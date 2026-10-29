@@ -1,0 +1,33 @@
+/** Local copies of the reference asset paths (shipped module 25621). */
+export const ASSETS = {
+  blueNoise: "/assets/textures/terrain/bnoise.png",
+  cityTexture: "/assets/textures/terrain/city.webp",
+  terrain: "/assets/models/terrain.glb",
+  cityTerrain: "/assets/models/city-terrain.glb",
+  building: "/assets/models/building.glb",
+  grid: "/assets/models/grid.glb",
+  gridCity: "/assets/models/grid-city.glb",
+  powerStation: "/assets/models/power-station.glb",
+  raven: "/assets/models/raven_quad.glb", // coaxial quad (4 arms, 8 props); source glb/raven-quad/
+  droneLowpoly: "/assets/models/drone-lowpoly.glb", // Raven silhouette, same node/axis convention as delta-lowpoly
+  cameraAnimations: "/assets/models/camera-animations.glb",
+  cameraAnimationsMobile: "/assets/models/camera-animations-mobile.glb",
+  droneAnimations: "/assets/models/drone-animations.glb",
+  droneAnimationsMobile: "/assets/models/drone-animations-mobile.glb",
+  loadingDrone: "/assets/models/loading-drone.glb", // Raven silhouette, replaces loading-delta
+  noise: "/assets/textures/fx/noise.webp",
+  wind: "/assets/textures/fx/wind.webp",
+  fire: "/assets/textures/fx/fire.webp",
+  env: "/assets/textures/environment/env.exr",
+  earthOutline: "/assets/textures/globe/earth_outline.webp",
+  earthNormal: "/assets/textures/globe/earth_normal.webp",
+  orbitronFont: "/assets/3d-fonts/orbitron-bold.json",
+  geistSemiBold: "/assets/3d-fonts/Geist-SemiBold.woff",
+} as const;
+
+export const LANDING_SEQUENCE = Array.from(
+  { length: 96 },
+  (_, i) => `/assets/images/raven-landing/${String(i + 1).padStart(4, "0")}.avif`, // Raven drone landing (glb/raven-quad/render_media.py)
+);
+
+export const DRACO_PATH = "/draco/";

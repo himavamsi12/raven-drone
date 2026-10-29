@@ -1,0 +1,28 @@
+node_modules
+.next
+.next-production
+*.tsbuildinfo
+.DS_Store
+.vercel
+.env*
+*.blend1
+
+# Third-party reference material: kept on local disk only, never redistributed
+/research/
+/asset/
+
+# Mirrored USAvionix jet/brand assets the Raven site no longer uses (kept locally, not shipped)
+/public/assets/images/brand/
+/public/assets/images/landing-sequence/
+/public/assets/images/media/border-storm.31d3c346.webp
+/public/assets/images/media/critical-infrastructure-in-crisis.d7587763.webp
+/public/assets/images/media/wildfire-cascade.5579c082.webp
+/public/assets/images/media/desktop.1b373cc8.webp
+/public/assets/images/media/mobile.8107afe0.webp
+/public/assets/models/delta-lowpoly.glb
+/public/assets/models/loading-delta.glb
+/public/assets/models/delta-pbr.glb
+/public/assets/textures/landing-logos/
+
+# Raw Blender render output (regenerate with glb/raven-quad/render_media.py)
+/glb/raven-quad/media/

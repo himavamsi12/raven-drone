@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+/*
+ * Tokens recovered verbatim from the shipped stylesheet (32d10e4cd8482b39.css,
+ * captured 2026-10-29). Note: --color-green is cyan (#7aebff) in the source.
+ */
+@theme {
+  --font-sans: var(--font-geist-sans), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+
+  --text-d-h0: 5rem;
+  --text-d-h0--line-height: 4.75rem;
+  --text-d-h0--letter-spacing: -0.04em;
+  --text-d-h0--font-weight: 600;
+  --text-d-h1: 4.75rem;
+  --text-d-h1--line-height: 5rem;
+  --text-d-h1--letter-spacing: -0.04em;
+  --text-d-h1--font-weight: 600;
+  --text-d-h2: 3.125rem;
+  --text-d-h2--line-height: 3.25rem;
+  --text-d-h2--letter-spacing: -0.03em;
+  --text-d-h2--font-weight: 600;
+  --text-d-h3: 1.8125rem;
+  --text-d-h3--line-height: 2rem;
+  --text-d-h3--letter-spacing: -0.01em;
+  --text-d-h3--font-weight: 500;
+  --text-d-body-l: 1.1875rem;
+  --text-d-body-l--line-height: 1.5rem;
+  --text-d-body-l--letter-spacing: 0em;
+  --text-d-body-l--font-weight: 500;
+  --text-d-body-s: 1rem;
+  --text-d-body-s--line-height: 1.25rem;
+  --text-d-body-s--letter-spacing: 0em;
+  --text-d-body-s--font-weight: 500;
+  --text-d-cta: 1.0625rem;
+  --text-d-cta--line-height: 1.25rem;
+  --text-d-cta--letter-spacing: 0em;
+  --text-d-cta--font-weight: 500;
+  --text-d-mono: 0.75rem;
+  --text-d-mono--line-height: 1rem;
+  --text-d-mono--letter-spacing: 0.06em;
+  --text-d-mono--font-weight: 500;
+  --text-m-h0: 2.6875rem;
+  --text-m-h0--line-height: 2.41875rem;
+  --text-m-h0--letter-spacing: -0.04em;
+  --text-m-h0--font-weight: 600;
+  --text-m-h1: 2.125rem;
+  --text-m-h1--line-height: 2.25rem;
+  --text-m-h1--letter-spacing: -0.04em;
+  --text-m-h1--font-weight: 600;
+  --text-m-h2: 1.875rem;
+  --text-m-h2--line-height: 2rem;
+  --text-m-h2--letter-spacing: -0.04em;
+  --text-m-h2--font-weight: 600;
+  --text-m-h3: 1.1875rem;
+  --text-m-h3--line-height: 1.25rem;
+  --text-m-h3--letter-spacing: 0em;
+  --text-m-h3--font-weight: 500;
+  --text-m-body-l: 0.875rem;
+  --text-m-body-l--line-height: 1rem;
+  --text-m-body-l--letter-spacing: 0em;
+  --text-m-body-l--font-weight: 500;
+  --text-m-body-s: 0.8125rem;
+  --text-m-body-s--line-height: 1rem;
+  --text-m-body-s--letter-spacing: 0em;
+  --text-m-body-s--font-weight: 500;
+  --text-m-mono: 0.6875rem;
+  --text-m-mono--line-height: 1rem;
+  --text-m-mono--letter-spacing: 0.06em;
+  --text-m-mono--font-weight: 500;
+
+  --color-white: #fff;
+  --color-neutral-50: #f2f2f2;
+  --color-neutral-100: #ccc;
+  --color-black: #000;
+  --color-red: #f66;
+  --color-yellow: #ffcb47;
+  --color-green: #7aebff;
+  --color-bg: #0f0f0f;
+
+  --animate-ripple: ripple 6s linear infinite backwards;
+}
+
+@utility z-scroll-sequence {
+  z-index: 550;
+}
+@utility z-over-scroll-sequence {
+  z-index: 575;
+}
+@utility z-info {
+  z-index: 590;
+}
+@utility z-navbar {
+  z-index: 600;
+}
+@utility z-menu {
+  z-index: 700;
+}
+@utility z-modal {
+  z-index: 800;
+}
+
+@utility container-md {
+  width: 100%;
+  max-width: calc(var(--spacing) * 369);
+  padding-inline: calc(var(--spacing) * 4);
+  @media (min-width: 48rem) {
+    padding-inline: calc(var(--spacing) * 12);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    opacity: 0;
+    width: 16px;
+    height: 16px;
+  }
+  25% {
+    opacity: 0.4;
+    width: 32px;
+    height: 32px;
+  }
+  50% {
+    opacity: 0.2;
+    width: 48px;
+    height: 48px;
+  }
+  75% {
+    opacity: 0.1;
+    width: 64px;
+    height: 64px;
+  }
+  to {
+    opacity: 0;
+    width: 64px;
+    height: 64px;
+  }
+}
+
+:root {
+  --nav-height: 3.5rem;
+}
+
+html {
+  overscroll-behavior: none;
+  background: var(--color-bg);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-white);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Lenis recommended base styles */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: 2px;
+}
+
+/*
+ * Reconstruction safeguard (not observed on the reference): reduced-motion
+ * users get instant overlay transitions. The scroll-seeking scene is kept,
+ * since it is driven by the user's own scroll input.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
