@@ -31,7 +31,8 @@ npm run assets:manifest  # regenerates research/usavionix/asset-manifest.json
 
 Local production builds use `.next-production/`; development uses `.next/` so checks do not corrupt a running preview.
 On Vercel (`VERCEL` env set) the build uses the default `.next/`.
-Git: private GitHub repo `bishwamandal/raven-drone-site`; deploy with `vercel deploy --prod` (project `raven-drone-site`).
+Git: private GitHub repo `bishwamandal/raven-drone-site`. Production: https://raven-drone-site.vercel.app, deployed from this
+working copy with `vercel deploy --prod --yes` (project `raven-drone-site`; no Git auto-deploy connected).
 `.vercelignore` keeps `glb/` sources and local-only material out of the upload.
 
 ## Stack (installed versions)

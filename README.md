@@ -4,6 +4,8 @@ A scroll-driven WebGL site for **Raven**, a concept medical delivery drone for r
 
 The site began as a study reconstruction of a third-party homepage's scroll and camera choreography. The Raven aircraft, silhouettes, mission imagery and footer sequence are original Blender work in `glb/raven-quad/`. Some terrain, camera-path, sound and texture assets still come from that reference. Raven is a concept: no flight performance, payload, range or certification is claimed.
 
+Live: https://raven-drone-site.vercel.app
+
 ## Run
 
 ```bash
