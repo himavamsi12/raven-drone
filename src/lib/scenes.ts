@@ -67,7 +67,7 @@ export type SceneData = {
 
 export type SceneRange = { id: SceneId; start: number; height: number; end: number };
 
-/** Pixel ranges of every scene for a viewport height. Matches the shipped bookkeeping. */
+/** Pixel ranges of every scene for a viewport height, in story scroll (Raven: see story-map.ts for page scroll). */
 export function computeSceneRanges(vh: number): SceneRange[] {
   let cursor = 0;
   return SCENE_ORDER.map((id) => {
@@ -78,7 +78,7 @@ export function computeSceneRanges(vh: number): SceneRange[] {
   });
 }
 
-/** Scroll offset at the end of a scene (what chapter navigation scrolls to). */
+/** Story scroll offset at the end of a scene (chapter navigation converts it with story-map `toPage`). */
 export function sceneEndOffset(id: SceneId, vh: number) {
   return computeSceneRanges(vh)[SCENE_ORDER.indexOf(id)].end;
 }

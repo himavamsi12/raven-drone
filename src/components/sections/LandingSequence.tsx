@@ -1,13 +1,14 @@
 "use client";
 
-import { AdaptiveDpr, Text, useFBO, useTexture } from "@react-three/drei";
+import { AdaptiveDpr, Environment, Lightformer, Text, useFBO, useTexture } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import clsx from "clsx";
 import { useLenis } from "lenis/react";
 import { KawaseBlurPass, KernelSize } from "postprocessing";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { ASSETS, LANDING_SEQUENCE } from "@/lib/assets";
+import { RavenModel } from "@/components/scene/Drone";
+import { ASSETS } from "@/lib/assets";
 import { useLoading } from "@/lib/loading";
 import { clamp, lerp, remap, smoothstep } from "@/lib/math";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -54,51 +55,6 @@ function useLandingProgress(): Progress {
   return { progress, total, team };
 }
 
-/**
- * Lazily decoded frame list. The reference uploads all 96 textures; this keeps
- * one GPU texture and swaps its image on frame change (same frame selection).
- */
-function useFrames(onReady: () => void) {
-  const [state] = useState(() => {
-    // Raw shader writes the sample straight out, so keep the texture undecoded.
-    const tex = new THREE.Texture();
-    tex.colorSpace = THREE.NoColorSpace;
-    tex.minFilter = THREE.LinearFilter;
-    tex.generateMipmaps = false;
-    return { tex, images: [] as HTMLImageElement[], current: -1 };
-  });
-  useEffect(() => {
-    let loaded = 0;
-    let done = false;
-    state.images = LANDING_SEQUENCE.map((src) => {
-      const img = new Image();
-      img.decoding = "async";
-      img.src = src;
-      img.onload = img.onerror = () => {
-        loaded += 1;
-        if (!done && loaded >= 2) {
-          done = true;
-          onReady();
-        }
-      };
-      return img;
-    });
-    return () => {
-      state.images.forEach((i) => (i.src = ""));
-      state.tex.dispose();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const show = (i: number) => {
-    const img = state.images[i];
-    if (!img || i === state.current || !img.complete || !img.naturalWidth) return;
-    state.tex.image = img;
-    state.tex.needsUpdate = true;
-    state.current = i;
-  };
-  return { texture: state.tex, show };
-}
-
 const CAPSULE_FRAG = /* glsl */ `
 varying vec2 vUv;
 uniform sampler2D uBlurredScene;
@@ -126,17 +82,50 @@ void main() {
     gl_FragColor.a = alpha * smoothstep(0.0, 0.1, uOpacity);
 }`;
 
-/** Frame plane + jet capsule (shipped `y` in module 73560). */
+/** Landing frame count and the drone's place in a frame (FRAME_Y is offset to the drone centre, measured on frame 96). */
+const FRAMES = FRAME_Y.length;
+const FRAME_DRONE_Y = -284;
+/** Drone size as a fraction of the frame (the 96 renders showed it ~0.8 frame wide). */
+const DRONE_SCALE = 0.36;
+/** Base nose dip: enough that the spinning rotor discs read from the front instead of edge-on. */
+const DRONE_PITCH = 0.3;
+
+/** Studio-ish light for the landing drone: soft key overhead, cool rims (pixel-space scene, so directions only). */
+function LandingLight() {
+  return (
+    <>
+      <Environment resolution={128} frames={1}>
+        <Lightformer form="rect" intensity={2} position={[0, 4, 1]} rotation={[Math.PI / 2, 0, 0]} scale={[6, 4, 1]} />
+        <Lightformer form="rect" intensity={1.2} color="#cfe9f5" position={[-4, 1, 2]} rotation={[0, Math.PI / 2.6, 0]} scale={[0.6, 5, 1]} />
+        <Lightformer form="rect" intensity={1} color="#cfe9f5" position={[4, 1, 2]} rotation={[0, -Math.PI / 2.4, 0]} scale={[0.5, 5, 1]} />
+      </Environment>
+      <directionalLight position={[-0.4, 1, 0.8]} intensity={1.4} />
+      <ambientLight intensity={0.1} />
+    </>
+  );
+}
+
+/**
+ * Landing drone + jet capsule (shipped `y` in module 73560). Raven: the 96 pre-rendered frames (old quad) are replaced
+ * by the live raven_hexa model following the same frame selection, FRAME_Y descent and frame travel, interpolated
+ * between frames instead of stepped.
+ */
 function Sequence({ p }: { p: Progress }) {
-  const frame = useRef<THREE.Mesh>(null);
+  const frame = useRef<THREE.Group>(null);
+  const drone = useRef<THREE.Group>(null);
   const capsuleAnchor = useRef<THREE.Mesh>(null);
   const width = useThree((s) => s.size.width);
   const height = useThree((s) => s.size.height);
   const dpr = useThree((s) => s.viewport.dpr);
   const size = 0.95 * height;
   const smoothed = useRef(0);
-  const { texture, show } = useFrames(() => setTimeout(() => useLoading.getState().setImageSequenceLoaded(true), 25));
-  const frameUniforms = useMemo(() => ({ uBase0: { value: texture } }), [texture]);
+  const hover = useRef<THREE.Group>(null);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  // The loader waits for the footer sequence; the model is already cached by the main scene.
+  useEffect(() => {
+    const t = setTimeout(() => useLoading.getState().setImageSequenceLoaded(true), 25);
+    return () => clearTimeout(t);
+  }, []);
   const capsuleUniforms = useMemo(
     () => ({
       uBlurredScene: { value: null as THREE.Texture | null },
@@ -151,8 +140,8 @@ function Sequence({ p }: { p: Progress }) {
   const blurred = useFBO(1, 1, { minFilter: THREE.LinearFilter });
   useEffect(() => () => blur.dispose(), [blur]);
 
-  useFrame(({ gl, scene, camera }, dt) => {
-    if (!frame.current || !capsuleAnchor.current) return;
+  useFrame(({ gl, scene, camera, clock }, dt) => {
+    if (!frame.current || !drone.current || !capsuleAnchor.current) return;
     gl.render(scene, camera);
     gl.setRenderTarget(null);
     const c = p.progress.current;
@@ -161,19 +150,35 @@ function Sequence({ p }: { p: Progress }) {
     mapped = remap(c, 0.45, 0.7, mapped, 0.3);
     mapped = remap(c, 0.7, 1, mapped, 1);
     smoothed.current = lerp(smoothed.current, mapped, 0.25);
-    const n = LANDING_SEQUENCE.length;
-    const idx = Math.min(n - 1, Math.floor(smoothed.current * n));
+    const idx = Math.min(FRAMES - 1, Math.floor(smoothed.current * FRAMES));
     capsuleAnchor.current.position.y = (-FRAME_Y[idx] / 1920) * height + 8 + 20;
     capsuleAnchor.current.position.x = 0.5 * width;
-    show(idx); // base0 only; base1 blending is commented out in the reference shader
     const travel = height - size;
     frame.current.position.y = remap(c, 0.75, 1, 0, -travel) - 0.5 * size + 0.05 * height + 20;
     frame.current.position.x = 0.5 * width;
+    // Drone inside the (now invisible) frame: continuous FRAME_Y, frame top = frame centre + size / 2.
+    const f = Math.min(smoothed.current * (FRAMES - 1), FRAMES - 1);
+    const i0 = Math.floor(f);
+    const y = lerp(FRAME_Y[i0], FRAME_Y[Math.min(i0 + 1, FRAMES - 1)], f - i0);
+    drone.current.position.y = 0.5 * size - ((y + FRAME_DRONE_Y) / 1920) * size;
+    // Hover: while airborne (also when the scroll stops) a slow bob with a second drift, small roll/pitch sway and
+    // heading wander, all settling out over the touchdown (last 8% of the footer scroll).
+    if (hover.current) {
+      const t = clock.getElapsedTime();
+      const air = reducedMotion ? 0 : 1 - smoothstep(0.92, 1, c);
+      // Model units (drone 2 wide; ~300 px per unit at 900 px tall): ~10 px bob, ~5 px drift.
+      hover.current.position.y = air * (0.032 * Math.sin(1.5 * t) + 0.014 * Math.sin(0.63 * t + 1.3));
+      hover.current.position.x = air * 0.016 * Math.sin(0.41 * t + 0.4);
+      hover.current.rotation.set(
+        DRONE_PITCH + air * 0.02 * Math.sin(0.9 * t + 1),
+        Math.PI + air * 0.045 * Math.sin(0.33 * t),
+        air * 0.03 * Math.sin(1.1 * t + 0.5),
+      );
+    }
     capsuleUniforms.uBlurredScene.value = blurred.texture;
     capsuleUniforms.uResolution.value.set(width * dpr, height * dpr);
     capsuleUniforms.uTime.value += dt;
     capsuleUniforms.uOpacity.value = remap(c, 0.2, 0.3, 0, 1) * remap(c, 0.8, 1, 1, 0) * 0.15;
-    void smoothstep;
   });
 
   return (
@@ -202,17 +207,15 @@ function Sequence({ p }: { p: Progress }) {
           />
         </mesh>
       </mesh>
-      <mesh ref={frame} renderOrder={2} scale={size}>
-        <planeGeometry args={[1, 1]} />
-        <shaderMaterial
-          uniforms={frameUniforms}
-          transparent
-          depthWrite={false}
-          depthTest={false}
-          vertexShader="varying vec2 vUv; void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); vUv = uv; }"
-          fragmentShader="varying vec2 vUv; uniform sampler2D uBase0; void main(){ gl_FragColor = texture2D(uBase0, vUv); }"
-        />
-      </mesh>
+      <group ref={frame}>
+        <group ref={drone} scale={DRONE_SCALE * size}>
+          {/* Front to camera, nose dipped so the deck and rotor discs read; `hover` adds the airborne sway. */}
+          <group ref={hover} rotation={[DRONE_PITCH, Math.PI, 0]}>
+            <RavenModel span={2} />
+          </group>
+        </group>
+      </group>
+      <LandingLight />
     </group>
   );
 }
@@ -429,7 +432,7 @@ function PixelCamera() {
 
 /**
  * Fixed WebGL landing/footer presentation for >=1024px (shipped module 73560).
- * Smaller layouts use the static final frame in the footer and never load the sequence.
+ * Smaller layouts show a resting live drone in the footer (FooterDrone) instead.
  */
 export function LandingSequence() {
   const mainLoaded = useLoading((s) => s.mainAppLoaded);
@@ -457,7 +460,7 @@ export function LandingSequence() {
         <Canvas
           className="pointer-events-none!"
           dpr={[1, 1.5]}
-          gl={{ powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, antialias: false, depth: false, stencil: false }}
+          gl={{ powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, antialias: true, stencil: false }} // depth: live 3D drone
           frameloop={active ? "always" : "never"}
         >
           <AdaptiveDpr pixelated />

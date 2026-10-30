@@ -35,10 +35,14 @@ const _h = new THREE.Vector3();
 
 type LiveMaterial = { material: THREE.MeshStandardMaterial; coat: number; glints: boolean };
 
-/** Raven adapter: only the visual child changes; shipped flight/camera trackers stay intact. */
-export function RavenModel({ envMap, span = 200 }: { envMap?: THREE.Texture; span?: number }) {
+/**
+ * Raven adapter: only the visual child changes; shipped flight/camera trackers stay intact.
+ * `still` parks the rotors and shows the real blades (studio close-ups), as reduced motion does.
+ */
+export function RavenModel({ envMap, span = 200, still = false }: { envMap?: THREE.Texture; span?: number; still?: boolean }) {
   const { scene } = useGLB(ASSETS.raven);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const spin = !reducedMotion && !still;
   const glint = useRef(0);
   const { object, rotors, blur, ownedMaterials, live, envRotation, scale } = useMemo(() => {
     const object = scene.clone(true);
@@ -74,10 +78,10 @@ export function RavenModel({ envMap, span = 200 }: { envMap?: THREE.Texture; spa
     return { object, rotors, blur, ownedMaterials, live, envRotation, scale: span / Math.max(size.x, size.z) };
   }, [scene, envMap, span]);
   useEffect(() => () => ownedMaterials.forEach((material) => material.dispose()), [ownedMaterials]);
-  // Reduced motion keeps the rotors still, so it shows the real blades instead of the blur.
-  useEffect(() => setRotorBlur(blur, !reducedMotion), [blur, reducedMotion]);
+  // Still rotors (reduced motion, close-ups) show the real blades instead of the blur.
+  useEffect(() => setRotorBlur(blur, spin), [blur, spin]);
   useFrame(({ camera, clock }, dt) => {
-    if (!reducedMotion) {
+    if (spin) {
       advanceRavenRotors(rotors, dt);
       updateRotorBlur(blur, clock.getElapsedTime());
     }

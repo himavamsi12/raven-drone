@@ -1,0 +1,4 @@
+"Low-Poly Tree" by laser blaster (Blend Swap 5671), Creative Commons Zero (Public Domain).
+Source: https://blendswap.com/blend/5671
+tree_leaves_128.webp: the pack's "Tree Leaves.png" (1024x1024 RGBA), resized to 128x128 WebP (q80) for the
+terrain appearance bake (a tree covers ~30-60 px of the 4K map). Used by 07_masters.py (M_LD_Leaves).

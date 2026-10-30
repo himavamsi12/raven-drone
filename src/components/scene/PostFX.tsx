@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { BG_COLOR, SKY_COLOR, terrainOffset, thermalState } from "@/lib/constants";
 import { damp, remap } from "@/lib/math";
 import { SCENE, scenes } from "@/lib/scenes";
+import { useStage } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { TerrainLensEffect } from "./TerrainLensEffect";
 
@@ -296,6 +297,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     const s = scenes();
     const multi = s[SCENE.MULTI_THREAT_RESPONSE];
     if (multi.hideRatio > 0.8) return;
+    if (useStage.getState().cover === 0) return; // Raven: stage off screen between the two story bands
     mix.mixFactor = remap(s[SCENE.FLOCK_SCENE].progress, 0.75, 1, 0, 1);
     mix.nextSceneProgress = s[SCENE.REAL_TIME_DETECTION].progress;
     final.u("uVignetteAspect").value.copy(aspect.current);

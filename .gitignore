@@ -34,3 +34,4 @@ node_modules
 /glb/raven-terrain/textures/raven-natural-render-*.png
 /glb/raven-terrain/textures/raven-natural-bake-4096.png
 __pycache__/
+/glb/raven-terrain/raven-terrain-v03.blend*

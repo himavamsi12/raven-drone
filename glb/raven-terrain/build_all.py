@@ -3,8 +3,9 @@ Cycles noise). From the repo root:
 
   /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python glb/raven-terrain/build_all.py -- <out_dir>
 
-Writes <out_dir>/raven-terrain.glb, glb/raven-terrain/textures/*.png and glb/raven-terrain/raven-terrain-v02.blend.
+Writes <out_dir>/raven-terrain.glb, glb/raven-terrain/textures/*.png and glb/raven-terrain/raven-terrain-v03.blend.
 v02 = look-dev pipeline (06-11): eco masks, scattered trees/bushes/rocks, golden-hour light, orthographic appearance bake.
+v03 = v02 + leaf-card broadleaf crowns (07, CC0 Blend Swap 5671 leaf card). Heavy: run on the Windows build machine.
 Then glb/raven-terrain/encode.sh <out_dir> (WebP q80 + Draco), validate with check_terrain.py, copy to public/.
 """
 import bpy, os, sys, time
@@ -15,6 +16,7 @@ OUT = os.path.abspath(argv[0] if argv else os.path.join(HERE, 'build'))
 TEX = os.path.join(HERE, 'textures')
 os.makedirs(OUT, exist_ok=True); os.makedirs(TEX, exist_ok=True)
 os.environ['RAVEN_TERRAIN_OUT'] = OUT
+os.environ.setdefault('RAVEN_LEAF_TEX', os.path.join(TEX, 'blendswap-5671', 'tree_leaves_128.webp'))
 
 bpy.ops.wm.read_homefile(use_empty=True)
 prefs = bpy.context.preferences.addons['cycles'].preferences
@@ -59,7 +61,9 @@ g['setup_appearance_scene']()
 img = g['render_appearance'](RES, os.path.join(TEX, f'raven-natural-render-{RES}.png'))
 g['fix_edges'](img)
 fixed = os.path.join(TEX, f'raven-natural-bake-{RES}.png')
-img.filepath_raw = fixed; img.file_format = 'PNG'; img.save()
+ims = bpy.context.scene.render.image_settings  # 8-bit RGB: WebP is 8-bit anyway, and the Windows sharp/libvips build
+ims.file_format = 'PNG'; ims.color_mode = 'RGB'; ims.color_depth = '8'  # cannot convert 16-bit RGBA (RGB16) to WebP
+img.save_render(fixed, scene=bpy.context.scene)  # Standard view transform: plain sRGB encode
 # Re-pack from the saved file: packed bytes are not refreshed by pixel edits, so a plain pack() keeps the unfixed render.
 bpy.data.images.remove(img)
 img = bpy.data.images.load(fixed); img.name = 'RT_Natural_Bake'; img.colorspace_settings.name = 'sRGB'; img.pack()
@@ -69,5 +73,5 @@ land = g['runtime_terrain']()
 houses = g['runtime_houses']()
 g['bake_houses'](houses, tex_dir=TEX)
 path = g['export']([land, houses], 'raven-terrain-raw.glb', draco=False, image_format='AUTO')  # then encode.sh
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, 'raven-terrain-v02.blend'))
+bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, 'raven-terrain-v03.blend'))
 print('BUILD OK', path, round(time.time() - t0, 1), 's')

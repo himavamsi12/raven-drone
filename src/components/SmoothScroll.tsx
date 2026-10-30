@@ -2,7 +2,8 @@
 
 import { ReactLenis, useLenis } from "lenis/react";
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
-import { computeSceneRanges, SCENE, SCENE_ORDER, SCENE_SPAN, useScenes, type SceneId, type SceneRange } from "@/lib/scenes";
+import { SCENE, SCENE_ORDER, SCENE_SPAN, useScenes, type SceneId, type SceneRange } from "@/lib/scenes";
+import { measureStoryMap, pageBands, toPage, toStory } from "@/lib/story-map";
 import { clamp, linear } from "@/lib/math";
 import { useLoading } from "@/lib/loading";
 import { isScrollLocked, LOCK_EVENT } from "@/lib/scroll-lock";
@@ -17,7 +18,7 @@ export function useScrollToScene(id: SceneId) {
       (acc, s) => acc + (s === SCENE.INTRO_SCENE ? 1 : (SCENE_SPAN[s] / 100) * vh),
       0,
     );
-    lenis?.scrollTo(target, { duration: 3, easing: linear });
+    lenis?.scrollTo(toPage(target), { duration: 3, easing: linear });
   };
 }
 
@@ -26,7 +27,20 @@ const findRangeIndex = (scroll: number, ranges: SceneRange[]) => {
   return ranges.length - 1;
 };
 
-/** Writes per-scene progress into the store on every Lenis scroll tick. */
+/** Re-measure the story bands when the page layout changes (sections below band 1 size themselves after mount). */
+function useStoryMeasure(onChange: () => void) {
+  useEffect(() => {
+    const ro = new ResizeObserver(() => onChange());
+    ro.observe(document.body);
+    window.addEventListener("resize", onChange);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onChange);
+    };
+  }, [onChange]);
+}
+
+/** Writes per-scene progress into the store on every Lenis scroll tick (Raven: from story scroll, story-map.ts). */
 function useSceneProgressDriver() {
   const lenis = useLenis();
   const ranges = useRef<SceneRange[]>([]);
@@ -36,10 +50,11 @@ function useSceneProgressDriver() {
     if (!lenis) return;
     const measure = () => {
       vhRef.current = window.innerHeight;
-      ranges.current = computeSceneRanges(window.innerHeight);
+      ranges.current = measureStoryMap();
     };
-    const update = ({ scroll }: { scroll: number }) => {
+    const update = ({ scroll: page }: { scroll: number }) => {
       if (isScrollLocked()) return;
+      const scroll = toStory(page);
       const list = ranges.current;
       const vh = vhRef.current || window.innerHeight;
       const { updateSceneData } = useScenes.getState();
@@ -70,15 +85,27 @@ function useSceneProgressDriver() {
     const onLock = (e: Event) => {
       if (!(e as CustomEvent).detail?.locked) update(current());
     };
+    const ro = new ResizeObserver(onResize);
+    ro.observe(document.body);
     window.addEventListener("resize", onResize);
     window.addEventListener(LOCK_EVENT, onLock);
     return () => {
+      ro.disconnect();
       window.removeEventListener(LOCK_EVENT, onLock);
       window.removeEventListener("resize", onResize);
       lenis.off("scroll", update);
     };
   }, [lenis]);
 }
+
+/** The page-space band holding `scroll`, and the scene index inside it (null between bands / after the story). */
+const findBand = (scroll: number, bands: SceneRange[][]) => {
+  for (let b = 0; b < bands.length; b++) {
+    const list = bands[b];
+    if (list.length && scroll >= list[0].start && scroll < list[list.length - 1].end) return { b, list, i: findRangeIndex(scroll, list) };
+  }
+  return null;
+};
 
 /**
  * Chapter snapping (shipped `f` in module 82245): wheel/keys/touch pick the
@@ -102,8 +129,7 @@ function SceneController() {
 
   useSceneProgressDriver();
 
-  const ranges = useRef<SceneRange[]>([]);
-  const totalRef = useRef(0);
+  const bands = useRef<SceneRange[][]>([]);
   const target = useRef<number | null>(null);
   const lastTs = useRef<number | null>(null);
   const touching = useRef(false);
@@ -111,30 +137,28 @@ function SceneController() {
   const pendingDir = useRef<number | null>(null);
   const raf = useRef<number | null>(null);
 
-  useEffect(() => {
-    const measure = () => {
-      ranges.current = computeSceneRanges(window.innerHeight);
-      totalRef.current = ranges.current[ranges.current.length - 1]?.end ?? 0;
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+  const measure = useCallback(() => {
+    bands.current = pageBands(measureStoryMap());
   }, []);
+  useEffect(measure, [measure]);
+  useStoryMeasure(measure);
 
+  // Snapping works inside each story band (page space); between bands and after the story the page scrolls freely.
   const pickTarget = useCallback(
     (dir: number) => {
       if (!lenis) return;
-      const list = ranges.current;
-      const total = totalRef.current;
       const scroll = lenis.scroll;
-      if (scroll >= total) {
+      const hit = findBand(scroll, bands.current);
+      if (!hit) {
         target.current = null;
         return;
       }
-      const i = findRangeIndex(scroll, list);
+      const { b, list, i } = hit;
       const { start, height, end } = list[i];
       const p = (scroll - start) / height;
       const last = i === list.length - 1;
+      // Reverse snapping ends on the band's opening frame (top of page / Care teams frame), then scrolls freely above it.
+      const bandStart = b === 0 ? 0 : Math.abs(scroll - list[0].start) < 1 ? null : list[0].start;
       if (dir > 0) {
         target.current = p < 0.99 ? end : last ? null : list[i + 1].end;
       } else {
@@ -142,9 +166,9 @@ function SceneController() {
         if (prev >= 0) {
           const prevEnd = list[prev].end;
           if (Math.abs(prevEnd - scroll) < 1 && prev > 0) target.current = list[prev - 1].end;
-          else if (Math.abs(prevEnd - scroll) < 1) target.current = 0;
+          else if (Math.abs(prevEnd - scroll) < 1) target.current = bandStart;
           else target.current = prevEnd;
-        } else target.current = 0;
+        } else target.current = bandStart;
       }
     },
     [lenis],
@@ -238,9 +262,9 @@ function SceneController() {
       if (!scrollbarDrag.current) return;
       scrollbarDrag.current = false;
       if (!ready()) return;
-      const s = lenis.scroll;
-      if (s < totalRef.current) {
-        target.current = ranges.current[findRangeIndex(s, ranges.current)].end;
+      const hit = findBand(lenis.scroll, bands.current);
+      if (hit) {
+        target.current = hit.list[hit.i].end;
         run();
       }
     };
@@ -293,11 +317,10 @@ function SceneController() {
     if (!lenis) return;
     const onLock = (e: Event) => {
       if ((e as CustomEvent).detail?.locked || !useLoading.getState().loadingCanvasHidden || isScrollLocked()) return;
-      const list = ranges.current;
-      if (!list.length) return;
       const s = lenis.scroll;
-      if (s >= totalRef.current || s <= 1 || list.some((r) => Math.abs(r.end - s) <= 1)) return;
-      if (target.current === null && pendingDir.current === null) target.current = list[findRangeIndex(s, list)].end;
+      const hit = findBand(s, bands.current);
+      if (!hit || s <= 1 || hit.list.some((r) => Math.abs(r.end - s) <= 1)) return;
+      if (target.current === null && pendingDir.current === null) target.current = hit.list[hit.i].end;
       run();
     };
     window.addEventListener(LOCK_EVENT, onLock);

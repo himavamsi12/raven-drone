@@ -1,9 +1,18 @@
 """Raven terrain 07 (look-dev): vegetation and rock masters in collections LD_Set_Trees / LD_Set_Bushes / LD_Set_Rocks
 (excluded from the view layer; used only through the 08 instancers). Three broadleaf crowns + one fir, two bushes,
 three limestone rocks. Colour variation per instance via Object Info > Random.
+v03: broadleaf crowns use the CC0 Blend Swap 5671 leaf card (textures/blendswap-5671/, RAVEN_LEAF_TEX overrides):
+box-projected onto the crown blob as leaf detail (`M_LD_Crown`, keeps the v02 shading and brightness) plus a few small
+crossed leaf cards on the rim to break the outline. Dense full-size cards self-shaded in the low bake sun and merged
+neighbouring crowns into one dark mass (forest patch ~40% darker than v02), so the cards stay sparse: 8 rim clumps
+leave the forest ~9% darker than v02 (none: matched; measured on 1024 test bakes).
 """
-import bpy, bmesh, math
-from mathutils import Vector, noise
+import bpy, bmesh, math, os, random
+from mathutils import Matrix, Vector, noise
+
+LEAF_TEX = os.environ.get('RAVEN_LEAF_TEX') or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd(),
+    'textures', 'blendswap-5671', 'tree_leaves_128.webp')
 
 
 def _coll(name, parent=None, exclude=False):
@@ -51,6 +60,74 @@ def _canopy(nt, bs):
     bump = nt.nodes.new('ShaderNodeBump'); bump.inputs['Strength'].default_value = 0.9
     nt.links.new(vor.outputs['Distance'], bump.inputs['Height']); nt.links.new(bump.outputs[0], bs.inputs['Normal'])
     bs.inputs['Roughness'].default_value = 0.85
+
+
+def _leaf_tex(nt, box=False):
+    img = bpy.data.images.load(LEAF_TEX, check_existing=True); img.alpha_mode = 'STRAIGHT'
+    tex = nt.nodes.new('ShaderNodeTexImage'); tex.image = img
+    if box:  # crown blobs have no UVs: object-space box projection, ~1.3 leaf cards per unit
+        tex.projection = 'BOX'; tex.projection_blend = 0.3
+        tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping')
+        mp.inputs['Scale'].default_value = (1.3, 1.3, 1.3)
+        nt.links.new(tc.outputs['Object'], mp.inputs['Vector']); nt.links.new(mp.outputs[0], tex.inputs['Vector'])
+    return tex
+
+
+def _tint(nt):
+    oi = nt.nodes.new('ShaderNodeObjectInfo'); ramp = nt.nodes.new('ShaderNodeValToRGB')
+    nt.links.new(oi.outputs['Random'], ramp.inputs[0])
+    e = ramp.color_ramp.elements
+    e[0].color = (0.016, 0.034, 0.010, 1); e[1].color = (0.075, 0.105, 0.022, 1); e.new(0.55).color = (0.035, 0.068, 0.016, 1)
+    return ramp.outputs[0]
+
+
+def _leaf_shade(nt, tex, gain):
+    # leaf-card luminance around 1.0 (its mean is ~0.22 linear): the canopy ramp keeps the hue, the card adds detail
+    bw = nt.nodes.new('ShaderNodeRGBToBW'); nt.links.new(tex.outputs['Color'], bw.inputs[0])
+    k = nt.nodes.new('ShaderNodeMath'); k.operation = 'MULTIPLY'; k.inputs[1].default_value = gain
+    nt.links.new(bw.outputs[0], k.inputs[0]); return k.outputs[0]
+
+
+def _crown(nt, bs):
+    tex = _leaf_tex(nt, box=True); shade = _leaf_shade(nt, tex, 7.0)
+    # same balance as _canopy (ramp x 0.55 detail mix), the leaf card replacing the Voronoi cells
+    nt.links.new(_mix_mul(nt, _tint(nt), shade, 0.55), bs.inputs['Base Color'])
+    bump = nt.nodes.new('ShaderNodeBump'); bump.inputs['Strength'].default_value = 0.6
+    nt.links.new(shade, bump.inputs['Height']); nt.links.new(bump.outputs[0], bs.inputs['Normal'])
+    bs.inputs['Roughness'].default_value = 0.85
+
+
+def _leaves(nt, bs):
+    tex = _leaf_tex(nt)
+    nt.links.new(_mix_mul(nt, _tint(nt), _leaf_shade(nt, tex, 7.0), 0.55), bs.inputs['Base Color'])
+    nt.links.new(tex.outputs['Alpha'], bs.inputs['Alpha'])
+    bs.inputs['Roughness'].default_value = 0.8
+
+
+def _leaf_cards(bm, seed, canopy=0, leaves=2, clumps=8, core=1.0):
+    """Sparse clumps of three small leaf cards (two crossed upright, one flat) on the crown rim, like the source
+    pack's hand-placed clumps; they break the blob outline without shading the crown."""
+    cv = {v for f in bm.faces if f.material_index == canopy for v in f.verts}
+    c = sum((v.co for v in cv), Vector()) / len(cv)
+    R = max((v.co - c).length for v in cv)
+    for v in cv:
+        v.co = c + (v.co - c) * core
+    uv = bm.loops.layers.uv.get('UVMap') or bm.loops.layers.uv.new('UVMap')
+    rng = random.Random(seed)
+
+    def card(p, rot, size):
+        h = size / 2
+        f = bm.faces.new([bm.verts.new(p + rot @ Vector(co)) for co in ((-h, 0, -h), (h, 0, -h), (h, 0, h), (-h, 0, h))])
+        f.material_index = leaves
+        for loop, t in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+            loop[uv].uv = t
+
+    for _ in range(clumps):
+        d = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1) * 0.75 + 0.25)).normalized()
+        p = c + d * R * rng.uniform(0.8, 0.98); size = R * rng.uniform(0.4, 0.6); yaw = rng.uniform(0, math.pi)
+        for q in range(2):
+            card(p, Matrix.Rotation(yaw + q * math.pi / 2, 3, 'Z') @ Matrix.Rotation(rng.uniform(-0.6, 0.6), 3, 'X'), size)
+        card(p, Matrix.Rotation(rng.uniform(0, 2 * math.pi), 3, 'Z') @ Matrix.Rotation(math.pi / 2 + rng.uniform(-0.3, 0.3), 3, 'X'), size)
 
 
 def _conifer(nt, bs):
@@ -108,7 +185,8 @@ def build_masters():
     bushes = _coll('LD_Set_Bushes', root, exclude=True)
     rocks = _coll('LD_Set_Rocks', root, exclude=True)
     canopy = _mat('M_LD_Canopy', _canopy); conifer = _mat('M_LD_Conifer', _conifer)
-    bark = _mat('M_LD_Bark', _bark); rock = _mat('M_LD_Limestone', _rock)
+    bark = _mat('M_LD_Bark', _bark); rock = _mat('M_LD_Limestone', _rock); leaves = _mat('M_LD_Leaves', _leaves)
+    crown = _mat('M_LD_Crown', _crown)
 
     def broadleaf(seed):
         def b(bm):
@@ -121,6 +199,7 @@ def build_masters():
                 if all(v in r['verts'] for v in f.verts):
                     f.material_index = 1
             _blob(bm, (0.45 * math.cos(seed), 0.45 * math.sin(seed), 1.9), 0.62, 0.8, seed + 5, 0.3, 1)  # second lobe
+            _leaf_cards(bm, int(seed * 1000))
         return b
 
     def fir(seed):
@@ -133,9 +212,9 @@ def build_masters():
                 bmesh.ops.translate(bm, verts=c['verts'], vec=(0, 0, z + h / 2))
         return b
 
-    _mesh('LD_Tree_A_broadleaf', trees, broadleaf(1.0), [canopy, bark])
-    _mesh('LD_Tree_B_broadleaf', trees, broadleaf(4.2), [canopy, bark])
-    _mesh('LD_Tree_C_broadleaf', trees, broadleaf(7.7), [canopy, bark])
+    _mesh('LD_Tree_A_broadleaf', trees, broadleaf(1.0), [crown, bark, leaves])
+    _mesh('LD_Tree_B_broadleaf', trees, broadleaf(4.2), [crown, bark, leaves])
+    _mesh('LD_Tree_C_broadleaf', trees, broadleaf(7.7), [crown, bark, leaves])
     _mesh('LD_Tree_D_fir', trees, fir(2.0), [conifer])
     _mesh('LD_Bush_A', bushes, lambda bm: _blob(bm, (0, 0, 0.32), 0.55, 0.62, 3.3, 0.3, 2), [canopy])
     _mesh('LD_Bush_B', bushes, lambda bm: _blob(bm, (0, 0, 0.28), 0.45, 0.7, 8.1, 0.35, 1), [canopy])

@@ -69,6 +69,61 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
 - `node scripts/check-raven-rotors.mjs` passes: 6 pivots, 3 CW / 3 CCW, web parity.
 - Not yet changed: silhouettes, loader drone, mission-card/demo renders and the footer sequence still show the quad.
 
+## Story band 2 replaces the globe map (user request, 2026-10-30)
+
+- The `#fleet` globe section is gone. After `#parts` the shipped chapters Care teams, Review, Updates, Support and
+  Network play again with their original copy, HUD, maps, drones and camera tracks, opening on the finished
+  "Keep the care team informed" frame (user's reference frame = end of phalanx-ai). Thermal, ignition and the
+  phalanx satellite/city transition are not shown.
+- How: `lib/story-map.ts` maps page scroll to story scroll across two bands; FixedContainer is now `position: fixed`
+  and placed by `stageTop` (scroll-away after each band, slide-in before band 2); PostFX skips frames while the stage
+  is off screen; SceneController snaps per band in page space (reverse snapping stops on the band 2 opening frame,
+  then scrolls freely into `#parts`); chapter ticks get their band 2 entries back and jump via `toPage`; the bar's
+  Network link and the menu go to `#story-band-2`. The end of the story (multi-threat fade) and footer are as shipped.
+- Checked with agent-browser at 1440×900: band 2 slide-in, every band 2 chapter end, hand-off to the about text;
+  wheel snapping (real wheel events) down/up in both bands and free scroll above band 2; 60 fps at band 2 chapters and
+  `#parts`; no console errors; typecheck and build pass. Not checked: 390×844 for band 2, reverse scroll through the
+  band 1 → parts → band 2 jumps with the stage partly on screen at mobile sizes.
+
+## Footer drone: live hexacopter (user request, 2026-10-30)
+
+- ≥1024px: `LandingSequence` draws `RavenModel` (raven_hexa, rotors spinning) in its pixel-space scene instead of the
+  96 pre-rendered quad frames. Same frame selection, descent (FRAME_Y, interpolated) and frame travel; drone centre =
+  frame top − (FRAME_Y + `FRAME_DRONE_Y` −284) / 1920 × frame size (measured on frame 96), `DRONE_SCALE` 0.36, front
+  to camera with a 0.2 rad nose dip; Lightformer studio light. Capsule shimmer, top fade, ground glow, wordmark outline
+  and team text unchanged. The loader flag is set when the model mounts (it was set when two frames decoded).
+- <1024px: `FooterDrone` shows the hexa at rest (still rotors) where the static frame 0096 was; renders only in view.
+- Checked with agent-browser: landing at 1440×900 (progress .55/.75/.9/1), 390×844 and 820×1100 footers; no console
+  errors; build passes. `public/assets/images/raven-landing/*.avif` and `LANDING_SEQUENCE` are no longer used.
+- The WebGL RAVEN outline wordmark still did not show in headless desktop capture (Open work 2).
+- Hover (user: "not flying when the scroll stops"): while airborne the drone bobs (~10 px, two sines), drifts ~5 px,
+  sways in roll/pitch (≤0.03 rad) and wanders in heading (≤0.045 rad), easing out over the touchdown (footer progress
+  .92–1); off for reduced motion. Base nose dip raised 0.2 → 0.3 rad (`DRONE_PITCH`) so the rotor blur discs read from
+  the front instead of edge-on. Checked: three captures 0.7 s apart move; landed view shows the discs.
+
+## Raven homepage layout (user reference `asset/html/raven_homepage.html`, 2026-10-30)
+
+- Structure: loader → hero → story band 1 (Airframe, Connection, Prepare, Journey, Route; unchanged camera tracks,
+  transitions and snapping) → `#parts` → story band 2 → about text → footer + landing sequence. Band 2 and the
+  skipped chapters are described in "Story band 2 replaces the globe map" above (`lib/story-map.ts`). Mission cards,
+  coverage and demo sections were removed (user choice); the about text stays because the landing sequence draws over it.
+  (First pass ended the story at Route with a 2500dvh spacer and `STORY_END` gates; superseded by the two bands.)
+- Hero: the reference composition (two-line uppercase headline bottom-left, copy + square CTA bottom-right) with our
+  copy, motion, loader, drone and terrain. Bar: hexacopter mark + RAVEN, in-page links, boxed Contact cell, black menu
+  square, hairline; chapter ticks stay centred in it. `--nav-height` is now clamp(56px, 5.4vw, 82px). Geist kept
+  (the reference uses Space Grotesk / JetBrains Mono).
+- `#parts`: the reference's sticky horizontal track (Lenis-driven translate, counter + progress bar; native swipe with
+  snap below 760px). Its photos showed a different airframe, so each card is a live view of `raven_hexa.glb` in one
+  shared fixed canvas (drei `View`, studio Lightformers, real blades via `RavenModel still`); camera turns with the
+  card's screen position. Fix found on the way: the shared canvas must reset the clear colour to transparent each frame
+  (a view's scene background leaves an opaque clear colour that hid the story stage).
+- `#fleet` (reference map layout over our coverage globe) was built, then removed for story band 2 (user);
+  `sections/Globe.tsx` is kept but unused.
+- Checked with agent-browser at 1440×900 and 390×844: hero, Route, the hand-off into `#parts`, parts track, `#fleet` (since removed),
+  footer; wheel scroll continues past Route into the sections; bar link and chapter tick navigation land exactly;
+  60 fps at hero, parts and fleet (M3, dev server); no console errors. Typecheck and production build pass.
+- Not checked: reverse scroll from the footer through the whole story, 821×1109, reduced motion on the parts views.
+
 ## Terrain lens retune: high-speed look (user request, 2026-10-30)
 
 - Bug fixed: the low cloud layers (`Clouds.tsx`, transparent full-screen planes) wrote depth after the terrain, so the

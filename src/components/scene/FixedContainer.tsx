@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { useLoading } from "@/lib/loading";
 import { remap } from "@/lib/math";
 import { SCENE, useMouse, useScenes } from "@/lib/scenes";
+import { measureStoryMap, stageTop, storyMap, useStage } from "@/lib/story-map";
 import { ChapterCopy } from "./ChapterCopy";
 import { HudLog } from "./HudLog";
 import { MainScene } from "./MainScene";
@@ -43,19 +44,38 @@ function SceneCanvas() {
   );
 }
 
-/** Sticky full-viewport stage inside the 6600dvh scroll track (shipped `np`). */
+/**
+ * Full-viewport story stage (shipped `np`, a sticky child of the 6600dvh track). Raven: the story runs in two page
+ * bands (story-map.ts), so the stage is fixed and placed per scroll: it scrolls away after each band and slides back in
+ * before band 2, exactly as a sticky stage would at a band edge.
+ */
 export function FixedContainer() {
   const ref = useRef<HTMLDivElement>(null);
   const lenis = useLenis();
 
   useEffect(() => {
     const update = () => {
+      const el = ref.current;
+      if (!el) return;
+      const top = stageTop(lenis?.actualScroll ?? window.scrollY);
+      el.style.visibility = top === null ? "hidden" : "visible";
+      el.style.transform = `translate3d(0,${(top ?? 0).toFixed(1)}px,0)`;
+      useStage.getState().setCover(top === null ? 0 : Math.max(0, 1 - Math.abs(top) / (storyMap.vh || window.innerHeight)));
       const multi = useScenes.getState()[SCENE.MULTI_THREAT_RESPONSE];
-      if (ref.current) ref.current.style.opacity = String(remap(multi.hideRatio, 0, 0.8, 1, 0));
+      el.style.opacity = String(remap(multi.hideRatio, 0, 0.8, 1, 0));
     };
+    const onResize = () => {
+      measureStoryMap();
+      update();
+    };
+    measureStoryMap();
     update();
     lenis?.on("scroll", update);
-    return () => lenis?.off("scroll", update);
+    window.addEventListener("resize", onResize);
+    return () => {
+      lenis?.off("scroll", update);
+      window.removeEventListener("resize", onResize);
+    };
   }, [lenis]);
 
   useEffect(() => {
@@ -66,7 +86,7 @@ export function FixedContainer() {
   }, []);
 
   return (
-    <div ref={ref} className="pointer-events-none sticky top-0 left-0 -mt-14 flex h-dvh w-full justify-center">
+    <div ref={ref} className="pointer-events-none fixed top-0 left-0 flex h-dvh w-full justify-center will-change-transform">
       <div id="scene-container" className="relative flex h-dvh w-full flex-col items-center justify-center">
         <SceneCanvas />
         <ChapterCopy />

@@ -26,9 +26,5 @@ export const ASSETS = {
   geistSemiBold: "/assets/3d-fonts/Geist-SemiBold.woff",
 } as const;
 
-export const LANDING_SEQUENCE = Array.from(
-  { length: 96 },
-  (_, i) => `/assets/images/raven-landing/${String(i + 1).padStart(4, "0")}.avif`, // Raven drone landing (glb/raven-quad/render_media.py)
-);
 
 export const DRACO_PATH = "/draco/";

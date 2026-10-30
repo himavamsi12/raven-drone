@@ -4,7 +4,7 @@ Context for coding agents (Codex, Claude Code, others). Read this before editing
 
 ## Current direction — Raven (user update)
 
-The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. The original `glb/raven_drone.glb` is preserved. Hero/swarm/globe now use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The previous light-gray coaxial quad (`raven_quad.glb`, `glb/raven-quad/`) is kept but unused; the silhouettes, loader drone and site renders still show the quad. The earlier dark hexacopter (`raven_drone_refined.glb`, `glb/raven-refined/`) is kept but unused. Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. Every jet silhouette and jet render is now a Raven drone: loader, sync flock, Raven Ops drones, mission-card images, demo image and the 96-frame footer landing sequence (`glb/raven-quad/render_media.py`).
+The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. The original `glb/raven_drone.glb` is preserved. Hero/swarm/globe now use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The previous light-gray coaxial quad (`raven_quad.glb`, `glb/raven-quad/`) is kept but unused; the silhouettes, loader drone and site renders still show the quad. The earlier dark hexacopter (`raven_drone_refined.glb`, `glb/raven-refined/`) is kept but unused. Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. Every jet silhouette and jet render is now a Raven drone: loader, sync flock, Raven Ops drones, mission-card images, demo image and the 96-frame footer landing sequence (`glb/raven-quad/render_media.py`); the footer now shows the live hexa instead of those frames.
 
 ## What this project is
 
@@ -64,7 +64,7 @@ Key shipped modules (in `page-33beb1af07230f28.js` unless noted): `7370` main sc
 
 ```
 src/app/layout.tsx          fonts, <SmoothScroll>, <Navbar>
-src/app/page.tsx            Loader, FixedContainer (sticky stage), 6600dvh spacer, sections, LandingSequence
+src/app/page.tsx            Loader, FixedContainer (fixed stage), story band 1 spacer, Parts, story band 2 spacer, team, footer, LandingSequence
 src/lib/
   scenes.ts                 SCENE ids, SCENE_SPAN (vh), SCENE_ORDER, computeSceneRanges, zustand store
   constants.ts              shared mutable refs (terrain travel, thermal box state), RENDER_ORDER, sun, colors
@@ -92,7 +92,7 @@ src/components/
     overlays/               SpecsCallouts, SwarmTags, ThermalHud, GroundHtml
     materials/              TerrainMaterial, WindMaterial
     shaders/screen-uv.ts    shared GLSL (diagonal scan wipe, grid AA)
-  sections/                 Sections (cards, coverage, demo, team, footer), Globe, LandingSequence, HeroLogo, logo-data
+  sections/                 Parts (live 3D close-ups, drei View), Sections (team, footer), FooterDrone, LandingSequence, HeroLogo, logo-data, Globe (unused)
 public/assets/              mirrored reference assets (same paths as live site); images/media = _next/static/media
 public/draco/               Draco decoder copied from three/examples (do not CDN)
 scripts/asset-manifest.mjs  manifest generator
@@ -100,8 +100,15 @@ scripts/asset-manifest.mjs  manifest generator
 
 ### Scroll / progress model (do not break)
 
-- Scene order + spans: intro 100vh (counts as **1px**), then 12 × 500vh, zone-stabilized 100vh, multi-threat 500vh.
-  Spacer = `calc(6600dvh + 1px + var(--nav-height))`. Scene end = sum of spans up to that scene.
+- Homepage layout (user decisions 2026-10-30, reference `asset/html/raven_homepage.html`): the shipped story runs in
+  two page bands (`lib/story-map.ts`). Band 1 = intro → real-time-detection (Route). Then `#parts`. Band 2 opens on the
+  finished Care teams map (end of phalanx-ai) and runs analysis → multi-threat. Thermal, ignition and the phalanx
+  satellite/city transition are skipped: story time jumps while the stage is off screen. Scene ranges and every scene
+  component stay in story coordinates; `toStory`/`toPage` convert page scroll, `stageTop` places the fixed stage
+  (it scrolls away after each band and slides in before band 2, like the shipped sticky stage), `useStage.cover`
+  gates PostFX and the bar background. Snapping works per band; between bands and after the story the page is free.
+- Scene spans unchanged (intro 1px, 12 × 500vh, zone 100vh, multi 500vh, in story px). Spacers: band 1
+  `calc(2600dvh + 1px)` (story to Route + one screen), band 2 `2700dvh` (analysis → multi + one screen).
 - Per scene: `progress=(scroll-start)/height`, `showRatio`, `hideRatio`, `isActive`, clamped 0–1, written on every
   Lenis scroll event. Everything reads `useScenes.getState()` in frame loops (no React state per frame).
 - One progress source, one Lenis. Do not add GSAP ScrollTrigger scrub or a second smoothing layer.
@@ -117,15 +124,17 @@ scripts/asset-manifest.mjs  manifest generator
 - Clear color: sky `#c9e0f7`, black after ignition > .99. Final grade fades to black with multi-threat hideRatio.
 - Custom ShaderMaterials output raw values: textures sampled there must not be sRGB-decoded unless the source did
   (landing frames use `NoColorSpace`).
-- Landing sequence (≥1024px only) keeps ONE GPU texture and swaps image per frame; mapping 0–.45→0–.1,
-  .45–.7→.1–.3, .7–1→.3–1, smoothed .25; base0 only. Below 1024px: static frame 0096 in the footer.
+- Landing sequence (≥1024px only): the live `raven_hexa` model (Raven, 2026-10-30) replaces the 96 quad frames,
+  following the shipped mapping 0–.45→0–.1, .45–.7→.1–.3, .7–1→.3–1, smoothed .25, along FRAME_Y (interpolated;
+  `FRAME_DRONE_Y`, `DRONE_SCALE` in LandingSequence.tsx). Canvas now has a depth buffer. Below 1024px: `FooterDrone`
+  (live hexa at rest, rotors parked). `public/assets/images/raven-landing/` is no longer referenced.
 
 ## Design tokens (from shipped CSS, in `globals.css @theme`)
 
 bg `#0f0f0f`; red `#f66`; yellow `#ffcb47`; **green token is cyan `#7aebff`**; transition flash `#FF2200`.
 Type: d-h0 80/76 600 -.04em; d-h1 76/80; d-h2 50/52 -.03em; d-h3 29/32 500 -.01em; d-body-l 19/24;
 d-mono 12/16 .06em; m-h0 43/38.7; m-h1 34/36; m-h2 30/32; m-h3 19/20; m-body-l 14/16; m-mono 11/16.
-Nav 56px, inset 32px desktop / 16px narrow. CTA rounded-full white/25 → hover white/30, 20×12px padding.
+Nav: homepage bar, `--nav-height` clamp(56px, 5.4vw, 82px) (the stage offset and spacer use the variable). Shipped CTA rounded-full white/25 → hover white/30, 20×12px padding; the hero uses the homepage square CTA.
 z: scroll-sequence 550, over-scroll-sequence 575, navbar 600, menu 700, modal 800.
 Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInOut; support +.2s, CTA +.4s.
 
@@ -140,9 +149,12 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Verification tips
 
-- Jump to a state: `window.scrollTo(0, Y)`. At vh=900: delta end 4501, swarm 9001, mission 13501, flock 18001,
-  detection 22501, thermal 27001, ignition 31501, phalanx 36001, … zone end 54901, page height ~64663.
-- Same vh on reference and local gives identical scrollY ↔ scene mapping (verified).
+- Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): delta end 4501, swarm 9001, mission
+  13501, flock 18001, Route 22501, `#parts` 23401, band 2 / Care teams frame 28430, analysis end 32930, notifications
+  37430, interdrone 41930, extra 46430, zone 47330, multi end 51830, page height ~54176. Test snapping with real wheel
+  events (agent-browser `mouse wheel`, not `scroll`).
+- Up to the story end, same vh on reference and local gives identical scrollY ↔ scene mapping (verified before the
+  homepage change; the later shipped chapters are no longer on the page).
 - Built-in preview pane throttles RAF between tool calls: wait a few seconds before screenshots; FPS dips there are
   harness artifacts (recovers to 60fps).
 
@@ -155,6 +167,11 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Hexa build commands: `glb/new-drone/README.md`. The unused quad's Blender build/QA/export commands and discrepancy list: `glb/raven-quad/README.md`. The earlier hexacopter pass: `glb/raven-refined/README.md`.
 
 ## Open work (see RECONSTRUCTION.md for full list)
+
+- Homepage layout (2026-10-30): hero composition, bar and `#parts` follow `asset/html/raven_homepage.html` (local
+  only); its map section was replaced by story band 2 (user). The reference's specs (prop size, km/h, AGL, kg, ETA,
+  altitudes) were not carried over. Parts cards are live views of `raven_hexa.glb` (`RavenModel still`), framed from
+  the GLB node bounds in `Parts.tsx` `SHOTS`. Thermal/ignition components, copy and HUD lines are unreachable code.
 
 - Raven follow-up: all jet imagery is replaced (silhouettes, mission cards, demo, footer sequence). The footer wordmark is "RAVEN" (Geist text: SVG on mobile/tablet, canvas texture for the desktop WebGL outline). The third-party team-logos texture, the USAvionix legal copy and the Notes link were removed. Preserve current camera/scroll choreography.
 - Story/content Phase 1 is done (copy only, 2026-10-30): one illustrative health-centre → hill-clinic delivery across chapters, HUD, scene labels, nav, menu and sections. Inventory and claim status: `RAVEN_CONTENT_MAP.md`. Chapter/HUD text lives beside its timing (`ChapterCopy.tsx`, `HudLog.tsx`); repeated notice/CTA copy lives in `src/lib/copy.ts`. Keep labels display-only: no fake confirmations ("delivered", "clinic notified", "cold chain maintained"), no numbers (temperature, confidence, speed).

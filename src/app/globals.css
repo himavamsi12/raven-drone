@@ -138,7 +138,9 @@
 }
 
 :root {
-  --nav-height: 3.5rem;
+  /* Raven homepage bar (asset/html/raven_homepage.html): 56px, growing with the viewport to 82px. */
+  --nav-height: clamp(3.5rem, 5.4vw, 5.125rem);
+  --bar-line: rgba(244, 243, 239, 0.42);
 }
 
 html {
