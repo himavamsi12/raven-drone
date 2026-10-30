@@ -12,6 +12,163 @@ User direction: Raven is a medical delivery drone concept for remote mountain vi
 
 Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HUD details, fire/emergency simulations, mission card/demo imagery, reference legal/Notes content, and baked footer sequence/wordmarks still come from the source reconstruction. They need a separate medical-delivery art/content pass. The existing terrain has not been replaced with snow/tundra. This first pass is model integration and core copy, not a finished Raven site.
 
+## Raven story and content rewrite (Phase 1, copy only, 2026-10-30)
+
+- Rewrote every visible string around one illustrative delivery, from a regional health centre to a hill clinic. Brief: `RAVEN_STORY_CONTENT_PROMPT.md`; full inventory: `RAVEN_CONTENT_MAP.md`.
+  - Covers: hero, chapters, callouts, HUD log, in-scene labels, nav ticks, menu, below-fold sections, footer, contact result and metadata.
+- Unchanged:
+  - Scene IDs, spans and windows.
+  - Camera and drone clips.
+  - HUD trigger points, callout anchors and text timing.
+  - The nav fade/scroll/restore sequence and the footer sequence.
+  - Verified: nav clicks land on exact scene ends forward and reverse at 1440×900 (Route 22501, Prepare 13501, Network 59401, Airframe 4501).
+- Removed unsupported claims:
+  - Sensor suite, dual-GPU agents, Phalanx link, fake coordinates, altitude and speed.
+  - Detection confidence %, the 0°C/148°C thermal scale.
+  - "Threat" and "secured" wording, and police/firefighter dispatch lines.
+  - Globe outcome badges; the hiring/partner menu items.
+  - Placeholder `#` menu links, replaced with in-page jumps.
+- Shared notice copy: `src/lib/copy.ts`.
+- Visual debt remains, so the copy describes the hazard detour as a simulation, not as delivery footage:
+  - The scroll still shows a fleet graph, object detection, a thermal search, fire, an ops grid, responder-style arrows and a power-station fire.
+  - No preparation, launch, handoff or return is animated.
+  - Phase 2 plan: `RAVEN_VISUAL_STORY_PLAN.md`.
+- Checked with agent-browser:
+  - Every chapter at 1440×900 and 390×844, a sample at 821×1109, and below-fold sections, menu, contact dialog (still "Not sent") and footer.
+  - Fixes made from the screenshots: the mobile "Care teams" callout title, shorter trait rows, the footer CTA width, and the mobile footer notice placement.
+  - The WebGL footer wordmark outline still did not show in headless capture (Open work 2).
+
+## Raven hexacopter v2 (user drone update, 2026-10-30)
+
+- `raven_hexa.glb` is now built from the user's v2 `Hexa_Medical_Drone_Black.glb` (from `asset/latest-drone/`):
+  86,456 tris (v1 36,508), 11 JPEG PBR maps, EO/IR turret, LiDAR and thermal pods. Same prepare script and rotor
+  contract; v1 source, prepared copy and web asset are kept in `glb/new-drone/` with a `_v1` suffix.
+- Web asset 1,995,084 bytes (v1 186,780): textures byte-identical to the source (lossless WebP would have been
+  6.59 MB), Draco 16/12/16. Requires `KHR_texture_transform`.
+- Rotor check passes: hub X/Z and CW/CCW pattern unchanged; hub Y 0.3385 (was 0.3485) after recentring.
+- `Drone.tsx` glint list follows the new material names (`PROP_Blade_DarkGrey` replaces `REF_Prop`; `MED_Carbon_Tube`
+  no longer exists).
+- Browser (agent-browser, 1440×900): hero, specs overhead, three-drone swarm and globe orbiters render; 60 fps /
+  16.7 ms p50 at each (vsync-capped on an M3, not a low-end measurement); no console errors.
+- Props (user request: no visible blades at speed): spin raised to 150 rad/s (~24 rev/s, was 45) and, while spinning,
+  each rotor shows a motion-blur disc (`scene/rotor-blur.ts`: dark smear, faint yellow tip trace, low-contrast blade
+  ghosts) with the `PROP_*` blade/tip meshes hidden; hubs stay. A faster mesh spin alone wagon-wheels at 60 Hz.
+  Reduced motion keeps the real, still blades. Checked at hero and overhead specs (1440×900).
+- Blade sun flashes (user request: blades must read as separate fast blades): the disc is a shader that sweeps two
+  blade images (crisp leading edge, long tail; 13 rad/s visible rate, per-rotor phase) and lights them with the live sun
+  against twisted, cambered blade normals. Flash gated by the blade images: radial streaks in the hero, narrow
+  sectors overhead, pulsing as blades pass. Checked at hero, overhead specs and swarm (1440×900).
+- Not changed: loader drone, silhouettes and site renders. The specs callout still reads "Coaxial quad / Four arms
+  carry paired upper and lower propellers", which does not describe this drone.
+
+## Raven hexacopter replaces the coaxial quad (user drone, 2026-10-30)
+
+- Hero, swarm and globe load `public/assets/models/raven_hexa.glb` (186,780 bytes), built from the user's `glb/new-drone/Hexa_Medical_Drone_Black.glb` by `glb/new-drone/prepare_hexa.mjs`. Commands: `glb/new-drone/README.md`.
+- Prepare step: the six nav point lights are stripped. The props become `Rotor_<Front|Mid|Rear>_<Left|Right>`, with spin directions read from the source's own prop clips (FL/MR/RL CW, FR/ML/RR CCW); the clips are then dropped. The model is centred on the prop ring.
+- Texture: lossless WebP, pixel-identical to the source. Geometry: Draco 16/12/16.
+- `node scripts/check-raven-rotors.mjs` passes: 6 pivots, 3 CW / 3 CCW, web parity.
+- Not yet changed: silhouettes, loader drone, mission-card/demo renders and the footer sequence still show the quad.
+
+## Terrain lens retune: high-speed look (user request, 2026-10-30)
+
+- Bug fixed: the low cloud layers (`Clouds.tsx`, transparent full-screen planes) wrote depth after the terrain, so the
+  lens read a flat cloud depth instead of the ground. The terrain mask never matched, and both blurs were close to
+  zero in every chapter. The clouds now have `depthWrite: false` (they are see-through, so they look the same).
+- High-speed look (`PostFX.tsx` constants): the terrain-travel part of the streak is exposed at `SPEED_GAIN` 9x (the
+  scene terrain only drifts ~0.5 units/s); camera motion stays physical. The per-frame travel is damped so streak
+  length does not flicker. Streak cap `MAX_BLUR_PX` 32 (96 and 48 smeared the overhead chapters into mush), 24 taps.
+  Depth of field `COC_INF_PX` 11 (was 7), disc cap `MAX_COC_PX` 40.
+- Checked with agent-browser at 1440x900: hero, Airframe overhead and Connection. Thermal wide view barely changes
+  (the terrain stops there). fps with the lens on vs `?lens=off`: hero 60.3/60.3, swarm 54.7/49.0, thermal 57.0/53.3
+  (dev server, M3; the swarm/thermal dips also occur with the lens off).
+- Follow-up (user: "feels too much"): `SPEED_GAIN` 9 -> 6 -> 4 -> 3, `MAX_BLUR_PX` 32 -> 24 -> 20 -> 16 (three user rounds); depth of field `COC_INF_PX` 11 -> 5, `MAX_COC_PX` 40 -> 16 (subtle: strong defocus on a wide aerial reads as a miniature).
+- Not checked: mobile widths, Shift boost (will sit on the streak cap), reduced motion (motion blur off by code path).
+
+## Terrain lens: motion blur + depth of field (Raven addition, 2026-10-30)
+
+- `scene/TerrainLensEffect.ts`, one EffectPass right after the RenderPass (uses the composer's scene depth).
+  Each pixel's world position is rebuilt from depth; only the terrain band (world y < -1.55: ground + roofs reach
+  -1.7, drones never go below -0.55 in any chapter, measured) is treated, and taps landing on nearer objects are
+  rejected, so drones stay sharp with no halo.
+- Motion blur: screen velocity of that ground point = this frame's terrain travel (`terrainOffset` delta, -Z) plus
+  camera motion (reprojection with last frame's view-projection), times a 1/30 s shutter. Near ground streaks more
+  than far ground; it grows with Shift boost and scroll; zero history on wrap/ramp jumps, resize or stalled frames.
+  Reduced motion: no motion blur.
+- Depth of field: thin lens focused on Drone1Group's world distance (7.1 at the hero, 18.5 swarm overhead, 28 in
+  the thermal wide view); blur diameter 7 px (1080p) x |1 - focus/distance|, 16 Vogel taps, max 36 px.
+- `?lens=off` disables the pass for comparison. Checked hero, mid-scroll, overhead specs, swarm, thermal; 60 fps
+  hero, thermal 57.6-58.2 fps on vs 58.6 off (M3); no console errors.
+- Idle hero motion blur is subtle by design: the terrain only moves ~0.5 units/s on screen, so a physical shutter
+  gives a sub-pixel to ~2 px streak; Shift boost (6x) and scrolling show clear streaks.
+
+## Raven terrain v02 look-dev map (user reference: golden-hour aerial of green karst hills, 2026-10-30)
+
+- Same `raven-terrain.glb` contract and geometry; only the baked appearance changed. New base map (4096, WebP q80) is an
+  orthographic render of the look-dev scene: ~53k trees, ~2k bushes, ~0.5k limestone outcrops per tile placed by
+  slope/curvature/sun-facing masks, golden meadow and rock materials, asphalt road, warm 20 deg sun with long shadows.
+  House atlas re-baked under the same light. 2,468,236 bytes (v01 873,544). No site code changed.
+- Checker PASS (edge continuity required sharp WebP via gltf-transform; Blender's WebP export failed it at 4K).
+- Browser (agent-browser, dev server): hero 1440×900, idle 30 s, DELTA overhead, route/detection (anchors on the ground),
+  thermal wide view, 390×844 mobile; 60 fps / 16.7 ms p50 at the hero (M3, vsync-capped); no console errors.
+- Gaps: trees are baked into the ground (flat at oblique angles, not 3D); haze/clouds from the Blender look-dev are not
+  in the site (site fog/grade apply instead); the shipped city tile still differs in style during thermal/ignition;
+  the golden light is lower (20 deg) than the drone's scene sun.
+
+## Raven mountain-village terrain replaces the natural tile (2026-10-30)
+
+Brief: `RAVEN_REALTIME_TERRAIN_CLAUDE_PROMPT.md`. Source, rebuild and checker: `glb/raven-terrain/README.md`.
+
+- `public/assets/models/raven-terrain.glb` (873,544 bytes): `Land-A` (20,000 tris, same footprint, flat 2.189 rim and
+  planar UV contract as the shipped tile) plus `Houses` (24 houses, 624 tris), baked appearance maps (2K ground,
+  1K house atlas). Valley road continues across tile rows; three terraced villages; rock, scree, conifers, summit snow.
+- `Terrain.tsx`: tile placement, travel, wrap, ramp, fog keyframes, scan and visibility groups are unchanged. Natural
+  tiles use the Raven `Land-A` and map. Each natural tile mounts `Houses` inside its own moving group (houses travel
+  with their ground) using a third `TerrainMaterial`, so fog and the Phalanx scan apply to them too. The city tile
+  keeps the shipped geometry, base map and `city.webp` overlay, so the thermal/ignition destination is unchanged.
+- `DetectionPoints` take `RAVEN_DETECTION_Y` (`scene/raven-terrain.ts`): the shipped anchors sit on their own ground,
+  so each anchor's height is the decoded Raven ground at the same x/z.
+- `?terrain=original` restores the shipped natural tile; `?plate=h00` also uses it (the plate was matched to it and
+  supplies its own hero background, so the two backgrounds never share a test). `plateLight.weight` stays 0 otherwise.
+- Depth: the postprocessing composer's targets carry a depth buffer (`depthBuffer` defaults to true), so houses and
+  ridges occlude each other; `depth: false` on the canvas context does not affect that path.
+- Checked: `check_terrain.py` PASS on the decoded asset (identity nodes, one rim height on all 4 edges, UV error
+  0.31 texel, periodic texture edges, houses seated). Headless Chrome (agent-browser, production build): hero 1440×900,
+  idle 72 s (over two wraps), Arrow steering and Shift, DELTA mid/end (roofs read overhead), swarm, detection
+  (anchors on the ground), thermal, ignition, scan, reverse scroll to the hero, 390×844 (mobile tracks), 821×1109 and
+  1600×900 (desktop-only tiles); no console errors (the `toHalfFloat` warning also occurs with `?terrain=original`).
+  60 fps / 16.7 ms p50 at hero and thermal for both terrains (vsync-capped on an M3; not a low-end measurement).
+
+Known gaps:
+- No settlement/clinic tile: the city tile is still the shipped one, so its texture style differs from the Raven
+  tiles beside it during thermal/ignition.
+- The shipped 4K terrain map still loads (city base map); the Raven tile adds 874 KB download.
+- Softer than the shipped 4K texture at the closest overhead framing (end of DELTA_DRONE).
+- Houses are flat-coloured; conifers are baked crowns, not geometry.
+- Draw calls: +1 per natural tile for its houses (up to 18).
+
+## Environment plate prototype (opt-in `?plate=h00`, 2026-10-30)
+
+Seedance 2.5 clips (480p, high bitrate, 16:9, 24 fps, silent) of one flight, drawn behind the live drones by `scene/HeroPlate.tsx`. The live terrain stays the default; without the query nothing changes.
+
+| Clip | File | Drives it | Notes |
+|---|---|---|---|
+| Hero | `raven-h00-loop.mp4`, 6.54 s | time, loops | 1.5 s crossfade loop. Measured drift −146° (up-left) at 3.8 %W/s, matching the live hero (−136°, 3.8 %W/s). |
+| Airframe | `raven-s01-airframe.mp4`, 8.04 s, all-intra | DELTA_DRONE progress → measured camera pitch (33.4° → 90°) → clip time | 33° oblique tilts to straight down; health centre enters upper-left. Flow-map drift keeps the ground moving when scroll stops. |
+| Connection | `raven-s02-connection.mp4`, 12.04 s | plays from 0 when the tilt ends, then loops 5.5–12.04 s | Straight down, past the health centre. Opening similarity-aligned to the Airframe last frame (seam diff 30.3 → 11.2); the loop range excludes the building. |
+
+- Crossfades: hero → airframe at DELTA_DRONE .02–.08, airframe → connection at .90–.96; fade to live terrain at SWARM_SCENE .88–1.
+- Shader: parallax shear on oblique views, two-phase flow map (no reset at loop points), directional motion blur near / disc blur far, haze, grade `pow(c,1.3)*0.9`.
+- Lighting (`scene/plate-light.ts`): while the plate shows, the drone uses a plate-matched PMREM environment (hazy sky, high late-morning sun 48° up and 22° left of the view heading, the plate's ground as reflected ground) instead of the sunset `env.exr`. The sun casts soft 2048 PCF shadows on the drones only; `MainScene` refits the shadow camera round `Drone1Group` every 15 frames.
+- Prompt rule learnt: the live camera retreats ahead of the drone, so ground must recede toward the TOP of frame. Seedance reads "forward" as content moving down; S02 was generated rotated 180° and turned back.
+- Sources, prompts and clip manifests: `research/raven-film/` (local only, `README.md` there).
+
+Known gaps:
+- Airframe mid-clip drift runs about 20° right of vertical; live terrain drifts slightly left. Visible only while scrolling.
+- Connection keeps one ground scale while the live camera climbs (0.54×); reads as a climb because the drones shrink.
+- 480p is soft behind the specs callouts; crossfades show brief double exposure.
+- The hand-off to live terrain at Prepare is a visible style change; later chapters have no plates.
+- Not checked on mobile widths or mobile camera tracks; not committed or deployed.
+
 ## Raven verification
 
 - Production build and TypeScript check pass.

@@ -181,13 +181,13 @@ export function ThermalHud({ drone1Ref }: { drone1Ref: RefObject<THREE.Group | n
           >
             <div className={clsx("relative top-0 left-0 h-full w-full transition-opacity delay-250 duration-350", phase === "intro" ? "opacity-0" : "opacity-100")}>
               <div className={clsx("text-d-mono absolute -top-px -left-px hidden h-5 items-center bg-black/70 px-1 font-mono text-white uppercase opacity-0 transition-opacity delay-500 md:flex", phase !== "intro" && "opacity-100")}>
-                Thermal Sensor
+                Simulated heat view
               </div>
               <div className={clsx("text-d-mono absolute -right-px -bottom-px flex h-5 items-center bg-black/70 px-1 font-mono text-white uppercase opacity-0 transition-opacity delay-500", phase !== "intro" && "opacity-100")}>
-                0°C
+                Cool
               </div>
               <div className={clsx("text-d-mono absolute -top-px -right-px flex h-5 items-center bg-black/70 px-1 font-mono text-white uppercase opacity-0 transition-opacity delay-500", phase !== "intro" && "opacity-100")}>
-                148°C
+                Hot
               </div>
             </div>
             <div className="absolute -inset-px bg-no-repeat" style={DASHED} />
@@ -204,7 +204,7 @@ export function ThermalHud({ drone1Ref }: { drone1Ref: RefObject<THREE.Group | n
           <div className="z-1000 -translate-1/2 transition-opacity select-none">
             <div className="outline-red relative h-12 w-20 origin-top-left outline -outline-offset-1 transition-colors select-none" />
             <div className="text-d-mono bg-red absolute -top-3 flex h-3 items-center px-0.5 font-mono whitespace-nowrap text-black uppercase transition-colors">
-              Threat Area
+              Hazard area
             </div>
           </div>
         </div>

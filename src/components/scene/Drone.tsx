@@ -9,11 +9,13 @@ import { damp } from "@/lib/math";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useGLB } from "./types";
 import { collectRavenRotors, advanceRavenRotors } from "./raven-rotors";
+import { attachRotorBlur, setRotorBlur, updateRotorBlur } from "./rotor-blur";
+import { plateLight } from "./plate-light";
 import { sunlight } from "./sunlight";
 
 const ENV_INTENSITY = 0.85;
-/** Surfaces that flash when a facet lines up with the sun (satin shell, coated carbon, blades). */
-const GLINT_MATERIALS = /^MAT_Raven_(Shell_CoolGray|Carbon_Tube|Propeller|PropTip)$/;
+/** Surfaces that flash when a facet lines up with the sun (body carbon, chassis, medical box, blades). */
+const GLINT_MATERIALS = /^(REF_Carbon|REF_Plastic_Graphite|MED_Chassis_Charcoal|MED_Box_White|PROP_Blade_DarkGrey)$/;
 /** Shell facet normals in model space (top plateau, shoulders, nose/tail rakes; glTF Y up). */
 const FACETS = [
   new THREE.Vector3(0, 1, 0),
@@ -38,7 +40,7 @@ export function RavenModel({ envMap, span = 200 }: { envMap?: THREE.Texture; spa
   const { scene } = useGLB(ASSETS.raven);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const glint = useRef(0);
-  const { object, rotors, ownedMaterials, live, envRotation, scale } = useMemo(() => {
+  const { object, rotors, blur, ownedMaterials, live, envRotation, scale } = useMemo(() => {
     const object = scene.clone(true);
     const rotors = collectRavenRotors(object);
     const ownedMaterials: THREE.Material[] = [];
@@ -48,6 +50,8 @@ export function RavenModel({ envMap, span = 200 }: { envMap?: THREE.Texture; spa
     object.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
       child.renderOrder = RENDER_ORDER.HERO_DRONE;
+      // Self-shadowing: arms, deck and props shade the box and gear (terrain is unlit and never receives).
+      child.castShadow = child.receiveShadow = true;
       const copy = (source: THREE.Material) => {
         const material = source.clone();
         if (material instanceof THREE.MeshStandardMaterial && envMap) {
@@ -64,12 +68,24 @@ export function RavenModel({ envMap, span = 200 }: { envMap?: THREE.Texture; spa
     });
     const bounds = new THREE.Box3().setFromObject(object);
     const size = bounds.getSize(new THREE.Vector3());
-    return { object, rotors, ownedMaterials, live, envRotation, scale: span / Math.max(size.x, size.z) };
+    // After the material pass: blur discs keep their own shader and cast no shadow.
+    const blur = attachRotorBlur(object, rotors);
+    ownedMaterials.push(...blur.materials);
+    return { object, rotors, blur, ownedMaterials, live, envRotation, scale: span / Math.max(size.x, size.z) };
   }, [scene, envMap, span]);
   useEffect(() => () => ownedMaterials.forEach((material) => material.dispose()), [ownedMaterials]);
-  useFrame(({ camera }, dt) => {
-    if (!reducedMotion) advanceRavenRotors(rotors, dt);
+  // Reduced motion keeps the rotors still, so it shows the real blades instead of the blur.
+  useEffect(() => setRotorBlur(blur, !reducedMotion), [blur, reducedMotion]);
+  useFrame(({ camera, clock }, dt) => {
+    if (!reducedMotion) {
+      advanceRavenRotors(rotors, dt);
+      updateRotorBlur(blur, clock.getElapsedTime());
+    }
     if (!live.length) return;
+    // Over the H00 plate, reflect the plate-matched sky and terrain instead of the default sunset HDRI.
+    const plateEnv = plateLight.weight > 0.5 ? plateLight.env : null;
+    const wantEnv = plateEnv ?? envMap ?? null;
+    if (live[0].material.envMap !== wantEnv) for (const { material } of live) material.envMap = wantEnv;
     // Sky/sun reflections follow the travel-driven heading (sunlight.ts) so highlights slide while flying.
     envRotation.set(sunlight.pitch, sunlight.heading, 0);
     // Sun glint: brief flare when a shell facet's half-vector (sun, camera) lines up as the aircraft banks.
@@ -85,13 +101,14 @@ export function RavenModel({ envMap, span = 200 }: { envMap?: THREE.Texture; spa
     }
     glint.current = damp(glint.current, target, target > glint.current ? 14 : 4, dt);
     // Under cloud the sky still reflects, so environment dims less than direct sun.
-    const env = ENV_INTENSITY * (0.8 + 0.2 * sunlight.shade);
+    // The plate sky is a softer, broader source than the HDRI's clipped sun: lift its fill a little.
+    const env = ENV_INTENSITY * (0.8 + 0.2 * sunlight.shade) * (1 + 0.3 * plateLight.weight);
     for (const { material, coat, glints } of live) {
       material.envMapIntensity = env + (glints ? 0.45 * glint.current : 0);
       if (glints && material instanceof THREE.MeshPhysicalMaterial) material.clearcoat = coat + 0.35 * glint.current;
     }
   });
-  // Raven faces +Z; the original rig's nose points -Z. Keep rotor deck at the tracker origin.
+  // The hexa faces +Z (front props at +Z); the original rig's nose points -Z. Body centre sits on the tracker origin.
   return <primitive object={object} rotation={[0, Math.PI, 0]} scale={scale} dispose={null} />;
 }
 

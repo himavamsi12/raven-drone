@@ -185,33 +185,33 @@ function Responders() {
   const cls = show ? "opacity-100" : "opacity-0";
   return (
     <>
-      <Responder position={[-3, 0, 2]} progress={progress} pathData="M0.489136 97.9961C6.48914 69.6628 39.3891 10.4961 122.989 0.496094" viewBox="0 0 124 99" className={cls} label="Police" />
-      <Responder position={[0.25, 0, -2.25]} progress={progress} pathData="M63.4999 0.398438C42.6665 16.2318 2.09988 60.8984 0.499878 142.898" viewBox="0 0 64 143" className={cls} label="Firefighters" />
-      <Responder position={[2.9, 0, -1]} progress={progress} pathData="M177.622 0.263672C160.788 27.4303 92.5217 68.0637 0.121704 91.2637" viewBox="0 0 179 92" className={cls} label="Ambulance" />
-      <Responder position={[2.35, 0, 1.5]} progress={progress} pathData="M146.607 101.488C144.773 68.6549 128.507 28.4883 0.106567 0.488281" viewBox="0 0 148 102" className={cls} label="Emergency Services" />
+      <Responder position={[-3, 0, 2]} progress={progress} pathData="M0.489136 97.9961C6.48914 69.6628 39.3891 10.4961 122.989 0.496094" viewBox="0 0 124 99" className={cls} label="Health centre update" />
+      <Responder position={[0.25, 0, -2.25]} progress={progress} pathData="M63.4999 0.398438C42.6665 16.2318 2.09988 60.8984 0.499878 142.898" viewBox="0 0 64 143" className={cls} label="Clinic update" />
+      <Responder position={[2.9, 0, -1]} progress={progress} pathData="M177.622 0.263672C160.788 27.4303 92.5217 68.0637 0.121704 91.2637" viewBox="0 0 179 92" className={cls} label="Care-team update" />
+      <Responder position={[2.35, 0, 1.5]} progress={progress} pathData="M146.607 101.488C144.773 68.6549 128.507 28.4883 0.106567 0.488281" viewBox="0 0 148 102" className={cls} label="Road access update" />
     </>
   );
 }
 
 const MULTI_STATES: Record<"perimeter_1" | "perimeter_2" | "perimeter_3", { perimeter: { status: Status; hidden?: boolean }; focusAreas: DotVariant }>[] = [
   {
-    perimeter_1: { perimeter: { status: { variant: "danger", text: "Hazard Area" }, hidden: true }, focusAreas: "red" },
-    perimeter_2: { perimeter: { status: { variant: "danger", text: "Active Zone" }, hidden: true }, focusAreas: "red" },
-    perimeter_3: { perimeter: { status: { variant: "danger", text: "Alert Area" }, hidden: true }, focusAreas: "red" },
+    perimeter_1: { perimeter: { status: { variant: "danger", text: "Supply request" }, hidden: true }, focusAreas: "red" },
+    perimeter_2: { perimeter: { status: { variant: "danger", text: "Supply request" }, hidden: true }, focusAreas: "red" },
+    perimeter_3: { perimeter: { status: { variant: "danger", text: "Supply request" }, hidden: true }, focusAreas: "red" },
   },
   {
-    perimeter_1: { perimeter: { status: { variant: "danger", text: "Hazard Area" } }, focusAreas: "red" },
-    perimeter_2: { perimeter: { status: { variant: "danger", text: "Active Zone" } }, focusAreas: "red" },
-    perimeter_3: { perimeter: { status: { variant: "danger", text: "Alert Area" } }, focusAreas: "red" },
+    perimeter_1: { perimeter: { status: { variant: "danger", text: "Supply request" } }, focusAreas: "red" },
+    perimeter_2: { perimeter: { status: { variant: "danger", text: "Supply request" } }, focusAreas: "red" },
+    perimeter_3: { perimeter: { status: { variant: "danger", text: "Supply request" } }, focusAreas: "red" },
   },
   {
-    perimeter_1: { perimeter: { status: { variant: "safe", text: "Zone Stabilized" } }, focusAreas: "green" },
-    perimeter_2: { perimeter: { status: { variant: "safe", text: "Zone Stabilized" } }, focusAreas: "green" },
-    perimeter_3: { perimeter: { status: { variant: "safe", text: "Area Contained" } }, focusAreas: "green" },
+    perimeter_1: { perimeter: { status: { variant: "safe", text: "Illustrative route" } }, focusAreas: "green" },
+    perimeter_2: { perimeter: { status: { variant: "safe", text: "Illustrative route" } }, focusAreas: "green" },
+    perimeter_3: { perimeter: { status: { variant: "safe", text: "Illustrative route" } }, focusAreas: "green" },
   },
 ];
 
-/** Multi-threat response zones (shipped `eV`). */
+/** Multi-threat response zones (shipped `eV`); Raven: remote clinics in the network view. */
 function MultiThreatZones() {
   const md = useMediaQuery("(min-width: 768px)");
   const engaged = useScenes((s) => s[SCENE.MULTI_THREAT_RESPONSE].progress > 0.5);
@@ -235,19 +235,19 @@ function MultiThreatZones() {
 }
 
 const SURVEY: { status: Status; hidden?: boolean }[] = [
-  { status: { variant: "warning", text: "Survey Area" }, hidden: true },
-  { status: { variant: "warning", text: "Survey Area" } },
-  { status: { variant: "danger", text: "Active Threats" } },
-  { status: { variant: "safe", text: "Services on site" } },
+  { status: { variant: "warning", text: "Route view" }, hidden: true },
+  { status: { variant: "warning", text: "Route view" } },
+  { status: { variant: "danger", text: "Hazard noted" } },
+  { status: { variant: "safe", text: "Care-team update" } },
 ];
 const SENSITIVE: { status: Status; hidden?: boolean }[] = [
-  { status: { variant: "warning", text: "Sensitive Area" }, hidden: true },
-  { status: { variant: "warning", text: "Sensitive Area" } },
-  { status: { variant: "danger", text: "Alert Area" } },
-  { status: { variant: "safe", text: "Area Secured" } },
+  { status: { variant: "warning", text: "Hill clinic" }, hidden: true },
+  { status: { variant: "warning", text: "Hill clinic" } },
+  { status: { variant: "danger", text: "Access review" } },
+  { status: { variant: "safe", text: "Scenario update" } },
 ];
 
-/** Phalanx/analysis/notification zones on the city tile (shipped `e1`). */
+/** Route/review/update zones on the city tile (shipped `e1`). */
 export function Perimeters() {
   const dotsOn = useScenes((s) => s[SCENE.PHALANX_AI].progress > 0.5);
   const surveyOn = useScenes((s) => s[SCENE.PHALANX_AI].progress > 0.75);

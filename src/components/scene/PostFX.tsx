@@ -2,11 +2,13 @@
 
 import { useFrame, useThree } from "@react-three/fiber";
 import { BlendFunction, Effect, EffectComposer, EffectPass, RenderPass, SMAAEffect } from "postprocessing";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { BG_COLOR, SKY_COLOR, thermalState } from "@/lib/constants";
-import { remap } from "@/lib/math";
+import { BG_COLOR, SKY_COLOR, terrainOffset, thermalState } from "@/lib/constants";
+import { damp, remap } from "@/lib/math";
 import { SCENE, scenes } from "@/lib/scenes";
+import { useMediaQuery } from "@/lib/use-media-query";
+import { TerrainLensEffect } from "./TerrainLensEffect";
 
 /** Flock scene radial-blur crossfade (shipped module 8743 + shader 79755). */
 class RenderTargetMixEffect extends Effect {
@@ -243,20 +245,40 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   }
 }
 
-/** Composer: scene -> flock crossfade -> AA -> final grade (shipped module 41480). */
+/** Lens (Raven): exposure for the terrain motion blur and the thin-lens blur at infinity (px at 1080p). */
+const SHUTTER_S = 1 / 30;
+/** Perceived flight speed: terrain-travel streak exposed as if the ground passed this many times faster. */
+const SPEED_GAIN = 3;
+/** Longest motion streak and largest defocus disc (px at 1080p). */
+const MAX_BLUR_PX = 16;
+const MAX_COC_PX = 16;
+const COC_INF_PX = 5;
+/** Top of the terrain band in world Y (parent -2.5 + 0.04 x highest roof ~20 local = -1.7); drones fly above. */
+const TERRAIN_TOP = -1.55;
+const _vp = new THREE.Matrix4();
+const _drone = new THREE.Vector3();
+const _eye = new THREE.Vector3();
+
+/** Composer: scene -> terrain lens (Raven) -> flock crossfade -> AA -> final grade (shipped module 41480). */
 export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const { gl, scene, size, camera } = useThree();
   const aspect = useRef(new THREE.Vector2());
-  const [composer, final, mix] = useMemo(() => {
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  // `?lens=off` disables the Raven lens pass (comparison).
+  const [lensOn] = useState(() => typeof window === "undefined" || new URLSearchParams(window.location.search).get("lens") !== "off");
+  const lensState = useRef({ prevVP: new THREE.Matrix4(), prevOffset: 0, step: 0, first: true, frame: 0, drone: null as THREE.Object3D | null });
+  const [composer, final, mix, lens] = useMemo(() => {
     const composer = new EffectComposer(gl, { multisampling: 0 });
     const final = new FinalEffect();
     const mix = new RenderTargetMixEffect(flockTarget);
+    const lens = new TerrainLensEffect();
     composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new EffectPass(camera, lens)); // needs the scene depth: first pass after the render
     composer.addPass(new EffectPass(camera, mix));
     // Shipped bundle constructs a default effect here (minified `eF`); SMAA is inferred.
     composer.addPass(new EffectPass(camera, new SMAAEffect()));
     composer.addPass(new EffectPass(camera, final));
-    return [composer, final, mix] as const;
+    return [composer, final, mix, lens] as const;
   }, [gl, scene, camera, flockTarget]);
 
   useEffect(() => {
@@ -283,10 +305,54 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     final.u("uThermalInvertPos").value.copy(thermalState.pos);
     final.u("uThermalInvertSize").value.copy(thermalState.size);
     final.u("uThermalInvertTargetPos").value.copy(thermalState.targetPos);
+    updateLens(state.camera, dt);
     gl.outputColorSpace = THREE.LinearSRGBColorSpace;
     const night = s[SCENE.IGNITION_VERIFIED].progress > 0.99;
     gl.setClearColor(night ? BG_COLOR : SKY_COLOR, 1);
     gl.outputColorSpace = THREE.SRGBColorSpace;
     composer.render(dt);
+    lensState.current.prevVP.copy(_vp);
   }, 100);
+
+  function updateLens(cam: THREE.Camera, dt: number) {
+    const st = lensState.current;
+    const pc = cam as THREE.PerspectiveCamera;
+    cam.updateWorldMatrix(true, false); // camera lives under the clip-driven mover/dolly groups
+    _vp.multiplyMatrices(pc.projectionMatrix, pc.matrixWorldInverse);
+    const offset = terrainOffset.current ?? 0;
+    let step = offset - st.prevOffset;
+    st.prevOffset = offset;
+    if (st.first || Math.abs(step) > 2 || dt > 0.1) {
+      // first frame, wrap/ramp jump or a stalled tab: no history, no blur this frame
+      st.prevVP.copy(_vp);
+      step = 0;
+      st.step = 0;
+      st.first = false;
+    }
+    // Smooth the per-frame travel so frame-time jitter does not make the streak length flicker.
+    st.step = damp(st.step, step, 10, dt);
+    st.drone ??= scene.getObjectByName("Drone1Group") ?? null;
+    cam.getWorldPosition(_eye);
+    const focus = st.drone ? st.drone.getWorldPosition(_drone).distanceTo(_eye) : 10;
+    const ratio = gl.getPixelRatio();
+    const u = (n: string) => lens.u(n).value;
+    u("uInvProj").copy(pc.projectionMatrixInverse);
+    u("uCamWorld").copy(pc.matrixWorld);
+    u("uPrevViewProj").copy(st.prevVP);
+    u("uTexel").set(1 / (size.width * ratio), 1 / (size.height * ratio));
+    lens.u("uPxScale").value = (size.height * ratio) / 1080;
+    lens.u("uNear").value = pc.near;
+    lens.u("uFar").value = pc.far;
+    lens.u("uTerrainStep").value = st.step;
+    // Streak = per-frame screen motion scaled to the exposure: velocity x shutter time.
+    lens.u("uShutter").value = dt > 0 ? Math.min(SHUTTER_S / dt, 4) : 0;
+    lens.u("uMotion").value = reducedMotion || !lensOn ? 0 : 1;
+    lens.u("uSpeedGain").value = SPEED_GAIN;
+    lens.u("uFocus").value = focus;
+    lens.u("uCocInf").value = lensOn ? COC_INF_PX : 0;
+    lens.u("uMaxBlurPx").value = MAX_BLUR_PX * ((size.height * ratio) / 1080);
+    lens.u("uMaxCocPx").value = MAX_COC_PX * ((size.height * ratio) / 1080);
+    lens.u("uTerrainTop").value = TERRAIN_TOP;
+    lens.u("uFrame").value = st.frame = (st.frame + 1) % 997;
+  }
 }

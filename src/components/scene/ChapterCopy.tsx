@@ -91,11 +91,12 @@ function Pill({ children, className }: { children: ReactNode; className?: string
   );
 }
 
+/** Raven: the four parts of one delivery replace the shipped trait list (same rows/layout). */
 const SWARM_TRAITS = [
-  { title: "Autonomy", description: "Guided routes from health centre to village" },
-  { title: "Scalability", description: "Connect more villages as the network grows" },
-  { title: "Collaboration", description: "Coordinate deliveries with local care teams" },
-  { title: "Coverage", description: "Reach communities beyond the road network" },
+  { title: "Sender", description: "A regional health centre" },
+  { title: "Cargo", description: "Medicines in a secured case" },
+  { title: "Route", description: "Over the ridge, not the road" },
+  { title: "Receiver", description: "Health workers at the clinic" },
 ];
 
 const bottomLeft = "bottom-0 left-0 lg:absolute lg:mr-70 lg:max-w-133.5";
@@ -104,13 +105,17 @@ function Hero() {
   const explore = useScrollToScene(SCENE.DELTA_DRONE);
   return (
     <Frame innerClassName="md:!block">
-      <Heading>Delivering care beyond the last road</Heading>
+      <p className="text-m-mono md:text-d-mono mb-3 font-mono text-white/70 uppercase text-shadow-[0px_1px_32px_rgba(0,0,0,0.25)] md:mb-4">
+        Illustrative medical delivery
+      </p>
+      <Heading>The road goes around. Raven goes over.</Heading>
       <div className="absolute right-0 bottom-0 contents w-133.5 flex-col gap-4 md:flex md:gap-6">
         <Support className="lg:max-w-128.5">
-          Meet Raven. A medical delivery drone concept connecting remote mountain villages with the medicines and supplies they need.
+          When a hill clinic runs short of medicines, the journey matters. Raven explores a direct air link from a regional health centre to the
+          village waiting for supplies.
         </Support>
         <Cta className="w-62.5" onClick={explore}>
-          Scroll To Explore
+          Follow the delivery
         </Cta>
       </div>
     </Frame>
@@ -122,11 +127,12 @@ function Swarm() {
   return (
     <Frame innerClassName="[@media(min-width:48rem)_and_(min-height:37.5rem)]:!block">
       <Heading as="h2" variant="h2">
-        {short ? "The Raven Network" : "A connected network of care"}
+        {short ? "Health centre to hill clinic." : "From a health centre to a hill clinic."}
       </Heading>
       <div className="right-0 bottom-0 contents w-168.75 flex-col gap-4 [@media(min-width:48rem)_and_(min-height:37.5rem)]:absolute [@media(min-width:48rem)_and_(min-height:37.5rem)]:flex [@media(min-width:48rem)_and_(min-height:37.5rem)]:gap-6">
         <Support className="[@media(min-width:48rem)_and_(max-height:37.5rem)]:max-w-xl">
-          A coordinated delivery concept linking regional health centres with isolated villages across mountain valleys and cold, remote terrain.
+          One supply request gives the journey a purpose. Raven&apos;s wider network begins with the connection between a care team and the village it
+          serves.
         </Support>
         <AnimatePresence mode="wait" propagate>
           <motion.div initial={ENTER} animate={SETTLE} exit={EXIT} transition={{ duration: 0.4, ease: "easeInOut", delay: 0.4 }}>
@@ -148,15 +154,15 @@ function Mission() {
   return (
     <Frame innerClassName="md:!block">
       <div className="contents w-full flex-wrap justify-between gap-4 md:flex">
-        <Heading as="h2" variant="h2" className="whitespace-nowrap">
-          Plan the delivery
+        <Heading as="h2" variant="h2" className="text-balance">
+          Start with what the clinic needs.
         </Heading>
         <div className="flex flex-col gap-4 md:gap-6 lg:max-w-204">
           <Support>
-            Plan a medical supply route from a regional health centre to a remote village, accounting for terrain, access and changing weather.
+            In this illustrative journey, a care team prepares the supplies and reviews the destination before dispatch.
           </Support>
           <Cta className="w-62.5" onClick={start}>
-            Explore the Route
+            Explore the route
           </Cta>
         </div>
       </div>
@@ -183,14 +189,14 @@ function Thermal() {
   return (
     <Frame>
       <Heading as="h2" variant="h2">
-        <span>Route hazard</span>
+        <span>A hazard changes</span>
         <br />
         <span className="inline-flex items-center gap-2 md:gap-4">
-          detected <Pill className={clsx("opacity-0 transition-opacity duration-500", done === "done" && "opacity-100")}>M-1 Success</Pill>
+          the plan. <Pill className={clsx("opacity-0 transition-opacity duration-500", done === "done" && "opacity-100")}>Hazard noted</Pill>
         </span>
       </Heading>
       <Support className={bottomLeft}>
-        A simulated heat and smoke alert flags a hazard along the route so the care team can review delivery access.
+        This simulated heat alert interrupts the delivery scenario. The route needs review before the journey continues.
       </Support>
     </Frame>
   );
@@ -204,51 +210,74 @@ const CHAPTERS: { component: ComponentType; timeWindow: Window }[] = [
   { component: Swarm, timeWindow: { startScene: SCENE.SWARM_SCENE, startSceneProgress: 0.75, endScene: SCENE.MISSION_PRESET, endSceneProgress: 0.075 } },
   { component: Mission, timeWindow: { startScene: SCENE.MISSION_PRESET, startSceneProgress: 0.75, endScene: SCENE.FLOCK_SCENE, endSceneProgress: 0.01 } },
   {
-    component: simple(null, "Raven deliveries share route updates to help care teams coordinate supplies across remote communities."),
+    component: simple(
+      "Keep the delivery in view.",
+      "The aircraft is one part of the journey. The sender, the receiving clinic and the route between them matter just as much.",
+    ),
     timeWindow: { startScene: SCENE.FLOCK_SCENE, startSceneProgress: 0.75, endScene: SCENE.REAL_TIME_DETECTION, endSceneProgress: 0.01 },
   },
   {
-    component: simple("Route awareness", "Route awareness and classification of tens of thousands of objects across the battlespace."),
+    component: simple("Read the route ahead.", "The route view introduces the terrain, road access and obstacles between the health centre and the clinic."),
     timeWindow: { startScene: SCENE.REAL_TIME_DETECTION, startSceneProgress: 0.5, endScene: SCENE.THERMAL_IRREGULARITY, endSceneProgress: 0.075 },
   },
   { component: Thermal, timeWindow: { startScene: SCENE.THERMAL_IRREGULARITY, startSceneProgress: 0.9, endScene: SCENE.IGNITION_VERIFIED, endSceneProgress: 0.075 } },
   {
-    component: simple("Hazard confirmed", "The route simulation confirms a fire near the planned delivery area and flags the need for review."),
+    component: simple(
+      "Review the affected area.",
+      "The scene confirms a fire along the illustrated route. It is a route-planning example, not a claim that Raven fights fires.",
+    ),
     timeWindow: { startScene: SCENE.IGNITION_VERIFIED, startSceneProgress: 0.75, endScene: SCENE.PHALANX_AI, endSceneProgress: 0.075 },
   },
   {
-    component: simple("Raven Operations", "A delivery coordination concept bringing route status, village requests and care-team updates into one view."),
+    component: simple(
+      "Keep the care team informed.",
+      "A useful delivery view brings the destination and route status together, so the people arranging supplies share the same picture.",
+    ),
     timeWindow: { startScene: SCENE.PHALANX_AI, startSceneProgress: 0.8, endScene: SCENE.ANALYSIS_EVALUATION, endSceneProgress: 0.075 },
   },
   {
-    component: simple("Analysis & evaluation", "Review the simulated hazard and surrounding access routes before proceeding with the medical delivery."),
+    component: simple(
+      "Reconsider the approach.",
+      "When access changes, the delivery plan must change with it. The next step in this scenario is a review of the route.",
+    ),
     timeWindow: { startScene: SCENE.ANALYSIS_EVALUATION, startSceneProgress: 0.75, endScene: SCENE.INTEGRATED_NOTIFICATIONS, endSceneProgress: 0.075 },
   },
   {
-    component: simple("Integrated notifications", "Keep health workers and local response teams informed about delivery progress and route hazards."),
+    component: simple(
+      "The clinic needs an update.",
+      "If a delivery is delayed, the people waiting for it need to know. Clear updates belong to the journey, not just to the aircraft.",
+    ),
     timeWindow: { startScene: SCENE.INTEGRATED_NOTIFICATIONS, startSceneProgress: 0.9, endScene: SCENE.INTERDRONE_COORDINATION, endSceneProgress: 0.075 },
   },
   {
-    component: simple("Inter-drone coordination", "Coordinate supply runs between nearby health centres and villages as delivery needs change."),
+    component: simple(
+      "Coordinate the next supply run.",
+      "The wider concept connects several requests with the care teams arranging them. Extra aircraft are support, not the story's main event.",
+    ),
     timeWindow: { startScene: SCENE.INTERDRONE_COORDINATION, startSceneProgress: 0.75, endScene: SCENE.EXTRA_SUPPORT, endSceneProgress: 0.075 },
   },
   {
-    component: simple(null, "A second Raven joins the simulated route to support communities whose normal supply access is disrupted."),
+    component: simple(
+      "Support the places still waiting.",
+      "A second Raven enters the illustration as access is reviewed. The goal remains the same: getting supplies to the intended clinic.",
+    ),
     timeWindow: { startScene: SCENE.EXTRA_SUPPORT, startSceneProgress: 0.75, endScene: SCENE.ZONE_STABILIZED, endSceneProgress: 0.075 },
   },
   {
     component: simple(
-      <span className="inline-flex items-center gap-2 whitespace-nowrap md:gap-4">
-        Access restored <Pill>M-2 Completed</Pill>
-      </span>,
-      "Local teams review the route status and prepare to receive the next medical supply delivery.",
+      <>
+        Prepare for the next step.
+        <br />
+        <Pill className="mt-2 inline-block md:mt-4">Scenario update</Pill>
+      </>,
+      "The illustrated response settles. The delivery outcome still depends on a suitable approach and a confirmed handoff.",
     ),
     timeWindow: { startScene: SCENE.ZONE_STABILIZED, startSceneProgress: 0.9, endScene: SCENE.MULTI_THREAT_RESPONSE, endSceneProgress: 0.075 },
   },
   {
     component: simple(
-      "Care across communities",
-      "A connected medical delivery network for mountain villages, tundra settlements and communities far from reliable road access.",
+      "One journey. A wider connection.",
+      "Start with one clinic and one supply request. Then consider how a regional health centre could support more remote communities.",
       "bottom-0 left-0 lg:absolute lg:mr-70 lg:max-w-204",
     ),
     timeWindow: { startScene: SCENE.MULTI_THREAT_RESPONSE, startSceneProgress: 0.9 },

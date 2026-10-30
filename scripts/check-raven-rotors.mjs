@@ -1,14 +1,13 @@
-// Regression: Raven coaxial quad must expose exactly eight rotor pivots (4 CW / 4 CCW): one upper and one
-// lower pivot per arm on the same shaft axis, counter-rotating.
-// Material-split Propeller_* children must never be selected; only the pivots may change.
+// Regression: the Raven hexacopter must expose exactly six rotor pivots (3 CW / 3 CCW), alternating around the ring.
+// Material-split prop submeshes must never be selected; only the pivots may change.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { collectRavenRotors, advanceRavenRotors } from '../src/components/scene/raven-rotors.ts';
 
-const SOURCE = 'glb/raven-quad/raven-quad-textured.glb';
-const WEB = 'public/assets/models/raven_quad.glb';
+const SOURCE = 'glb/new-drone/raven-hexa-prepared.glb';
+const WEB = 'public/assets/models/raven_hexa.glb';
 const readJson = (file) => { const b = readFileSync(file); return [b, JSON.parse(b.toString('utf8', 20, 20 + b.readUInt32LE(12)))]; };
 
 const [file, json] = readJson(SOURCE);
@@ -24,25 +23,20 @@ const { scene } = await new GLTFLoader().parseAsync(glb.buffer.slice(glb.byteOff
 scene.updateMatrixWorld(true);
 
 const rotors = collectRavenRotors(scene);
-assert.equal(rotors.length, 8, 'eight rotor pivots');
-let mid = 0; scene.traverse((o) => { if (/Mid/.test(o.name)) mid++; }); assert.equal(mid, 0, 'no middle rotors');
-// Upper-prop direction per station (viewed from above, CW = -1); lower props turn the other way.
-const expected = { Front_Left: [0.76, 0.63, -1], Front_Right: [-0.76, 0.63, 1], Rear_Left: [0.76, -0.63, 1], Rear_Right: [-0.76, -0.63, -1] };
-const LEVEL = { Upper: [0.235, 1], Lower: [-0.175, -1] };
+assert.equal(rotors.length, 6, 'six rotor pivots');
+// Viewed from above, CW = -1; neighbours around the ring alternate (from the source's own prop clips).
+const expected = { Front_Left: [0.425, 0.7361, -1], Front_Right: [-0.425, 0.7361, 1], Mid_Left: [0.85, 0, 1], Mid_Right: [-0.85, 0, -1], Rear_Left: [0.425, -0.7361, -1], Rear_Right: [-0.425, -0.7361, 1] };
 for (const { object, direction } of rotors) {
-  const [, station, level] = object.name.match(/^Rotor_(.+)_(Upper|Lower)$/);
-  const [x, z, dir] = expected[station];
-  const [y, flip] = LEVEL[level];
+  const [x, z, dir] = expected[object.name.replace(/^Rotor_/, '')];
   const p = object.getWorldPosition(new THREE.Vector3());
-  assert(Math.abs(p.x - x) < 1e-4 && Math.abs(p.y - y) < 1e-4 && Math.abs(p.z - z) < 1e-4, `${object.name} pivot at shaft ${p.toArray()}`);
-  assert.equal(direction, dir * flip, `${object.name} spin direction`);
-  assert(object.quaternion.equals(new THREE.Quaternion()), `${object.name} rest rotation is identity`);
+  assert(Math.abs(p.x - x) < 1e-3 && Math.abs(p.y - 0.3385) < 1e-3 && Math.abs(p.z - z) < 1e-3, `${object.name} pivot at hub ${p.toArray()}`);
+  assert.equal(direction, dir, `${object.name} spin direction`);
   // Blades must be centred on the pivot (no orbiting): bounds centre on the shaft in XZ.
   const box = new THREE.Box3().setFromObject(object); const c = box.getCenter(new THREE.Vector3());
   assert(Math.hypot(c.x - p.x, c.z - p.z) < 0.01, `${object.name} geometry centred on shaft`);
   let meshes = 0; object.traverse((o) => { if (o.isMesh) meshes++; }); assert(meshes > 0, `${object.name} carries propeller geometry`);
 }
-assert.equal(rotors.filter((r) => r.direction === 1).length, 4); assert.equal(rotors.filter((r) => r.direction === -1).length, 4);
+assert.equal(rotors.filter((r) => r.direction === 1).length, 3); assert.equal(rotors.filter((r) => r.direction === -1).length, 3);
 
 const pivotSet = new Set(rotors.map((r) => r.object)); const before = new Map(); scene.traverse((o) => before.set(o, o.quaternion.clone()));
 const centres = rotors.map((r) => new THREE.Box3().setFromObject(r.object).getCenter(new THREE.Vector3()));
@@ -57,6 +51,6 @@ try {
   const [, web] = readJson(WEB);
   const pivots = (j) => j.nodes.filter((n) => /^Rotor_/.test(n.name)).map((n) => [n.name, n.extras?.spin_direction, (n.children ?? []).map((c) => j.nodes[c].name).join()].join(':')).sort();
   assert.deepEqual(pivots(web), pivots(json), 'web asset pivots');
-  console.log('PASS: web derivative keeps eight pivots', web.extensionsUsed.join(','));
+  console.log('PASS: web derivative keeps six pivots', web.extensionsUsed.join(','));
 } catch (e) { if (e.code !== 'ENOENT') throw e; console.log('SKIP: web derivative not built yet'); }
-console.log('PASS: eight coaxial Raven pivots on four shaft axes, four CW/four CCW, pairs counter-rotate; children unchanged; instances independent.');
+console.log('PASS: six hexa pivots at the hubs, three CW/three CCW alternating; children unchanged; instances independent.');

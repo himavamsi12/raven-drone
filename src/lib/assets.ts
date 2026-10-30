@@ -4,11 +4,12 @@ export const ASSETS = {
   cityTexture: "/assets/textures/terrain/city.webp",
   terrain: "/assets/models/terrain.glb",
   cityTerrain: "/assets/models/city-terrain.glb",
+  ravenTerrain: "/assets/models/raven-terrain.glb", // Raven natural tile Land-A + Houses (glb/raven-terrain/)
   building: "/assets/models/building.glb",
   grid: "/assets/models/grid.glb",
   gridCity: "/assets/models/grid-city.glb",
   powerStation: "/assets/models/power-station.glb",
-  raven: "/assets/models/raven_quad.glb", // coaxial quad (4 arms, 8 props); source glb/raven-quad/
+  raven: "/assets/models/raven_hexa.glb", // hexacopter medical drone (6 props); source glb/new-drone/
   droneLowpoly: "/assets/models/drone-lowpoly.glb", // Raven silhouette, same node/axis convention as delta-lowpoly
   cameraAnimations: "/assets/models/camera-animations.glb",
   cameraAnimationsMobile: "/assets/models/camera-animations-mobile.glb",

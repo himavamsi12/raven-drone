@@ -215,8 +215,8 @@ export function SpecsCallouts() {
     <>
       <GroundHtml transform={false} position={[0, 0, (lg ? -0.55 : md ? -1 : -1.25) - 0.025]}>
         <Callout
-          title="Medical Cargo"
-          description="An underslung parcel is central to the Raven medical delivery concept."
+          title="Medical cargo"
+          description="A case beneath the aircraft puts the delivery at the centre of the design."
           desktopSide="right"
           mobileSide="top-right"
           staggerIndex={1}
@@ -224,8 +224,8 @@ export function SpecsCallouts() {
       </GroundHtml>
       <GroundHtml transform={false} position={[0, 0, (lg ? -0.2 : md ? -1 : -1.25) - 0.025]}>
         <Callout
-          title="Coaxial Quad Architecture"
-          description="Four arms, each with counter-rotating upper and lower propellers, for the vertical take-off and landing delivery concept."
+          title="Coaxial quad"
+          description="Four arms carry paired upper and lower propellers."
           desktopSide="left"
           mobileSide="top-left"
           className="md:w-[calc(min(50vw,832px)-208px-64px)]!"
@@ -234,8 +234,8 @@ export function SpecsCallouts() {
       </GroundHtml>
       <GroundHtml transform={false} position={[0, 0, (lg ? 0.15 : md ? 1 : 1.25) - 0.025]}>
         <Callout
-          title="Remote Village Access"
-          description="Connecting care teams with communities beyond reliable road access."
+          title="Remote clinics"
+          description="The intended connection is between a health centre and the communities around it."
           desktopSide="right"
           mobileSide="bottom-left"
           staggerIndex={3}
@@ -243,8 +243,8 @@ export function SpecsCallouts() {
       </GroundHtml>
       <GroundHtml transform={false} position={[0, 0, lg ? 0.5 : md ? 1 : 1.25]}>
         <Callout
-          title="Medical Delivery"
-          description="A concept for delivering medicines across mountain valleys and cold, remote regions."
+          title="Care teams"
+          description="The journey ends with people receiving the supplies they need."
           desktopSide="left"
           staggerIndex={4}
           mobileSide="bottom-right"

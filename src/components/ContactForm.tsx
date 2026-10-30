@@ -33,7 +33,7 @@ export function ContactForm({ className }: { className?: string }) {
     if (email && !EMAIL.test(email)) next.email = "Invalid email address";
     setErrors(next);
     if (Object.keys(next).length) return;
-    setNotice("Not sent: this local reconstruction has no form backend configured.");
+    setNotice("Not sent: this concept site has no form backend, so your message was not delivered.");
   };
 
   const input = (name: Exclude<Field, "message">, label: string, autoComplete: string, extra?: string) => (

@@ -76,7 +76,7 @@ function LoadingCanvas({ width, className }: { width: number; className?: string
 const STATUS = {
   initializing: { label: "Initializing", progress: 0.18 },
   loading: { label: "Loading assets", progress: 0.52 },
-  calibrating: { label: "Calibrating", progress: 0.84 },
+  calibrating: { label: "Preparing scene", progress: 0.84 },
   ready: { label: "Ready", progress: 1 },
   degraded: { label: "Slow connection", progress: 0.52 },
 };

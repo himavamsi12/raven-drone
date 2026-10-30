@@ -9,8 +9,8 @@ import { SCENE, useScenes } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
- * Scripted "real-time detection" boxes (shipped `D`/`O`/`U`). These are
- * presentation content with jittering confidence values, not live inference.
+ * Scripted "real-time detection" boxes (shipped `D`/`O`/`U`). Presentation content, not live inference; Raven drops
+ * the shipped jittering confidence percentage and keeps the literal object labels.
  */
 const POINTS: { position: [number, number, number]; label: string; index: number }[] = [
   { position: [-182.2743, 1.6271, -195.5112], label: "road block", index: 0 },
@@ -54,26 +54,21 @@ const MD = { x: 0.65, y: 0.5 };
 const SM = { x: 0.99, y: 0.5 };
 const projected = new THREE.Vector3();
 
-function DetectionBox({ position, label, show, index }: { position: [number, number, number]; label: string; show: boolean; index: number }) {
+function DetectionBox({ position, label, show }: { position: [number, number, number]; label: string; show: boolean }) {
   const isLg = useMediaQuery("(min-width: 1024px)");
   const isMd = useMediaQuery("(min-width: 768px)");
   const camera = useThree((s) => s.camera);
   const anchor = useRef<THREE.Group>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const value = useRef<HTMLSpanElement>(null);
-  const current = useRef(80);
-  const target = useRef(80);
   const jitterClock = useRef(Math.random());
-  const valueClock = useRef(Math.random());
   const last = useRef({ x: 0, y: 0 });
   const transition = useRef("350ms");
   const opacity = useRef("0");
-  const shown = useRef(99);
   const zone = isLg ? LG : isMd ? MD : SM;
 
-  useFrame((state, dt) => {
-    if (!anchor.current || !wrapper.current || !box.current || !value.current) return;
+  useFrame((_, dt) => {
+    if (!anchor.current || !wrapper.current || !box.current) return;
     if (!show) {
       if (opacity.current !== "0") {
         wrapper.current.style.opacity = "0";
@@ -103,20 +98,6 @@ function DetectionBox({ position, label, show, index }: { position: [number, num
       jitterClock.current = 0;
       box.current.style.transform = `scale(${0.9 + 0.1 * Math.random()}, ${0.9 + 0.1 * Math.random()})`;
     }
-    valueClock.current += dt;
-    if (valueClock.current >= 2.15) {
-      valueClock.current = 0;
-      target.current = 80 + 21 * THREE.MathUtils.seededRandom((index % 8) + state.clock.getElapsedTime());
-    }
-    current.current = THREE.MathUtils.lerp(current.current, target.current, Math.min(1.5 * dt, 0.1));
-    const pct = Math.max(Math.min(Math.floor(current.current), 100), 75);
-    if (shown.current !== pct) {
-      value.current.textContent = `${pct}%`;
-      shown.current = pct;
-    }
-    const color = pct > 90 ? "#b1ff7a" : "#ffcb47";
-    box.current.style.outlineColor = color;
-    if (value.current.parentElement) value.current.parentElement.style.backgroundColor = color;
   });
 
   return (
@@ -125,7 +106,7 @@ function DetectionBox({ position, label, show, index }: { position: [number, num
         <div ref={wrapper} className="relative opacity-0 transition-opacity select-none" aria-hidden="true">
           <div ref={box} className="outline-yellow relative size-12 origin-top-left outline -outline-offset-1 transition-all select-none" />
           <div className="text-m-mono bg-yellow absolute -top-3 h-3 px-0.5 font-mono leading-[0.75rem] whitespace-nowrap text-black uppercase transition-colors">
-            {label} <span ref={value}>99%</span>
+            {label}
           </div>
         </div>
       </Html>
@@ -133,7 +114,8 @@ function DetectionBox({ position, label, show, index }: { position: [number, num
   );
 }
 
-export function DetectionPoints() {
+/** `groundY`: per-point tile-local height for a replacement ground mesh (POINTS order); defaults to the shipped y. */
+export function DetectionPoints({ groundY }: { groundY?: readonly number[] }) {
   const isSm = useMediaQuery("(max-width: 767px)");
   const isMdOnly = useMediaQuery("(min-width: 768px) and (max-width: 1023px)");
   const show = useScenes(
@@ -149,7 +131,12 @@ export function DetectionPoints() {
     <group dispose={null}>
       <group>
         {POINTS.filter((p) => Math.abs(p.position[0]) < limit).map((p, i) => (
-          <DetectionBox key={i} position={p.position} label={p.label} show={show} index={p.index} />
+          <DetectionBox
+            key={i}
+            position={groundY ? [p.position[0], groundY[p.index], p.position[2]] : p.position}
+            label={p.label}
+            show={show}
+          />
         ))}
       </group>
     </group>

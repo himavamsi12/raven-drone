@@ -23,6 +23,7 @@ import { TerrainMaterial } from "./materials/TerrainMaterial";
 import { getNoiseTexture } from "./textures";
 import { DetectionPoints } from "./DetectionPoints";
 import { FireGroups } from "./Fire";
+import { RAVEN_DETECTION_Y, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
 
 /** Distance between tile origins (shipped `X`). */
@@ -93,10 +94,13 @@ type TileProps = {
   isCity?: boolean;
   withPoints?: boolean;
   desktopOnly?: boolean;
+  /** Raven natural tile: its village rides the same moving tile group (not drawn on the city tile). */
+  houses?: { geometry: THREE.BufferGeometry; material: THREE.Material };
+  detectionY?: readonly number[];
 };
 
 /** One terrain tile (shipped `K`); slides in -z by the wrapped travel offset. */
-function Tile({ position: [col, row], geometries, material, isCity, withPoints, desktopOnly }: TileProps) {
+function Tile({ position: [col, row], geometries, material, isCity, withPoints, desktopOnly, houses, detectionY }: TileProps) {
   const is2xl = useMediaQuery("(min-width: 1536px)");
   const ref = useRef<THREE.Group>(null);
   const z = TILE_STEP * row;
@@ -115,13 +119,16 @@ function Tile({ position: [col, row], geometries, material, isCity, withPoints, 
   return (
     <group ref={ref}>
       <mesh frustumCulled={false} renderOrder={RENDER_ORDER.TERRAIN} geometry={geometries[isCity ? 1 : 0]} material={material} />
+      {houses && !isCity && (
+        <mesh frustumCulled={false} renderOrder={RENDER_ORDER.TERRAIN} geometry={houses.geometry} material={houses.material} />
+      )}
       {isCity && (
         <>
           <Buildings material={material} />
           <FireGroups />
         </>
       )}
-      {withPoints && <DetectionPoints />}
+      {withPoints && <DetectionPoints groundY={detectionY} />}
     </group>
   );
 }
@@ -130,6 +137,10 @@ function Tile({ position: [col, row], geometries, material, isCity, withPoints, 
 export function Terrain() {
   const terrain = useGLB(ASSETS.terrain);
   const city = useGLB(ASSETS.cityTerrain);
+  const raven = useGLB(ASSETS.ravenTerrain);
+  // Canvas children render on the client only, so the query string is readable on first render.
+  const [variant] = useState(terrainVariant);
+  const isRaven = variant === "raven";
   const [, getKeys] = useKeyboardControls();
   const dpr = useThree((s) => s.viewport.dpr);
   const isMd = useMediaQuery("(min-width: 768px)");
@@ -139,11 +150,17 @@ export function Terrain() {
 
   const land = terrain.nodes["Land-A"] as THREE.Mesh;
   const cityLand = city.nodes["Land-A"] as THREE.Mesh;
+  const ravenLand = raven.nodes["Land-A"] as THREE.Mesh;
+  const ravenHouses = raven.nodes.Houses as THREE.Mesh;
+  const naturalLand = isRaven ? ravenLand : land;
   const geometries = useMemo(
-    () => [land.geometry, cityLand.geometry] as [THREE.BufferGeometry, THREE.BufferGeometry],
-    [land, cityLand],
+    () => [naturalLand.geometry, cityLand.geometry] as [THREE.BufferGeometry, THREE.BufferGeometry],
+    [naturalLand, cityLand],
   );
+  // The city tile keeps the shipped base map under its overlay; natural tiles take the Raven bake when active.
   const baseMap = (land.material as THREE.MeshStandardMaterial).map;
+  const naturalMap = (naturalLand.material as THREE.MeshStandardMaterial).map;
+  const housesMap = (ravenHouses.material as THREE.MeshStandardMaterial).map;
 
   const cityTex = useTexture(ASSETS.cityTexture, (t) => {
     const tex = Array.isArray(t) ? t[0] : t;
@@ -154,21 +171,29 @@ export function Terrain() {
 
   const [natural] = useState(() => new TerrainMaterial(getNoiseTexture()));
   const [urban] = useState(() => new TerrainMaterial(getNoiseTexture()));
+  // Same fog/scan treatment as the ground so houses never sit crisp over hazy terrain.
+  const [village] = useState(() => new TerrainMaterial(getNoiseTexture()));
+  const materials = useMemo(() => [natural, urban, village], [natural, urban, village]);
+  const houses = useMemo(
+    () => (isRaven ? { geometry: ravenHouses.geometry, material: village } : undefined),
+    [isRaven, ravenHouses, village],
+  );
 
   useEffect(() => {
-    if (baseMap) baseMap.anisotropy = 4;
-    for (const m of [natural, urban]) {
+    for (const map of [baseMap, naturalMap, housesMap]) if (map) map.anisotropy = 4;
+    for (const m of materials) {
       m.uniforms.uResolution.value = resolution;
-      m.uniforms.uBaseTexture.value = baseMap;
       m.uniforms.uCityTexture.value = cityTex;
       m.uniforms.uBgColor.value.set(0x000000);
     }
-  }, [baseMap, cityTex, natural, urban]);
+    natural.uniforms.uBaseTexture.value = naturalMap;
+    urban.uniforms.uBaseTexture.value = baseMap;
+    village.uniforms.uBaseTexture.value = housesMap;
+  }, [baseMap, naturalMap, housesMap, cityTex, materials, natural, urban, village]);
 
   useEffect(() => {
-    natural.uniforms.uDpr.value = dpr;
-    urban.uniforms.uDpr.value = dpr;
-  }, [dpr, natural, urban]);
+    for (const m of materials) m.uniforms.uDpr.value = dpr;
+  }, [dpr, materials]);
 
   const groupA = useRef<THREE.Group>(null);
   const groupB = useRef<THREE.Group>(null);
@@ -217,6 +242,7 @@ export function Terrain() {
     const scan = remapEased(phalanx.progress, 0, 0.5, 0, 1, easeInOutCubic);
     natural.uniforms.uHideRatio.value = scan;
     urban.uniforms.uHideRatio.value = scan;
+    village.uniforms.uHideRatio.value = scan;
     urban.uniforms.uisCity.value = nearCity;
 
     const tp = thermal.progress;
@@ -231,10 +257,20 @@ export function Terrain() {
 
     applyFog(natural, steps);
     applyFog(urban, steps);
+    applyFog(village, steps);
   });
 
+  const detectionY = isRaven ? RAVEN_DETECTION_Y : undefined;
   const tile = (pos: [number, number], extra: Partial<TileProps> = {}) => (
-    <Tile key={pos.join(",")} position={pos} geometries={geometries} material={natural} {...extra} />
+    <Tile
+      key={pos.join(",")}
+      position={pos}
+      geometries={geometries}
+      material={natural}
+      houses={houses}
+      detectionY={detectionY}
+      {...extra}
+    />
   );
 
   return (
@@ -274,4 +310,5 @@ export function Terrain() {
 
 useGLB.preload(ASSETS.terrain);
 useGLB.preload(ASSETS.cityTerrain);
+useGLB.preload(ASSETS.ravenTerrain);
 useGLB.preload(ASSETS.building);

@@ -7,7 +7,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Raven — medical delivery drone concept",
-  description: "Raven: a medical delivery drone concept for remote mountain villages and cold-climate communities.",
+  description:
+    "The road goes around. Raven goes over. A medical delivery drone concept exploring a direct air link from a regional health centre to remote hill clinics.",
   robots: { index: false, follow: false },
 };
 

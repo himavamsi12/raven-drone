@@ -9,78 +9,81 @@ import { useMediaQuery } from "@/lib/use-media-query";
 
 type Line = { label: ReactNode; scene: SceneId; progress: number };
 
-/** Mission log lines + trigger points (shipped module 76772 `Xy` / `gc`). Scripted demo content. */
+/**
+ * Mission log trigger points from shipped module 76772 (`Xy` / `gc`); Raven wording. Scripted display labels for the
+ * illustrated scenario, not backend events or telemetry.
+ */
 const HEADER: Line[] = [
-  { label: "BOOT SEQUENCE…", scene: "flock-scene", progress: 0.1 },
-  { label: "THERMAL / LIDAR / RGB / IR [ONLINE]", scene: "flock-scene", progress: 0.15 },
-  { label: "AI: 2 AGENTS / DUAL GPU [ACTIVE]", scene: "flock-scene", progress: 0.2 },
-  { label: "LINK: PHALANX SYSTEM [ESTABLISHED]", scene: "flock-scene", progress: 0.25 },
-  { label: "SCAN MODE: ACTIVE", scene: "real-time-detection", progress: 0.25 },
-  { label: "COORD: [37.4419°N / 119.8772°W]", scene: "real-time-detection", progress: 0.3 },
-  { label: "ALT 1,240M | SPEED 74 KM/H", scene: "real-time-detection", progress: 0.35 },
-  { label: "32 CAR / 4 TRUCK / 1 PERSON / 2 UAV", scene: "real-time-detection", progress: 0.4 },
-  { label: "ALERT: THERMAL ANOMALY", scene: "thermal-irregularity", progress: 0.45 },
-  { label: "COORD: [37.4478°N / 119.8732°W]", scene: "thermal-irregularity", progress: 0.5 },
-  { label: "TARGET ZONE LOCKED", scene: "thermal-irregularity", progress: 0.55 },
-  { label: "EMERGENCY AGENCIES NOTIFIED", scene: "thermal-irregularity", progress: 0.6 },
-  { label: "ALERT: THERMAL ANOMALY", scene: "ignition-verified", progress: 0.15 },
-  { label: "COORD: [37.4478°N / 119.8732°W]", scene: "ignition-verified", progress: 0.2 },
-  { label: "SIG INTENSITY: 87%", scene: "ignition-verified", progress: 0.25 },
-  { label: "CLASSIFICATION: POTENTIAL THREAT", scene: "ignition-verified", progress: 0.3 },
+  { label: "ILLUSTRATIVE DELIVERY", scene: "flock-scene", progress: 0.1 },
+  { label: "FROM: REGIONAL HEALTH CENTRE", scene: "flock-scene", progress: 0.15 },
+  { label: "DESTINATION: HILL CLINIC", scene: "flock-scene", progress: 0.2 },
+  { label: "REQUEST: MEDICAL SUPPLIES", scene: "flock-scene", progress: 0.25 },
+  { label: "ROUTE VIEW", scene: "real-time-detection", progress: 0.25 },
+  { label: "TERRAIN AND RIDGES SHOWN", scene: "real-time-detection", progress: 0.3 },
+  { label: "ROAD ACCESS SHOWN", scene: "real-time-detection", progress: 0.35 },
+  { label: "ROAD OBJECTS LABELLED", scene: "real-time-detection", progress: 0.4 },
+  { label: "SIMULATED HEAT ALERT", scene: "thermal-irregularity", progress: 0.45 },
+  { label: "ALERT ON ILLUSTRATED ROUTE", scene: "thermal-irregularity", progress: 0.5 },
+  { label: "ROUTE REVIEW REQUIRED", scene: "thermal-irregularity", progress: 0.55 },
+  { label: "CARE-TEAM UPDATE", scene: "thermal-irregularity", progress: 0.6 },
+  { label: "SIMULATED HEAT ALERT", scene: "ignition-verified", progress: 0.15 },
+  { label: "FIRE SHOWN NEAR ROUTE", scene: "ignition-verified", progress: 0.2 },
+  { label: "AFFECTED AREA SHOWN", scene: "ignition-verified", progress: 0.25 },
+  { label: "ROUTE REVIEW REQUIRED", scene: "ignition-verified", progress: 0.3 },
 ];
 
 const BODY: Line[] = [
-  { label: <span className="text-yellow">SURVEY AREA</span>, scene: "phalanx-ai", progress: 0.75 },
-  { label: "COORD: [37.4478°N / 119.8732°W]", scene: "phalanx-ai", progress: 0.8 },
-  { label: "SIG INTENSITY: 87%", scene: "phalanx-ai", progress: 0.85 },
-  { label: "alert: POTENTIAL THREATs", scene: "phalanx-ai", progress: 0.9 },
-  { label: "2 DRONES ASSIGNED TO TARGET AREA", scene: "analysis-evaluation", progress: 0.1 },
+  { label: <span className="text-yellow">ROUTE VIEW</span>, scene: "phalanx-ai", progress: 0.75 },
+  { label: "DESTINATION: HILL CLINIC", scene: "phalanx-ai", progress: 0.8 },
+  { label: "SHARED VIEW: CARE TEAMS", scene: "phalanx-ai", progress: 0.85 },
+  { label: "HAZARD NOTED ON ROUTE", scene: "phalanx-ai", progress: 0.9 },
+  { label: "REVIEWING THE APPROACH", scene: "analysis-evaluation", progress: 0.1 },
   {
     label: (
       <>
-        <span className="text-red">2 WILDFIRES</span> + <span className="text-red">1 ROADBLOCK</span> DETECTED{" "}
+        <span className="text-red">2 FIRES</span> + <span className="text-red">1 ROADBLOCK</span> SHOWN{" "}
       </>
     ),
     scene: "analysis-evaluation",
     progress: 0.95,
   },
-  { label: "AUTHORITIES CONTACTED", scene: "integrated-notifications", progress: 0.1 },
+  { label: "CARE-TEAM UPDATE", scene: "integrated-notifications", progress: 0.1 },
   {
     label: (
       <>
-        AREA STATUS: <span className="text-green">SECURED</span>
+        SCENARIO: <span className="text-yellow">DELIVERY DELAYED</span>
       </>
     ),
     scene: "integrated-notifications",
     progress: 0.95,
   },
-  { label: "sensitive area ESTABLISHED", scene: "extra-support", progress: 0.05 },
-  { label: "COORD: [37.4478°N / 119.8732°W]", scene: "extra-support", progress: 0.1 },
-  { label: "DRONE ASSIGNED TO TARGET AREA", scene: "extra-support", progress: 0.3 },
-  { label: "CONFIRMED ON LOCATION", scene: "extra-support", progress: 0.75 },
+  { label: "SUPPORT VIEW", scene: "extra-support", progress: 0.05 },
+  { label: "DESTINATION: HILL CLINIC", scene: "extra-support", progress: 0.1 },
+  { label: "SECOND RAVEN SHOWN", scene: "extra-support", progress: 0.3 },
+  { label: "ON THE ILLUSTRATED ROUTE", scene: "extra-support", progress: 0.75 },
   {
     label: (
       <>
-        <span className="text-red">WILDFIRE</span> NEAR ELECTRICAL STATION
+        <span className="text-red">FIRE</span> NEAR POWER STATION
       </>
     ),
     scene: "extra-support",
     progress: 0.85,
   },
+  { label: "ROUTE REVIEW CONTINUES", scene: "zone-stabilized", progress: 0.99 },
   {
     label: (
       <>
-        <span className="text-green">FIREFIGHTER</span> UNITS ALERTED
+        HAZARD: <span className="text-green">SETTLING</span>
       </>
     ),
     scene: "zone-stabilized",
-    progress: 0.99,
+    progress: 0.994,
   },
-  { label: "RISK LEVEL: REDUCED", scene: "zone-stabilized", progress: 0.994 },
   {
     label: (
       <>
-        AREA STATUS: <span className="text-green">SECURED</span>
+        STATUS: <span className="text-green">SCENARIO COMPLETE</span>
       </>
     ),
     scene: "zone-stabilized",

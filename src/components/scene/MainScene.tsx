@@ -15,13 +15,19 @@ import { CoordinationDrones } from "./CoordinationDrones";
 import { DroneRig } from "./DroneRig";
 import { Flock } from "./Flock";
 import { GridRow } from "./Grid";
+import { HeroPlate, heroPlateEnabled } from "./HeroPlate";
 import { Perimeters } from "./Perimeters";
 import { PowerStation } from "./PowerStation";
 import { usePostFX } from "./PostFX";
+import { plateLight } from "./plate-light";
 import { sunlight, updateSunlight } from "./sunlight";
 import { Terrain } from "./Terrain";
 
 const TILE = 2 * TERRAIN_SCALE * 200;
+/** Sun shadow camera hugs the hero drone (refit every few frames: swarm/mission rescale it). */
+const SHADOW_REFIT_FRAMES = 15;
+const _box = new THREE.Box3();
+const _sphere = new THREE.Sphere();
 
 const SOUNDS = {
   engine: "/assets/sounds/delta-jet.mp3",
@@ -119,6 +125,8 @@ export function MainScene() {
   const announced = useRef(false);
   const flockOn = useRef(false);
   const [renderFlock, setRenderFlock] = useState(false);
+  const [plate, setPlate] = useState(false);
+  useEffect(() => setPlate(heroPlateEnabled()), []);
 
   useTexture(ASSETS.blueNoise, (t) => {
     const tex = Array.isArray(t) ? t[0] : t;
@@ -138,15 +146,50 @@ export function MainScene() {
   usePostFX(flockTarget);
 
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  const scene = useThree((s) => s.scene);
+  const heroDrone = useRef<THREE.Object3D | null>(null);
+  const shadowFit = useRef({ frame: 0, centre: new THREE.Vector3(), radius: 1 });
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const sunDistance = SUN_POSITION.length();
 
   useFrame(({ clock }) => {
     // Raven daylight: travel-driven sun sway + passing cloud shade (see sunlight.ts).
     updateSunlight(terrainOffset.current ?? 0, clock.getElapsedTime(), reducedMotion);
-    if (sunRef.current) {
-      sunRef.current.position.copy(sunlight.direction).multiplyScalar(sunDistance);
-      sunRef.current.intensity = 4 * sunlight.shade;
+    // Over the H00 plate the light is the plate's: fixed sun (no sway, no cloud dips), warm key.
+    const w = plateLight.weight;
+    if (w > 0) {
+      sunlight.direction.lerp(plateLight.sunDirection, w).normalize();
+      sunlight.heading *= 1 - w;
+      sunlight.pitch *= 1 - w;
+      sunlight.shade += (1 - sunlight.shade) * w;
+    }
+    const sun = sunRef.current;
+    if (sun) {
+      sun.intensity = 4 * sunlight.shade;
+      sun.color.setRGB(1, 1, 1).lerp(plateLight.sunColor, w);
+      // Same parallel sun, but placed just above the hero drone so a tight shadow frustum gives crisp
+      // self-shadowing (arms and deck onto the medical box and gear).
+      heroDrone.current ??= scene.getObjectByName("Drone1Group") ?? null;
+      const fit = shadowFit.current;
+      if (heroDrone.current && fit.frame++ % SHADOW_REFIT_FRAMES === 0) {
+        _box.setFromObject(heroDrone.current).getBoundingSphere(_sphere);
+        if (_sphere.radius > 0) fit.radius = _sphere.radius;
+        const cam = sun.shadow.camera;
+        cam.left = cam.bottom = -1.05 * fit.radius;
+        cam.right = cam.top = 1.05 * fit.radius;
+        cam.near = 2 * fit.radius;
+        cam.far = 6 * fit.radius;
+        cam.updateProjectionMatrix();
+        sun.shadow.normalBias = 0.006 * fit.radius;
+      }
+      if (heroDrone.current) {
+        heroDrone.current.getWorldPosition(fit.centre);
+        sun.target.position.copy(fit.centre);
+        sun.position.copy(sunlight.direction).multiplyScalar(4 * fit.radius).add(fit.centre);
+      } else {
+        sun.position.copy(sunlight.direction).multiplyScalar(sunDistance);
+      }
+      sun.target.updateMatrixWorld();
     }
     if (!announced.current) {
       announced.current = true;
@@ -163,6 +206,7 @@ export function MainScene() {
     <>
       <HeroAudio />
       <DroneRig />
+      {plate && <HeroPlate />}
       <group position={[0, -2.5, -8.6]}>
         <Terrain />
         <GridRow offset={2 * TILE} isCity />
@@ -173,7 +217,14 @@ export function MainScene() {
         </group>
       </group>
       <Clouds />
-      <directionalLight ref={sunRef} args={[0xffffff, 4]} position={SUN_POSITION} />
+      <directionalLight
+        ref={sunRef}
+        args={[0xffffff, 4]}
+        position={SUN_POSITION}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
+      />
       <FlockPortal target={flockTarget} enabled={renderFlock} />
     </>
   );

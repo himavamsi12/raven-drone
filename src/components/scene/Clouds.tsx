@@ -120,6 +120,8 @@ export const Clouds = memo(function Clouds() {
           vertexShader,
           fragmentShader,
           transparent: true,
+          // Raven: keep the depth buffer for the ground (terrain lens reads it); the layers are see-through.
+          depthWrite: false,
         });
       }),
     [],

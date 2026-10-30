@@ -10,28 +10,30 @@ import { SCENE, sceneEndOffset, useScenes, type SceneId } from "@/lib/scenes";
 import { isScrollLocked, lockScroll, unlockScroll } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { ContactButton } from "./ContactButton";
-import { ArrowUpRightIcon, CloseIcon, MenuIcon } from "./ui/icons";
+import { CONCEPT_NOTICE } from "@/lib/copy";
+import { CloseIcon, MenuIcon } from "./ui/icons";
 
-/** Chapter labels in order (shipped `O` in layout module 72781). */
+/** Chapter targets in order (shipped `O` in layout module 72781); Raven display labels. */
 const CHAPTERS: [SceneId, string][] = [
-  [SCENE.DELTA_DRONE, "Specs"],
-  [SCENE.SWARM_SCENE, "Swarm"],
-  [SCENE.MISSION_PRESET, "Mission"],
-  [SCENE.FLOCK_SCENE, "Sync"],
-  [SCENE.REAL_TIME_DETECTION, "Detection"],
-  [SCENE.PHALANX_AI, "Raven Ops"],
-  [SCENE.ANALYSIS_EVALUATION, "Sys Analysis"],
-  [SCENE.INTEGRATED_NOTIFICATIONS, "Int Alerts"],
-  [SCENE.INTERDRONE_COORDINATION, "Coordination"],
-  [SCENE.MULTI_THREAT_RESPONSE, "Response"],
+  [SCENE.DELTA_DRONE, "Airframe"],
+  [SCENE.SWARM_SCENE, "Connection"],
+  [SCENE.MISSION_PRESET, "Prepare"],
+  [SCENE.FLOCK_SCENE, "Journey"],
+  [SCENE.REAL_TIME_DETECTION, "Route"],
+  [SCENE.PHALANX_AI, "Care teams"],
+  [SCENE.ANALYSIS_EVALUATION, "Review"],
+  [SCENE.INTEGRATED_NOTIFICATIONS, "Updates"],
+  [SCENE.INTERDRONE_COORDINATION, "Support"],
+  [SCENE.MULTI_THREAT_RESPONSE, "Network"],
 ];
 
-const MENU_LINKS = [
-  { label: "Raven", href: "#" },
-  { label: "Raven Ops", href: "#" },
-  { label: "SARA", href: "#" },
-  { label: "Athena", href: "#" },
-  { label: "About Us", href: "#" },
+/** In-page destinations (the shipped menu linked to other products). `null` = top of the story. */
+const MENU_LINKS: { label: string; target: string | null }[] = [
+  { label: "The delivery story", target: null },
+  { label: "Use cases", target: "#use-cases" },
+  { label: "Network", target: "#network" },
+  { label: "Scenario", target: "#scenario" },
+  { label: "About Raven", target: "#our-team" },
 ];
 
 const FADE_MS = 150;
@@ -227,6 +229,11 @@ function Menu() {
     return () => unlockScroll(lenis);
   }, [open, lenis]);
   const close = () => dialog.current?.close();
+  // Jump once the dialog's scroll lock is released (unlock runs in the effect cleanup after close).
+  const go = (target: string | null) => {
+    close();
+    window.setTimeout(() => lenis?.scrollTo(target ?? 1, { immediate: true }), 50);
+  };
   return (
     <>
       <button
@@ -266,9 +273,13 @@ function Menu() {
             <ul className="flex flex-col gap-1">
               {MENU_LINKS.map((l) => (
                 <li key={l.label}>
-                  <a href={l.href} onClick={close} className="text-d-cta block w-fit py-3 text-white transition-colors duration-200 hover:text-white/50">
+                  <button
+                    type="button"
+                    onClick={() => go(l.target)}
+                    className="text-d-cta block w-fit cursor-pointer py-3 text-white transition-colors duration-200 hover:text-white/50"
+                  >
                     {l.label}
-                  </a>
+                  </button>
                 </li>
               ))}
               <li className="md:hidden">
@@ -282,22 +293,10 @@ function Menu() {
                 />
               </li>
             </ul>
-            <ul className="mt-auto flex flex-col gap-2 border-t border-white/10 pt-5">
-              {[
-                { title: "We're hiring", description: "Join a team of engineers building a sentient drone for good." },
-                { title: "Partner Program", description: "We partner with agencies responsible for large areas. Capacity is limited." },
-              ].map((i) => (
-                <li key={i.title}>
-                  <a href="#" onClick={close} className="group block py-2">
-                    <span className="text-d-cta flex items-center gap-2 text-white transition-colors duration-200 group-hover:text-white/60">
-                      {i.title}
-                      <ArrowUpRightIcon className="size-4 text-white/40 transition-colors duration-200 group-hover:text-white/70" />
-                    </span>
-                    <span className="text-d-body-s mt-1 block leading-6 text-white/40">{i.description}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-auto border-t border-white/10 pt-5">
+              <p className="text-d-cta text-white">A design concept</p>
+              <p className="text-d-body-s mt-1 leading-6 text-white/40">{CONCEPT_NOTICE}</p>
+            </div>
           </div>
         </div>
       </dialog>

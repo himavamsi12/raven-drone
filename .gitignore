@@ -26,3 +26,11 @@ node_modules
 
 # Raw Blender render output (regenerate with glb/raven-quad/render_media.py)
 /glb/raven-quad/media/
+
+# Raven terrain build output (regenerate with glb/raven-terrain/build_all.py)
+/glb/raven-terrain/build/
+# Raven terrain v02 large outputs (>100 MB; regenerate with glb/raven-terrain/build_all.py)
+/glb/raven-terrain/raven-terrain-v02.blend*
+/glb/raven-terrain/textures/raven-natural-render-*.png
+/glb/raven-terrain/textures/raven-natural-bake-4096.png
+__pycache__/

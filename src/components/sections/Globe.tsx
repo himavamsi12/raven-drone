@@ -16,7 +16,8 @@ import { useGLB } from "@/components/scene/types";
 import { gridFunctions } from "@/components/scene/shaders/screen-uv";
 
 const CYAN = "#7aebff";
-const LABELS = ["Power Restored", "Flood Area Secured", "Evacuation Supported", "Missing Person Found", "Road Block Cleared", "Wildfire Contained"];
+/** Illustrative destinations, not confirmed routes or delivered outcomes. */
+const LABELS = ["Hill clinic", "Village health post", "Regional health centre", "Winter-access clinic", "Mountain village", "Remote health post"];
 const grid = (lon: number, lat: number) => ({ phi: (1 - lat / 25) * Math.PI, theta: (lon / 40) * 2 * Math.PI });
 const SPOTS = [grid(8, 15), grid(14, 20), grid(12, 17), grid(31, 18), grid(40, 18), grid(38, 20)];
 
@@ -488,7 +489,7 @@ export function Globe() {
     <div ref={ref} className="top-0 right-0 aspect-square w-full overflow-visible select-none lg:absolute lg:right-10 lg:h-full lg:w-auto" draggable={false}>
       <div className="absolute -inset-4 aspect-square -translate-y-8 lg:-inset-32">
         <div className="top-0 -right-48 bottom-0 -left-48 contents lg:absolute lg:block">
-          <Canvas gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping }} dpr={[1, 1.5]} frameloop={inView ? "always" : "never"} aria-label="Interactive globe of mission coverage">
+          <Canvas gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping }} dpr={[1, 1.5]} frameloop={inView ? "always" : "never"} aria-label="Interactive globe of illustrative clinic destinations">
             <AdaptiveDpr pixelated />
             <Suspense fallback={null}>
               <GlobeScene inView={inView} />

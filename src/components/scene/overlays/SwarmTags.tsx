@@ -69,7 +69,7 @@ type Props = {
   drone3Ref: RefObject<THREE.Group | null>;
 };
 
-/** DSA011/012/013 tags + dashed links between them (shipped `ts`). Desktop/tablet only. */
+/** Aircraft tags (shipped DSA011/012/013, Raven names) + dashed links between them (shipped `ts`). Desktop/tablet only. */
 export function SwarmTags({ mainRef, drone2Ref, drone3Ref }: Props) {
   const size = useThree((s) => s.size);
   const md = useMediaQuery("(min-width: 768px)");
@@ -139,21 +139,21 @@ export function SwarmTags({ mainRef, drone2Ref, drone3Ref }: Props) {
       <group ref={a1}>
         <Html center>
           <div ref={tag1} className="inline-block">
-            <Tag text="DSA011" staggerIndex={0} />
+            <Tag text="RAVEN-01" staggerIndex={0} />
           </div>
         </Html>
       </group>
       <group ref={a2}>
         <Html center>
           <div ref={tag2} className="inline-block">
-            <Tag text="DSA012" staggerIndex={1} />
+            <Tag text="RAVEN-02" staggerIndex={1} />
           </div>
         </Html>
       </group>
       <group ref={a3}>
         <Html center>
           <div ref={tag3} className="inline-block">
-            <Tag text="DSA013" staggerIndex={2} />
+            <Tag text="RAVEN-03" staggerIndex={2} />
           </div>
         </Html>
       </group>

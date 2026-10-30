@@ -6,27 +6,28 @@ import { useEffect, useRef, useState } from "react";
 import { ContactButton } from "@/components/ContactButton";
 import { Modal } from "@/components/ui/Modal";
 import { LANDING_SEQUENCE } from "@/lib/assets";
+import { CONCEPT_NOTICE, USE_CASE_CTA } from "@/lib/copy";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { Globe } from "./Globe";
 import { HeroLogo } from "./HeroLogo";
 
 const USE_CASES = [
   {
-    title: "Mountain Villages",
+    title: "Mountain villages",
     description:
-      "A medical delivery concept connecting mountain villages with essential supplies when long journeys make routine care difficult.",
+      "A nearby health centre can still be a difficult road journey away. Raven explores another connection for essential supplies.",
     image: "/assets/images/media/raven-mountain-villages.webp",
   },
   {
-    title: "Winter Access",
+    title: "Winter access",
     description:
-      "Explore routes to cold-climate communities where snow and disrupted road access can separate people from nearby health centres.",
+      "Snow and disrupted roads can separate communities from routine care. Cold-climate delivery is part of the use case, not a tested weather capability.",
     image: "/assets/images/media/raven-winter-access.webp",
   },
   {
-    title: "Remote Health Centres",
+    title: "Remote health centres",
     description:
-      "Connect regional medical hubs with remote health workers through a coordinated supply delivery concept.",
+      "A regional hub could support smaller clinics with planned supply runs and a clear handoff to local health workers.",
     image: "/assets/images/media/raven-remote-health-centres.webp",
   },
 ];
@@ -44,10 +45,10 @@ export function UseCases() {
     return () => window.removeEventListener("resize", on);
   }, []);
   return (
-    <section className="-mt-4 w-full md:-mt-8" aria-labelledby="missions-title">
+    <section id="use-cases" className="-mt-4 w-full md:-mt-8" aria-labelledby="missions-title">
       <div className="container-md mx-auto flex w-full flex-col gap-4 md:gap-6">
         <h2 id="missions-title" className="text-m-h2 md:text-d-h2 text-balance">
-          One purpose. Care within reach.
+          Care depends on the connection.
         </h2>
         <LayoutGroup>
           <motion.div ref={grid} layout className="grid w-full grid-cols-1 gap-4 md:gap-6 lg:grid-cols-4">
@@ -104,14 +105,18 @@ export function UseCases() {
 
 export function Coverage() {
   return (
-    <section className="relative w-full overflow-hidden">
+    <section id="network" className="relative w-full overflow-hidden" aria-labelledby="network-title">
       <div className="flex w-full flex-col items-center justify-center">
         <div className="container-md relative -mt-[12vw] flex w-full flex-col items-center justify-center lg:-mt-0 lg:aspect-[2/1]">
           <Globe />
           <div className="relative z-10 flex flex-col gap-4 md:gap-6 lg:absolute lg:top-0 lg:left-10 lg:z-10 lg:w-120 lg:items-start">
-            <h2 className="text-m-h2 md:text-d-h2">
-              Connecting care across mountain valleys, tundra settlements and the communities beyond the last road.
+            <h2 id="network-title" className="text-m-h2 md:text-d-h2">
+              From one health centre to the communities around it.
             </h2>
+            <p className="text-m-body-l md:text-d-body-l text-pretty text-white/70">
+              The network view illustrates a relationship between senders and receivers. It does not represent confirmed routes, an operating service
+              or a guaranteed coverage radius.
+            </p>
           </div>
         </div>
       </div>
@@ -121,7 +126,7 @@ export function Coverage() {
 
 export function Demo() {
   return (
-    <section className="w-full">
+    <section id="scenario" className="w-full" aria-labelledby="scenario-title">
       <div className="container-md mx-auto -mt-12 flex flex-col items-center gap-2 lg:-mt-16 lg:flex-row lg:justify-between lg:gap-12 xl:-mt-24">
         <div className="relative flex h-92 w-full items-center justify-center lg:aspect-690/644 lg:h-auto lg:max-w-185 lg:flex-1">
           <div className="absolute -inset-4 lg:static lg:inset-0">
@@ -137,12 +142,15 @@ export function Demo() {
         </div>
         <div className="relative z-10 flex max-w-lg flex-col gap-6 lg:w-136 lg:max-w-none lg:gap-12">
           <div className="flex flex-col gap-4 lg:gap-6">
-            <p className="text-m-h2 md:text-d-h2">Explore a medical delivery route</p>
+            <h2 id="scenario-title" className="text-m-h2 md:text-d-h2">
+              Follow a medical delivery scenario.
+            </h2>
             <p className="text-m-h3 md:text-d-h3 text-pretty text-white/80">
-              Explore the Raven concept for remote medical logistics. This local prototype illustrates the experience; flight capabilities and service availability are not yet defined.
+              Explore how an air route could connect a regional health centre with a remote clinic, from the request for supplies to the people waiting
+              at the other end.
             </p>
           </div>
-          <ContactButton label="Discuss a Route" withArrow />
+          <ContactButton label={USE_CASE_CTA} withArrow />
         </div>
       </div>
     </section>
@@ -150,12 +158,12 @@ export function Demo() {
 }
 
 export const TEAM_TEXT =
-  "Raven is a medical delivery concept focused on a simple goal: helping essential care reach people in remote mountain and cold-climate communities.";
+  "Raven is a medical delivery drone concept for remote mountain and cold-climate communities. This site explores the journey, the aircraft and the connection between local care teams.";
 
 /** On lg+ the WebGL landing sequence draws this text/logos; the DOM copy stays for a11y. */
 export function OurTeam() {
   return (
-    <section className="container-md relative flex flex-col items-center gap-8 lg:invisible" id="our-team" aria-label="Our team">
+    <section className="container-md relative flex flex-col items-center gap-8 lg:invisible" id="our-team" aria-label="About Raven">
       <p className="md:text-d-body-l text-m-body-l max-w-148.5 px-4 text-center text-pretty" data-type="our-team-description">
         {TEAM_TEXT}
       </p>
@@ -201,11 +209,13 @@ export function Footer() {
       <HeroLogo className="mt-5 w-full md:mt-8 lg:invisible" />
       <div className="z-over-scroll-sequence flex w-full flex-col items-center justify-between gap-12 pb-8 md:flex-row md:items-end">
         <div className="flex max-w-94 flex-col items-center gap-5 text-center md:items-start md:text-left">
-          <p className="text-d-h3 text-white">Bring care closer.</p>
-          <ContactButton label="Contact Us" withArrow className="w-full md:w-auto" />
+          <p className="text-d-h3 text-white">Start with a place that needs the connection.</p>
+          <p className="text-d-body-s hidden text-white/50 md:block">{CONCEPT_NOTICE}</p>
+          <ContactButton label={USE_CASE_CTA} withArrow className="w-full md:w-62.5" />
         </div>
         <div className="flex flex-col items-center gap-6 whitespace-nowrap md:contents">
-          <p className="text-d-cta order-last text-white/20 md:order-none md:hidden lg:block">Raven · Local concept · {new Date().getFullYear()}</p>
+          <p className="text-d-cta hidden text-white/20 lg:block">Raven · Local concept · {new Date().getFullYear()}</p>
+          <p className="text-m-body-l order-last max-w-80 text-center whitespace-normal text-white/60 md:hidden">{CONCEPT_NOTICE}</p>
           <div className="flex items-center gap-6 whitespace-nowrap md:gap-6.5">
             <Modal
               title="Privacy Policy"

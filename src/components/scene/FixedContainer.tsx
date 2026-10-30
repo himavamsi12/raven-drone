@@ -28,6 +28,7 @@ function SceneCanvas() {
       <Canvas
         camera={{ position: [0, 5, 0], fov: 60 }}
         dpr={[1, 1.5]}
+        shadows="soft" // drone self-shadowing only (sun shadow camera is fitted to the hero drone in MainScene)
         gl={{ powerPreference: "high-performance", antialias: false, stencil: false, depth: false, outputColorSpace: THREE.SRGBColorSpace }}
         onCreated={({ gl }) => gl.setClearColor(0x000000, 1)}
       >

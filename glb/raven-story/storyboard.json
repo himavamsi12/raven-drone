@@ -1,0 +1,71 @@
+{
+  "fps": 24,
+  "frame_range": [
+    1,
+    600
+  ],
+  "duration_seconds": 25,
+  "cuts": "camera markers, hard cuts at chapter boundaries",
+  "shots": [
+    {
+      "id": "01_The_valley",
+      "frames": [
+        1,
+        100
+      ],
+      "camera": "CAM-01_The_valley",
+      "lens_mm": 35.0,
+      "status": "draft, not legacy track match"
+    },
+    {
+      "id": "02_Health_centre",
+      "frames": [
+        101,
+        200
+      ],
+      "camera": "CAM-02_Health_centre",
+      "lens_mm": 40.0,
+      "status": "draft, not legacy track match"
+    },
+    {
+      "id": "03_Departure_space",
+      "frames": [
+        201,
+        300
+      ],
+      "camera": "CAM-03_Departure_space",
+      "lens_mm": 35.0,
+      "status": "draft, not legacy track match"
+    },
+    {
+      "id": "04_Mountain_crossing",
+      "frames": [
+        301,
+        400
+      ],
+      "camera": "CAM-04_Mountain_crossing",
+      "lens_mm": 38.0,
+      "status": "draft, not legacy track match"
+    },
+    {
+      "id": "05_Clinic_arrival",
+      "frames": [
+        401,
+        500
+      ],
+      "camera": "CAM-05_Clinic_arrival",
+      "lens_mm": 38.0,
+      "status": "draft, not legacy track match"
+    },
+    {
+      "id": "06_Connected_valley",
+      "frames": [
+        501,
+        600
+      ],
+      "camera": "CAM-06_Connected_valley",
+      "lens_mm": 38.0,
+      "status": "draft, not legacy track match"
+    }
+  ]
+}
