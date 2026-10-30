@@ -167,7 +167,7 @@ function Callout({
           right ? "bg-gradient-to-r from-white via-white to-transparent" : "bg-gradient-to-l from-white via-white to-transparent",
         )}
       />
-      <div className="text">
+      <div className="text [text-shadow:0_1px_14px_rgba(0,0,0,0.55)]">
         <AnimatePresence>
           {show && (
             <motion.h3
@@ -224,8 +224,8 @@ export function SpecsCallouts() {
       </GroundHtml>
       <GroundHtml transform={false} position={[0, 0, (lg ? -0.2 : md ? -1 : -1.25) - 0.025]}>
         <Callout
-          title="Coaxial quad"
-          description="Four arms carry paired upper and lower propellers."
+          title="Six rotors"
+          description="Six arms carry propellers that spin in alternating directions."
           desktopSide="left"
           mobileSide="top-left"
           className="md:w-[calc(min(50vw,832px)-208px-64px)]!"

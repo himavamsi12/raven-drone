@@ -304,7 +304,7 @@ function Menu() {
             </ul>
             <div className="mt-auto border-t border-white/10 pt-5">
               <p className="text-d-cta text-white">A design concept</p>
-              <p className="text-d-body-s mt-1 leading-6 text-white/40">{CONCEPT_NOTICE}</p>
+              <p className="text-d-body-s mt-1 leading-6 text-white/65">{CONCEPT_NOTICE}</p>
             </div>
           </div>
         </div>
@@ -341,7 +341,7 @@ function Logo({ collapsed }: { collapsed?: boolean }) {
   );
 }
 
-const barText = "text-[clamp(0.625rem,0.78vw,0.78125rem)] leading-none font-medium tracking-[0.02em] uppercase opacity-90 transition-opacity hover:opacity-100 hover:underline hover:underline-offset-[5px] focus-visible:opacity-100";
+const barText = "text-[clamp(0.6875rem,0.78vw,0.78125rem)] leading-none font-medium tracking-[0.02em] uppercase opacity-90 transition-opacity hover:opacity-100 hover:underline hover:underline-offset-[5px] focus-visible:opacity-100";
 
 /**
  * Homepage bar (asset/html/raven_homepage.html `.bar`): brand + links | boxed Contact cell | black menu square, one

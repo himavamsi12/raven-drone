@@ -246,7 +246,7 @@ export function Parts() {
       <div className="sticky top-0 flex h-svh items-center overflow-hidden max-[760px]:static max-[760px]:block max-[760px]:h-auto">
         <div
           ref={track}
-          className="relative z-10 flex items-center gap-[clamp(1rem,2.2vw,2.25rem)] px-[clamp(1.25rem,3.3vw,3.375rem)] will-change-transform max-[760px]:snap-x max-[760px]:snap-mandatory max-[760px]:overflow-x-auto max-[760px]:pb-2 max-[760px]:[scrollbar-width:none]"
+          className="relative z-10 flex items-center gap-[clamp(1rem,2.2vw,2.25rem)] px-[clamp(1.25rem,3.3vw,3.375rem)] will-change-transform max-[760px]:snap-x max-[760px]:snap-mandatory max-[760px]:scroll-px-5 max-[760px]:overflow-x-auto max-[760px]:pb-2 max-[760px]:[scrollbar-width:none]"
         >
           <div className="grid w-[min(30vw,26.25rem)] flex-none gap-[clamp(0.875rem,1.6vw,1.5rem)] max-[760px]:w-[78vw] max-[760px]:snap-start">
             <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-[#cfe9f5]/60 uppercase">/ Concept airframe</span>
@@ -265,7 +265,7 @@ export function Parts() {
         </div>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-[clamp(1.25rem,3.3vw,3.375rem)] bottom-[clamp(1.125rem,2.4vw,2.125rem)] left-[clamp(1.25rem,3.3vw,3.375rem)] z-10 flex items-center gap-4 max-[760px]:static max-[760px]:mt-4"
+          className="pointer-events-none absolute right-[clamp(1.25rem,3.3vw,3.375rem)] bottom-[clamp(1.125rem,2.4vw,2.125rem)] left-[clamp(1.25rem,3.3vw,3.375rem)] z-10 flex items-center gap-4 max-[760px]:static max-[760px]:mt-4 max-[760px]:px-5"
         >
           <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-[#cfe9f5]/60 uppercase">
             <b className="font-medium text-white">{String(current + 1).padStart(2, "0")}</b> / {String(SHOTS.length).padStart(2, "0")}

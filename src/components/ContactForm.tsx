@@ -1,12 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { ArrowRightIcon } from "@/components/ui/icons";
 
 const LIMITS = { name: 120, company: 160, email: 254, message: 4000 } as const;
 const FIELD =
-  "rounded-lg bg-white/10 hover:bg-white/15 -outline-offset-2! focus:bg-white/15 px-3 py-2 text-d-body-s text-white placeholder-white/50 transition-colors backdrop-blur-sm";
+  "border border-white/15 bg-white/8 hover:bg-white/12 -outline-offset-2! focus:bg-white/12 px-3 py-2 text-d-body-s text-white placeholder-white/60 transition-colors";
 const EMAIL = /^[\w.!#$%&'*+/=?^`{|}~-]+@[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?)*$/i;
 
 type Field = keyof typeof LIMITS;
@@ -20,6 +20,8 @@ type Errors = Partial<Record<Field, string>>;
 export function ContactForm({ className }: { className?: string }) {
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const uid = useId();
+  const errId = (k: Field) => `${uid}-${k}-error`;
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -32,7 +34,11 @@ export function ContactForm({ className }: { className?: string }) {
     const email = String(data.get("email") ?? "");
     if (email && !EMAIL.test(email)) next.email = "Invalid email address";
     setErrors(next);
-    if (Object.keys(next).length) return;
+    const first = (Object.keys(LIMITS) as Field[]).find((k) => next[k]);
+    if (first) {
+      (e.currentTarget.elements.namedItem(first) as HTMLElement | null)?.focus();
+      return;
+    }
     setNotice("Not sent: this concept site has no form backend, so your message was not delivered.");
   };
 
@@ -44,11 +50,12 @@ export function ContactForm({ className }: { className?: string }) {
         placeholder={label}
         aria-label={label}
         aria-invalid={!!errors[name] || undefined}
+        aria-describedby={errors[name] ? errId(name) : undefined}
         autoComplete={autoComplete}
         maxLength={LIMITS[name]}
         type={name === "email" ? "email" : "text"}
       />
-      <p aria-hidden={!errors[name]} className={clsx("text-red text-m-mono font-mono", !errors[name] && "invisible")}>
+      <p id={errId(name)} aria-hidden={!errors[name]} className={clsx("text-red text-m-mono font-mono", !errors[name] && "invisible")}>
         {errors[name] || "This field is required"}
       </p>
     </div>
@@ -68,15 +75,16 @@ export function ContactForm({ className }: { className?: string }) {
           placeholder="Message"
           aria-label="Message"
           aria-invalid={!!errors.message || undefined}
+          aria-describedby={errors.message ? errId("message") : undefined}
           maxLength={LIMITS.message}
         />
-        <p aria-hidden={!errors.message} className={clsx("text-red text-m-mono font-mono", !errors.message && "invisible")}>
+        <p id={errId("message")} aria-hidden={!errors.message} className={clsx("text-red text-m-mono font-mono", !errors.message && "invisible")}>
           This field is required
         </p>
       </div>
       <button
         type="submit"
-        className="text-d-cta flex h-11 cursor-pointer items-center justify-between rounded-full border border-white/20 bg-transparent! px-5 text-white/40 backdrop-blur-sm transition-colors hover:text-white/100"
+        className="text-d-cta flex h-11 cursor-pointer items-center justify-between border border-white/40 bg-transparent! px-5 text-white/75 transition-colors hover:border-white/75 hover:text-white"
       >
         Submit Form
         <ArrowRightIcon className="size-4.5" />

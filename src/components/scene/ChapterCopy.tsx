@@ -16,9 +16,9 @@ const EXIT = { opacity: 0, y: -8, color: "#FF2200" };
 
 const HEADING = {
   /** Homepage hero (asset/html/raven_homepage.html `.headline`): two uppercase lines, tight leading. */
-  hero: "text-[clamp(2.125rem,11.5vw,3.75rem)] sm:text-[clamp(2.5rem,4.7vw,4.875rem)] leading-[0.9] font-semibold tracking-[-0.045em] uppercase text-shadow-[0px_1px_32px_rgba(0,0,0,0.25)]",
-  h1: "text-m-h0 md:text-d-h0 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h0 max-w-204 text-shadow-[0px_1px_32px_rgba(0,0,0,0.25)]",
-  h2: "text-m-h1 md:text-d-h1 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h1 max-w-204 text-shadow-[0px_1px_32px_rgba(0,0,0,0.25)]",
+  hero: "text-[clamp(2.125rem,11.5vw,3.75rem)] sm:text-[clamp(2.5rem,4.7vw,4.875rem)] leading-[0.9] font-semibold tracking-[-0.045em] uppercase text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
+  h1: "text-m-h0 md:text-d-h0 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h0 max-w-204 text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
+  h2: "text-m-h1 md:text-d-h1 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h1 max-w-204 text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
 };
 
 /** Animated chapter heading (shipped `t9`). */
@@ -50,7 +50,7 @@ function Support({ children, className }: { children: ReactNode; className?: str
         exit={EXIT}
         transition={{ duration: 0.4, ease: "easeInOut", delay: 0.2 }}
         className={clsx(
-          "text-m-h3 md:text-d-h3 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h3 text-pretty text-shadow-[0px_1px_32px_rgba(0,0,0,0.25)]",
+          "text-m-h3 md:text-d-h3 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h3 text-pretty text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
           className,
         )}
       >
@@ -111,7 +111,7 @@ function SquareCta({ onClick, children }: { onClick?: () => void; children: Reac
         <button
           type="button"
           onClick={onClick}
-          className="pointer-events-auto inline-flex cursor-pointer items-center gap-3 border border-[#f4f3ef] bg-white/8 px-[1.375rem] py-3.5 text-[clamp(0.6875rem,0.82vw,0.8125rem)] leading-none font-medium tracking-[0.04em] text-[#f4f3ef] uppercase backdrop-blur-[6px] transition-colors duration-200 hover:bg-white/18 focus-visible:bg-white/18 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-white"
+          className="pointer-events-auto inline-flex cursor-pointer items-center gap-3 border border-[#f4f3ef] bg-black/25 px-[1.375rem] py-3.5 text-[clamp(0.6875rem,0.82vw,0.8125rem)] leading-none font-medium tracking-[0.04em] text-[#f4f3ef] uppercase backdrop-blur-[6px] transition-colors duration-200 hover:bg-black/45 focus-visible:bg-black/45 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-white"
         >
           {children}
           <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" className="size-3.5">
@@ -130,7 +130,7 @@ function Hero() {
     <Frame innerClassName="!flex flex-col justify-end">
       <div className="flex flex-col items-start justify-between gap-5 px-1 sm:flex-row sm:items-end sm:gap-8 md:px-[clamp(0rem,1.1vw,1.375rem)]">
         <div>
-          <p className="text-m-mono md:text-d-mono mb-3 font-mono text-white/70 uppercase text-shadow-[0px_1px_32px_rgba(0,0,0,0.25)] md:mb-4">
+          <p className="text-m-mono md:text-d-mono mb-3 font-mono text-white/70 uppercase text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)] md:mb-4">
             Illustrative medical delivery
           </p>
           <Heading variant="hero" className="sm:whitespace-nowrap">

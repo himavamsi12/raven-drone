@@ -52,17 +52,17 @@ export function Modal({
           if (e.target === dialog.current) close();
         }}
         className={clsx(
-          "z-modal fixed inset-0 m-0 flex h-dvh max-h-none w-full max-w-none items-center justify-center bg-black/80 px-4 text-white backdrop:bg-transparent md:px-12",
+          "z-modal fixed inset-0 m-0 flex h-dvh max-h-none w-full max-w-none items-center justify-center bg-black/80 px-4 text-left text-white backdrop:bg-transparent md:px-12",
           "transition-opacity duration-200 [&:not([open])]:hidden",
         )}
         data-lenis-prevent
       >
-        <div className="bg-bg relative flex w-full max-w-149.5 flex-col gap-8 overflow-hidden rounded-lg p-6 md:p-8">
+        <div className="bg-bg relative flex w-full max-w-149.5 flex-col gap-8 overflow-hidden border border-white/15 p-6 md:p-8">
           <div className="relative flex w-full items-start justify-between">
             <h2 id={titleId} className="text-m-h2 md:text-d-h2">
               {title}
             </h2>
-            <button type="button" onClick={close} aria-label="Close" className="flex size-6 cursor-pointer items-center justify-center">
+            <button type="button" onClick={close} aria-label="Close" className="-m-2.5 flex size-11 cursor-pointer items-center justify-center">
               <CloseIcon className="size-5 text-white transition-colors hover:text-white/80" />
             </button>
           </div>

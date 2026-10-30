@@ -2,9 +2,13 @@ import clsx from "clsx";
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowRightIcon } from "./icons";
 
-/** Exact class list from shipped module 56612. */
+/**
+ * Raven CTA: the homepage's square outlined button (hero `SquareCta`) instead of the shipped white/25 pill (module 56612),
+ * so every action on the page speaks one equipment-like language. The dark frosted fill keeps white text readable over
+ * bright terrain.
+ */
 export const CTA_CLASS =
-  "text-d-cta pointer-events-auto flex cursor-pointer items-center justify-between rounded-full bg-white/25 px-5 py-3 -outline-offset-1 hover:bg-white/30 focus-visible:bg-white/25 focus-visible:shadow-none focus-visible:outline-1 focus-visible:outline-white";
+  "text-d-cta pointer-events-auto flex cursor-pointer items-center justify-between border border-white/75 bg-black/25 px-5 py-3 backdrop-blur-[6px] transition-colors duration-200 hover:border-white hover:bg-black/45 focus-visible:border-white focus-visible:bg-black/45 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-white";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;

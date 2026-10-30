@@ -41,7 +41,7 @@ Edits from the brief's baseline, prompted by screenshots:
 | Title | Body | Status |
 |---|---|---|
 | Medical cargo | A case beneath the aircraft puts the delivery at the centre of the design. | Literal: the case is modelled. Its contents and any insulation are not designed. |
-| Coaxial quad | Four arms carry paired upper and lower propellers. | Literal: 4 arms, 8 props. |
+| Six rotors | Six arms carry propellers that spin in alternating directions. | Literal: raven_hexa has 6 arms/props; spin directions come from the source GLB's prop clips (2026-10-31). |
 | Remote clinics | The intended connection is between a health centre and the communities around it. | Scenario |
 | Care teams | The journey ends with people receiving the supplies they need. | Scenario |
 
@@ -146,5 +146,5 @@ Removed from the HUD:
 - None of these capabilities are invented:
   - Winch, cold chain or temperature logger.
   - Delivery approval, clinic network, service availability or dispatch integration.
-- Airframe terminology is consistent everywhere: four arms, paired upper/lower props (coaxial quad).
+- Airframe terminology is consistent everywhere: hexacopter, six arms, six props with alternating spin (the loader/flock silhouettes still show the earlier quad).
 - Temperature appears once, as an open requirement in the concept notice, with no numerical readout.

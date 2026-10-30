@@ -47,18 +47,18 @@ const linkCls ="text-d-cta cursor-pointer underline decoration-1 underline-offse
 
 export function Footer() {
   return (
-    <footer id="footer" className="relative flex h-[calc(100vh-var(--nav-height))] w-full flex-col items-center justify-between px-4 md:px-12">
+    <footer id="footer" className="relative flex h-[calc(100vh-var(--nav-height))] w-full flex-col overflow-x-clip items-center justify-between px-4 md:px-12">
       {/* Below lg the reference shows the final landing frame; Raven shows the live hexacopter at rest there. */}
       <FooterDrone className="absolute bottom-0 left-1/2 aspect-square h-full max-w-none -translate-x-1/2 md:h-19/20 lg:hidden" />
       <HeroLogo className="mt-5 w-full md:mt-8 lg:invisible" />
       <div className="z-over-scroll-sequence flex w-full flex-col items-center justify-between gap-12 pb-8 md:flex-row md:items-end">
         <div className="flex max-w-94 flex-col items-center gap-5 text-center md:items-start md:text-left">
-          <p className="text-d-h3 text-white">Start with a place that needs the connection.</p>
-          <p className="text-d-body-s hidden text-white/50 md:block">{CONCEPT_NOTICE}</p>
+          <h2 className="text-d-h3 text-balance text-white">Start with a place that needs the connection.</h2>
+          <p className="text-d-body-s hidden text-white/60 md:block">{CONCEPT_NOTICE}</p>
           <ContactButton label={USE_CASE_CTA} withArrow className="w-full md:w-62.5" />
         </div>
         <div className="flex flex-col items-center gap-6 whitespace-nowrap md:contents">
-          <p className="text-d-cta hidden text-white/20 lg:block">Raven · Local concept · {new Date().getFullYear()}</p>
+          <p className="text-d-cta hidden text-white/55 lg:block">Raven · Local concept · {new Date().getFullYear()}</p>
           <p className="text-m-body-l order-last max-w-80 text-center whitespace-normal text-white/60 md:hidden">{CONCEPT_NOTICE}</p>
           <div className="flex items-center gap-6 whitespace-nowrap md:gap-6.5">
             <Modal
