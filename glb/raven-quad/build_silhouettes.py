@@ -328,12 +328,12 @@ def bbox(mask, ss):
 
 build_lowpoly()
 # Validation: the tracer must reproduce the shipped jet path inside the shipped box.
-mask, ss = render_mask(os.path.join(ROOT, 'public', 'assets', 'models', 'loading-delta.glb'), 2, SHIPPED_BOX)
+mask, ss = render_mask(os.path.join(ROOT, 'research', 'usavionix', 'public-mirror', 'assets', 'models', 'loading-delta.glb'), 2, SHIPPED_BOX)
 jet = trace(mask, ss)
 json.dump(jet, open(os.path.join(OUT, 'jet-check.json'), 'w'))
 print('RQ_SIL jet-check loops', jet['loops'], 'length', jet['length'], 'bbox', jet['bbox'])
 # Size the loader drone to the jet's on-screen footprint (equal bbox area), then fit a new SVG box around it.
-jx0, jy0, jx1, jy1 = bbox(*render_mask(os.path.join(ROOT, 'public', 'assets', 'models', 'loading-delta.glb'), 0.5))
+jx0, jy0, jx1, jy1 = bbox(*render_mask(os.path.join(ROOT, 'research', 'usavionix', 'public-mirror', 'assets', 'models', 'loading-delta.glb'), 0.5))
 build_loader(S)
 dx0, dy0, dx1, dy1 = bbox(*render_mask(os.path.join(OUT, 'loading-drone.glb'), 0.5))
 k = math.sqrt(((jx1 - jx0) * (jy1 - jy0)) / ((dx1 - dx0) * (dy1 - dy0)))

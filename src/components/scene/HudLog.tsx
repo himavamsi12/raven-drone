@@ -22,14 +22,6 @@ const HEADER: Line[] = [
   { label: "TERRAIN AND RIDGES SHOWN", scene: "real-time-detection", progress: 0.3 },
   { label: "ROAD ACCESS SHOWN", scene: "real-time-detection", progress: 0.35 },
   { label: "ROAD OBJECTS LABELLED", scene: "real-time-detection", progress: 0.4 },
-  { label: "SIMULATED HEAT ALERT", scene: "thermal-irregularity", progress: 0.45 },
-  { label: "ALERT ON ILLUSTRATED ROUTE", scene: "thermal-irregularity", progress: 0.5 },
-  { label: "ROUTE REVIEW REQUIRED", scene: "thermal-irregularity", progress: 0.55 },
-  { label: "CARE-TEAM UPDATE", scene: "thermal-irregularity", progress: 0.6 },
-  { label: "SIMULATED HEAT ALERT", scene: "ignition-verified", progress: 0.15 },
-  { label: "FIRE SHOWN NEAR ROUTE", scene: "ignition-verified", progress: 0.2 },
-  { label: "AFFECTED AREA SHOWN", scene: "ignition-verified", progress: 0.25 },
-  { label: "ROUTE REVIEW REQUIRED", scene: "ignition-verified", progress: 0.3 },
 ];
 
 const BODY: Line[] = [

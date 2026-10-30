@@ -17,14 +17,8 @@ export const ASSETS = {
   droneAnimationsMobile: "/assets/models/drone-animations-mobile.glb",
   loadingDrone: "/assets/models/loading-drone.glb", // Raven silhouette, replaces loading-delta
   noise: "/assets/textures/fx/noise.webp",
-  wind: "/assets/textures/fx/wind.webp",
-  fire: "/assets/textures/fx/fire.webp",
   env: "/assets/textures/environment/env.exr",
-  earthOutline: "/assets/textures/globe/earth_outline.webp",
-  earthNormal: "/assets/textures/globe/earth_normal.webp",
-  orbitronFont: "/assets/3d-fonts/orbitron-bold.json",
   geistSemiBold: "/assets/3d-fonts/Geist-SemiBold.woff",
 } as const;
-
 
 export const DRACO_PATH = "/draco/";

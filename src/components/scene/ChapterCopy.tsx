@@ -212,24 +212,6 @@ const simple = (title: ReactNode | null, body: string, bodyClass = bottomLeft) =
     );
   };
 
-function Thermal() {
-  const done = useScenes((s) => s.thermalIrregularityAnimationState);
-  return (
-    <Frame>
-      <Heading as="h2" variant="h2">
-        <span>A hazard changes</span>
-        <br />
-        <span className="inline-flex items-center gap-2 md:gap-4">
-          the plan. <Pill className={clsx("opacity-0 transition-opacity duration-500", done === "done" && "opacity-100")}>Hazard noted</Pill>
-        </span>
-      </Heading>
-      <Support className={bottomLeft}>
-        This simulated heat alert interrupts the delivery scenario. The route needs review before the journey continues.
-      </Support>
-    </Frame>
-  );
-}
-
 type Window = { startScene: SceneId; startSceneProgress: number; endScene?: SceneId; endSceneProgress?: number };
 
 /** Chapter copy + time windows, verbatim order from shipped `nl`. */
@@ -247,14 +229,6 @@ const CHAPTERS: { component: ComponentType; timeWindow: Window }[] = [
   {
     component: simple("Read the route ahead.", "The route view introduces the terrain, road access and obstacles between the health centre and the clinic."),
     timeWindow: { startScene: SCENE.REAL_TIME_DETECTION, startSceneProgress: 0.5, endScene: SCENE.THERMAL_IRREGULARITY, endSceneProgress: 0.075 },
-  },
-  { component: Thermal, timeWindow: { startScene: SCENE.THERMAL_IRREGULARITY, startSceneProgress: 0.9, endScene: SCENE.IGNITION_VERIFIED, endSceneProgress: 0.075 } },
-  {
-    component: simple(
-      "Review the affected area.",
-      "The scene confirms a fire along the illustrated route. It is a route-planning example, not a claim that Raven fights fires.",
-    ),
-    timeWindow: { startScene: SCENE.IGNITION_VERIFIED, startSceneProgress: 0.75, endScene: SCENE.PHALANX_AI, endSceneProgress: 0.075 },
   },
   {
     component: simple(

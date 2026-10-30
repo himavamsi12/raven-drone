@@ -11,20 +11,9 @@ node_modules
 /research/
 /asset/
 
-# Mirrored USAvionix jet/brand assets the Raven site no longer uses (kept locally, not shipped)
-/public/assets/images/brand/
-/public/assets/images/landing-sequence/
-/public/assets/images/media/border-storm.31d3c346.webp
-/public/assets/images/media/critical-infrastructure-in-crisis.d7587763.webp
-/public/assets/images/media/wildfire-cascade.5579c082.webp
-/public/assets/images/media/desktop.1b373cc8.webp
-/public/assets/images/media/mobile.8107afe0.webp
-/public/assets/models/delta-lowpoly.glb
-/public/assets/models/loading-delta.glb
-/public/assets/models/delta-pbr.glb
-/public/assets/textures/landing-logos/
+# Mirrored USAvionix jet/brand assets the site no longer uses now live in research/usavionix/public-mirror/
 
-# Raw Blender render output (regenerate with glb/raven-quad/render_media.py)
+# Raw Blender render output (regenerate with glb/raven-quad/render_media.py; no longer used by the site)
 /glb/raven-quad/media/
 
 # Not needed to build the site

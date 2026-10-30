@@ -85,8 +85,6 @@ export function sceneEndOffset(id: SceneId, vh: number) {
 
 type SceneStore = Record<SceneId, SceneData> & {
   updateSceneData: (id: SceneId, data: SceneData) => void;
-  thermalIrregularityAnimationState: "inProgress" | "done";
-  setThermalIrregularityAnimationDone: () => void;
 };
 
 const blank: SceneData = { isActive: false, progress: 0, showRatio: 0, hideRatio: 0 };
@@ -107,9 +105,6 @@ export const useScenes = create<SceneStore>()((set, get) => ({
       set({ [id]: data } as Partial<SceneStore>);
     }
   },
-  thermalIrregularityAnimationState: "inProgress",
-  setThermalIrregularityAnimationDone: () =>
-    set({ thermalIrregularityAnimationState: "done" }),
 }));
 
 /** Read scene state without subscribing; for frame loops. */

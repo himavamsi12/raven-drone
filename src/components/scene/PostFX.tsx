@@ -4,7 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { BlendFunction, Effect, EffectComposer, EffectPass, RenderPass, SMAAEffect } from "postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { BG_COLOR, SKY_COLOR, terrainOffset, thermalState } from "@/lib/constants";
+import { BG_COLOR, SKY_COLOR, terrainOffset } from "@/lib/constants";
 import { damp, remap } from "@/lib/math";
 import { SCENE, scenes } from "@/lib/scenes";
 import { useStage } from "@/lib/story-map";
@@ -85,7 +85,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   }
 }
 
-/** Grade, grain, vignette and thermal palette box (shipped module 98894 + shader 25460). */
+/** Grade, grain and vignette (shipped module 98894 + shader 25460; thermal palette box dropped with the thermal chapter). */
 class FinalEffect extends Effect {
   constructor() {
     super(
@@ -107,10 +107,6 @@ uniform float uSharpenOpacity;
 uniform float uGamma;
 uniform float uGrainAmount;
 uniform float uTime;
-uniform float uThermalInvert;
-uniform vec2 uThermalInvertPos;
-uniform vec2 uThermalInvertSize;
-uniform vec2 uThermalInvertTargetPos;
 
 float hash13(vec3 p3) {
   p3 = fract(p3 * .1031);
@@ -141,27 +137,6 @@ vec3 colorVibrancy(vec3 color, float vibrancy, float luma) {
 vec3 gammaCorrect(vec3 color, float gamma) { return pow(clamp(color, 0.0, 1.0), vec3(1.0 / gamma)); }
 vec3 ACESFilm(vec3 x) { return (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14); }
 
-const vec3 ironPalette[10] = vec3[10](
-  vec3(1.0, 0.996, 0.957),
-  vec3(1.0, 0.855, 0.055),
-  vec3(0.961, 0.486, 0.0),
-  vec3(0.878, 0.216, 0.227),
-  vec3(0.690, 0.004, 0.596),
-  vec3(0.486, 0.0, 0.616),
-  vec3(0.290, 0.0, 0.588),
-  vec3(0.106, 0.0, 0.502),
-  vec3(0.0, 0.0, 0.290),
-  vec3(0.0, 0.0, 0.039)
-);
-vec3 palette(in float t) {
-  t = clamp(t, 0.0, 1.0);
-  float scaledT = t * 9.0;
-  int index = int(floor(scaledT));
-  float f = scaledT - float(index);
-  index = min(index, 8);
-  return mix(ironPalette[index], ironPalette[index + 1], f);
-}
-
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   vec3 sharpenedColor = sharpen(inputBuffer, uv);
   vec3 color = mix(inputColor.rgb, sharpenedColor, uSharpenOpacity);
@@ -179,35 +154,6 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   float verticalFalloff = smoothstep(0.25, 0.75, abs(uv.y - 0.5));
   color = mix(color, uVignetteColor, verticalFalloff);
 
-  vec2 boxPos = vec2(uThermalInvertPos.x, 1.0 - uThermalInvertPos.y);
-  vec2 targetPos = vec2(uThermalInvertTargetPos.x, 1.0 - uThermalInvertTargetPos.y);
-  vec2 halfSize = 0.5 * uThermalInvertSize;
-  vec2 boxMin = boxPos - halfSize;
-  vec2 boxMax = boxPos + halfSize;
-  bool inBox = all(greaterThanEqual(uv, boxMin)) && all(lessThanEqual(uv, boxMax));
-  float legendWidth = uThermalInvertSize.x * 0.02;
-  vec2 legendMax = vec2(boxMax.x, boxMax.y);
-  vec2 legendMin = vec2(boxMax.x - legendWidth, boxMin.y);
-  bool inLegend = all(greaterThanEqual(uv, legendMin)) && all(lessThanEqual(uv, legendMax));
-  if (inBox) {
-    float di = 1.0 - smoothstep(0.00, 0.6, distance(uv, targetPos));
-    float di2 = 1.0 - smoothstep(0.015, 0.1, distance(uv, targetPos));
-    di = pow(di, 24.0);
-    di2 = pow(di2, 32.0);
-    luma = mix(luma * 0.2, luma, di);
-    luma = mix(luma, pow(luma * 7.0, 2.0), di2);
-    vec3 thermalColor = palette(1.0 - luma);
-    thermalColor = pow(thermalColor, vec3(1.75));
-    color = mix(color, thermalColor, uThermalInvert);
-  }
-  if (inLegend) {
-    float legendT = (uv.y - legendMin.y) / (legendMax.y - legendMin.y);
-    legendT = pow(legendT * 1.0, 1.75);
-    vec3 legendColor = palette(1.0 - legendT);
-    legendColor *= vec3(2.0, 1.0, 1.0);
-    legendColor = pow(legendColor, vec3(1.5));
-    color = mix(color, legendColor, uThermalInvert);
-  }
   float fadeOut = smoothstep(0.0, 1.0 - uOpacity, uv.y);
   color = mix(uBgColor, color, fadeOut);
   color = gammaCorrect(color, uGamma);
@@ -233,10 +179,6 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
           ["uSharpenOpacity", new THREE.Uniform(0.3)],
           ["uGrainAmount", new THREE.Uniform(0.25)],
           ["uTime", new THREE.Uniform(0)],
-          ["uThermalInvert", new THREE.Uniform(0)],
-          ["uThermalInvertPos", new THREE.Uniform(new THREE.Vector2())],
-          ["uThermalInvertSize", new THREE.Uniform(new THREE.Vector2())],
-          ["uThermalInvertTargetPos", new THREE.Uniform(new THREE.Vector2())],
         ]),
       },
     );
@@ -303,10 +245,6 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     final.u("uVignetteAspect").value.copy(aspect.current);
     final.u("uTime").value = state.clock.getElapsedTime();
     final.u("uOpacity").value = remap(multi.hideRatio, 0, 0.25, 1, 0);
-    final.u("uThermalInvert").value = thermalState.shouldInvert;
-    final.u("uThermalInvertPos").value.copy(thermalState.pos);
-    final.u("uThermalInvertSize").value.copy(thermalState.size);
-    final.u("uThermalInvertTargetPos").value.copy(thermalState.targetPos);
     updateLens(state.camera, dt);
     gl.outputColorSpace = THREE.LinearSRGBColorSpace;
     const night = s[SCENE.IGNITION_VERIFIED].progress > 0.99;

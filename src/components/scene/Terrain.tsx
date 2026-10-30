@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
 import {
-  buildingsRef,
   RENDER_ORDER,
   resolution,
   TERRAIN_SCALE,
@@ -22,7 +21,6 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { TerrainMaterial } from "./materials/TerrainMaterial";
 import { getNoiseTexture } from "./textures";
 import { DetectionPoints } from "./DetectionPoints";
-import { FireGroups } from "./Fire";
 import { RAVEN_DETECTION_Y, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
 
@@ -81,7 +79,7 @@ function Buildings({ material }: { material: THREE.Material }) {
     if (ref.current) ref.current.visible = (scenes()[SCENE.IGNITION_VERIFIED]?.progress ?? 0) < 0.25;
   });
   return (
-    <group dispose={null} ref={buildingsRef}>
+    <group dispose={null}>
       <mesh ref={ref} rotation={[0, Math.PI, 0]} geometry={nodes.Buildings.geometry} material={material} />
     </group>
   );
@@ -123,10 +121,7 @@ function Tile({ position: [col, row], geometries, material, isCity, withPoints, 
         <mesh frustumCulled={false} renderOrder={RENDER_ORDER.TERRAIN} geometry={houses.geometry} material={houses.material} />
       )}
       {isCity && (
-        <>
-          <Buildings material={material} />
-          <FireGroups />
-        </>
+        <Buildings material={material} />
       )}
       {withPoints && <DetectionPoints groundY={detectionY} />}
     </group>

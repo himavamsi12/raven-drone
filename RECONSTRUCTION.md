@@ -118,11 +118,34 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
   card's screen position. Fix found on the way: the shared canvas must reset the clear colour to transparent each frame
   (a view's scene background leaves an opaque clear colour that hid the story stage).
 - `#fleet` (reference map layout over our coverage globe) was built, then removed for story band 2 (user);
-  `sections/Globe.tsx` is kept but unused.
+  `sections/Globe.tsx` was deleted in the 2026-10-31 cleanup.
 - Checked with agent-browser at 1440×900 and 390×844: hero, Route, the hand-off into `#parts`, parts track, `#fleet` (since removed),
   footer; wheel scroll continues past Route into the sections; bar link and chapter tick navigation land exactly;
   60 fps at hero, parts and fleet (M3, dev server); no console errors. Typecheck and production build pass.
 - Not checked: reverse scroll from the footer through the whole story, 821×1109, reduced motion on the parts views.
+
+## Cleanup: unused files and dead code (user request, 2026-10-31)
+
+- Code removed (unreachable in the two-band story, see `lib/story-map.ts`): `Fire.tsx` (sprites showed only for
+  ignition > .5 with phalanx < .5), `overlays/ThermalHud.tsx` + the final-pass thermal palette box (`thermalState`,
+  four uniforms, iron palette), the Thermal and "Review the affected area" chapters, the eight thermal/ignition HUD
+  header lines, the thermal animation flag in the scene store, `buildingsRef`, `RENDER_ORDER.FIRE/SMOKE`,
+  `sections/Globe.tsx`, and the wind sprite material in `DroneRig` (updated every frame but attached to no mesh).
+  The thermal and ignition scenes stay in `SCENE_ORDER`: band 2 reads their progress (city tile, camera, clear colour).
+- Public assets removed: `raven_drone.glb`, `raven_drone_refined.glb`, `raven_quad.glb` (16 MB), the 96
+  `raven-landing/*.avif` frames, `images/media/raven-*.webp`, `fx/fire.webp`, `fx/wind.webp`, `textures/globe/`,
+  `3d-fonts/orbitron-bold.json`, `draco/draco_encoder.js`. Gitignored USAvionix mirrors moved from `public/` to
+  `research/usavionix/public-mirror/` (local only; `build_silhouettes.py` updated). `public/` is now 39 MB, of which
+  30 MB is the opt-in `?plate=h00` video.
+- Sources removed (user choice): `glb/raven-refined/`, `glb/raven-story/`, `glb/Untitled.blend`, `glb/raven_drone.glb`
+  (all recoverable from git history), plus local `.blend1` backups and `glb/raven-quad/media/` render output.
+  Kept: `glb/new-drone/`, `glb/raven-terrain/`, `glb/raven-quad/` (builds the loader/flock silhouettes).
+- Measured on the production build, agent-browser 1440x900, before -> after: 50 -> 47 requests, 9.28 -> 8.41 MB
+  transferred on first load (fire.webp 669 KB and wind.webp 194 KB no longer fetched); 60 fps (vsync cap) at all 11
+  checkpoints from hero to footer, before and after; no console errors. Typecheck (with --noUnusedLocals), build and
+  `check-raven-rotors.mjs` pass. Captures of Route, the band 2 opening and the footer look unchanged.
+- Not done: the shipped `terrain.glb` (2 MB) still loads up front because the flock ground and the city tile base
+  map use it; deferring it needs local Suspense around those two consumers.
 
 ## Terrain lens retune: high-speed look (user request, 2026-10-30)
 
@@ -337,17 +360,17 @@ Draco decoder is served locally from `public/draco/`; nothing is hotlinked.
 | Single scroll controller (Lenis, lerp .95) + per-scene progress writer + scene-end snapping | `src/components/SmoothScroll.tsx` | 82245 |
 | Sticky stage inside the `calc(6600dvh + 1px + nav)` track | `src/components/scene/FixedContainer.tsx`, `src/app/page.tsx` | 7370 `np` |
 | Scene assembly, composer, flock FBO portal, hero audio | `scene/MainScene.tsx`, `scene/PostFX.tsx` | `t4`, 41480, 8743, 98894 |
-| Camera + 3 drones, GLB clip seeking, hover/steer/boost, shake, wind | `scene/DroneRig.tsx`, `scene/ClipSeeker.ts`, `scene/Drone.tsx` | `tU`, `tN`, `tC`, `tP`, `tr`, 31905 |
-| Terrain tiles, fog keyframes, Phalanx scan wipe, buildings, fire | `scene/Terrain.tsx`, `materials/TerrainMaterial.ts`, `scene/Fire.tsx` | `J`, `K`, `y`, `z`/`V`/`W`, `B`, `G`–`Q` |
+| Camera + 3 drones, GLB clip seeking, hover/steer, shake | `scene/DroneRig.tsx`, `scene/ClipSeeker.ts`, `scene/Drone.tsx` | `tU`, `tN`, `tC`, `tP`, `tr`, 31905 |
+| Terrain tiles, fog keyframes, Phalanx scan wipe, buildings (fire sprites removed 2026-10-31) | `scene/Terrain.tsx`, `materials/TerrainMaterial.ts` | `J`, `K`, `y`, `z`/`V`/`W`, `B`, `G`–`Q` |
 | Grid, clouds, detection boxes | `scene/Grid.tsx`, `scene/Clouds.tsx`, `scene/DetectionPoints.tsx` | `et`/`en`, `g`, `D`/`U` |
-| Spec callouts, DSA tags, thermal HUD | `scene/overlays/*` | `tS`/`tR`, `ts`/`ta`/`ti`, `tv` |
+| Spec callouts, DSA tags (thermal HUD removed 2026-10-31) | `scene/overlays/*` | `tS`/`tR`, `ts`/`ta`/`ti`, `tv` |
 | Flock (instanced, separation + Delaunay links) | `scene/Flock.tsx` | `tZ`, `tk`, `tz` |
 | Zones, responders, coordination drones, power station | `scene/Perimeters.tsx`, `scene/CoordinationDrones.tsx`, `scene/PowerStation.tsx` | `e1`/`eV`/`eq`, `eb`/`eg`/`eh`, `e8` |
 | Chapter copy + time windows, mission log | `scene/ChapterCopy.tsx`, `scene/HudLog.tsx` | `nl`/`nc`, `nd`, 76772 |
 | Navbar, chapter ticks (150ms fade → .75s scroll → restore), menu sheet | `src/components/Navbar.tsx` | 72781 |
 | Modal, contact form | `ui/Modal.tsx`, `ContactForm.tsx`, `ContactButton.tsx` | 66741, 98317, 52953 |
-| Mission cards, globe, demo, team, footer | `sections/Sections.tsx`, `sections/Globe.tsx` | 88572, 48847, 98776, 28866 |
-| 96-frame landing sequence (≥1024px), static frame 96 below | `sections/LandingSequence.tsx` | 73560, 68363, 51462, 38219, 80465 |
+| Team, footer (mission cards, globe, demo removed) | `sections/Sections.tsx` | 88572, 48847, 98776, 28866 |
+| Landing sequence with the live hexa (≥1024px), `FooterDrone` below | `sections/LandingSequence.tsx` | 73560, 68363, 51462, 38219, 80465 |
 | Loader | `loading/Loader.tsx` | 86700, 58905, 60745 |
 
 Hot paths use refs and uniforms. Per-frame React state is avoided except where the source does the same
@@ -382,7 +405,7 @@ Hot paths use refs and uniforms. Per-frame React state is avoided except where t
 6. **Outlined wordmark in WebGL** (module 38219) is ported but was not confirmed visible in local captures
    (preview throttling made late-footer screenshots unreliable). Needs a foreground-browser check.
 7. **Icons.** Phosphor glyphs in badges/arrows are close stand-ins, not the exact paths.
-8. **Globe orbiters** use the PBR drone without the rendered hull number.
+8. ~~Globe orbiters~~: the globe was removed (2026-10-31).
 9. **Reverse travel into ignition**: the reference showed the Phalanx survey zone still visible after
    scrolling back to ignition-verified; this build hides it per the code's state mapping.
 10. **Menu links** point to `#` (other pages were not reconstructed). Contact submit validates and then states

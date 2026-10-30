@@ -1,9 +1,9 @@
 "use client";
 
-import { PerspectiveCamera, useKeyboardControls, useTexture } from "@react-three/drei";
+import { PerspectiveCamera, useKeyboardControls } from "@react-three/drei";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { CopyPass } from "postprocessing";
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { ASSETS } from "@/lib/assets";
@@ -15,10 +15,8 @@ import { isScrollLocked } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CAMERA_BINDINGS, ClipSeeker, DRONE1_BINDINGS, DRONE2_BINDINGS, DRONE3_BINDINGS } from "./ClipSeeker";
 import { Drone } from "./Drone";
-import { WindMaterial } from "./materials/WindMaterial";
 import { SpecsCallouts } from "./overlays/SpecsCallouts";
 import { SwarmTags } from "./overlays/SwarmTags";
-import { ThermalHud } from "./overlays/ThermalHud";
 import { useGLB } from "./types";
 
 /** Camera shake intensity per scene (shipped `tM`). */
@@ -61,52 +59,6 @@ function CameraShake({ children }: { children: ReactNode }) {
   return <group ref={ref}>{children}</group>;
 }
 
-/** Wind sprite opacity: random gusts, full while boosting/steering (shipped hook in `tU`). */
-function useWindMaterial(boosting: RefObject<boolean>) {
-  const material = useMemo(() => new WindMaterial(), []);
-  const wind = useTexture(ASSETS.wind);
-  const next = useRef(0);
-  const gustStart = useRef(0);
-  const gustDur = useRef(0);
-  const gustPeak = useRef(0);
-  const gusting = useRef(false);
-  const target = useRef(0);
-  const value = useRef(0);
-  useEffect(() => {
-    material.windTexture = wind as THREE.Texture;
-  }, [wind, material]);
-  useFrame((state, dt) => {
-    const t = state.clock.getElapsedTime();
-    material.time = t;
-    if (next.current === 0) next.current = t + 4 + 3 * Math.random();
-    if (t >= next.current && !gusting.current) {
-      gusting.current = true;
-      gustStart.current = t;
-      gustDur.current = 2 + 2 * Math.random();
-      gustPeak.current = 0.85 + 0.15 * Math.random();
-    }
-    const freq = [0.3, 0.7, 1.1, 0.5];
-    const phase = [0, 1.2, 2.4, 3.6];
-    const amp = [0.4, 0.3, 0.2, 0.1];
-    let base = 0;
-    for (let i = 0; i < freq.length; i++) base += (0.5 * Math.sin(t * freq[i] + phase[i]) + 0.5) * amp[i];
-    base *= 0.5;
-    let v = base;
-    if (gusting.current) {
-      const k = Math.min((t - gustStart.current) / gustDur.current, 1);
-      if (k < 1) v = base + (gustPeak.current - base) * Math.sin(k * Math.PI);
-      else {
-        gusting.current = false;
-        next.current = t + 5 + 5 * Math.random();
-      }
-    }
-    target.current = boosting.current ? 1 : v;
-    value.current += (target.current - value.current) * Math.min(60 * dt * 0.05, 1);
-    material.alpha = value.current;
-  }, 100);
-  return material;
-}
-
 type Pose = { position: THREE.Vector3; rotation: THREE.Vector3 };
 const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Vector3() });
 
@@ -132,9 +84,6 @@ export function DroneRig() {
   const drones = useGLB(ASSETS.droneAnimations);
   const dronesMobile = useGLB(ASSETS.droneAnimationsMobile);
   const [, getKeys] = useKeyboardControls();
-
-  const boosting = useRef(false);
-  const wind = useWindMaterial(boosting);
 
   const env = useLoader(EXRLoader, ASSETS.env, (loader) => loader.setDataType(THREE.HalfFloatType));
   env.mapping = THREE.EquirectangularReflectionMapping;
@@ -241,7 +190,7 @@ export function DroneRig() {
 
     settle.current = damp(settle.current, delta > 0.01 && swarm === 0 ? 0 : 1, 1, dt);
 
-    const { left, right, shift } = getKeys() as { left: boolean; right: boolean; shift: boolean };
+    const { left, right } = getKeys() as { left: boolean; right: boolean };
     const heroIdle = delta < 0.001 && !isScrollLocked();
     if (heroIdle) {
       const force = 100 * (Number(left) - Number(right)) - 1.25 * steer.current;
@@ -251,8 +200,6 @@ export function DroneRig() {
       steer.current = damp(steer.current, 0, 2, dt);
       steerVel.current = damp(steerVel.current, 0, 1, dt);
     }
-    const thermalActive = s[SCENE.THERMAL_IRREGULARITY].isActive;
-    boosting.current = Math.abs(steerVel.current) > 32 || thermalActive || (heroIdle && shift);
 
     reveal.current = damp(reveal.current, Number(useLoading.getState().loadingCanvasHidden), 3, dt);
     drone1.current.position.set(
@@ -350,7 +297,6 @@ export function DroneRig() {
         </group>
       </group>
       <SwarmTags mainRef={drone1} drone2Ref={drone2} drone3Ref={drone3} />
-      <ThermalHud drone1Ref={drone1} />
       <SpecsCallouts />
     </>
   );
