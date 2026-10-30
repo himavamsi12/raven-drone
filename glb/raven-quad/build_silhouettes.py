@@ -6,11 +6,14 @@
 Writes (uncompressed; Draco is applied afterwards, geometry only):
   glb/raven-quad/silhouettes/drone-lowpoly.glb  nodes `mainBody` + `outlineHull`, same node/axis convention as
                                                 delta-lowpoly.glb (node rotated 180 deg about Z; after it: nose -Z, up +Y)
-  glb/raven-quad/silhouettes/loading-drone.glb  decimated Raven coaxial quad, world nose -Z / up +Y, like loading-delta
+  glb/raven-quad/silhouettes/loading-drone.glb  decimated Raven hexacopter (glb/new-drone/raven-hexa-prepared.glb),
+                                                world nose -Z / up +Y, like loading-delta
   glb/raven-quad/silhouettes/boot-shape.json    SVG path traced from the loader's desktop camera (viewBox 1320x666)
   glb/raven-quad/silhouettes/jet-check.json     same tracer on loading-delta.glb, to validate against the shipped path
+
+Pass `-- --loader-only` after the script to rebuild just the loader drone and boot path (drone-lowpoly.glb untouched).
 """
-import bpy, bmesh, json, math, os
+import bpy, bmesh, json, math, os, sys
 import numpy as np
 from mathutils import Matrix, Vector
 
@@ -150,14 +153,18 @@ def build_lowpoly():
 # ---------------------------------------------------------------- loader drone (decimated real model)
 
 
+LOADER_SOURCE = os.path.join(ROOT, 'glb', 'new-drone', 'raven-hexa-prepared.glb')   # the site's hexa, pre-Draco
+# Stagger the six props (pivots sit on the hubs, spin about local Z) so no two blades line up: they read as blades.
+LOADER_ROTOR_DEG = {'Front_Left': 25, 'Front_Right': -35, 'Mid_Left': 70, 'Mid_Right': -60, 'Rear_Left': -10, 'Rear_Right': 40}
+
+
 def build_loader(scale):
     reset()
-    bpy.ops.import_scene.gltf(filepath=os.path.join(ROOT, 'glb', 'raven-quad', 'raven-quad-textured.glb'))
-    for name, ang in {'Front_Left': 25, 'Front_Right': -35, 'Rear_Left': 70, 'Rear_Right': -10}.items():  # blades read as blades
-        for level, extra in (('Upper', 0), ('Lower', 75)):
-            o = bpy.data.objects[f'Rotor_{name}_{level}']
-            o.rotation_mode = 'XYZ'
-            o.rotation_euler.z += math.radians(ang + extra)
+    bpy.ops.import_scene.gltf(filepath=LOADER_SOURCE)
+    for name, ang in LOADER_ROTOR_DEG.items():
+        o = bpy.data.objects[f'Rotor_{name}']
+        o.rotation_mode = 'XYZ'
+        o.rotation_euler.z += math.radians(ang)
     bpy.context.view_layer.update()
     dg = bpy.context.evaluated_depsgraph_get()
     bm = bmesh.new()
@@ -181,7 +188,7 @@ def build_loader(scale):
     me.materials.clear()
     o = link(bpy.data.objects.new('RavenSilhouette', me))
     dec = o.modifiers.new('Decimate', 'DECIMATE')
-    dec.ratio = 0.22
+    dec.ratio = 0.17   # hexa 86k tris -> ~15k, like the earlier quad loader
     dg = bpy.context.evaluated_depsgraph_get()
     baked = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
     o.modifiers.clear()
@@ -326,7 +333,8 @@ def bbox(mask, ss):
     return xs.min() / ss, ys.min() / ss, (xs.max() + 1) / ss, (ys.max() + 1) / ss
 
 
-build_lowpoly()
+if '--loader-only' not in sys.argv:
+    build_lowpoly()
 # Validation: the tracer must reproduce the shipped jet path inside the shipped box.
 mask, ss = render_mask(os.path.join(ROOT, 'research', 'usavionix', 'public-mirror', 'assets', 'models', 'loading-delta.glb'), 2, SHIPPED_BOX)
 jet = trace(mask, ss)

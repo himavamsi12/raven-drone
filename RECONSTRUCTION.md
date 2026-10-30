@@ -124,6 +124,32 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
   60 fps at hero, parts and fleet (M3, dev server); no console errors. Typecheck and production build pass.
 - Not checked: reverse scroll from the footer through the whole story, 821×1109, reduced motion on the parts views.
 
+## Loader shows the hexacopter (user request, 2026-10-31)
+
+- `build_silhouettes.py` now builds `loading-drone.glb` from `glb/new-drone/raven-hexa-prepared.glb` (decimate 0.17,
+  14.7k tris, six props staggered) and re-traces the boot SVG through the loader's desktop camera: viewBox 1089x805,
+  h 40.19vh, +0.77vh / -1.1vh (`boot-shape.ts`, `Loader.tsx`). The tracer still reproduces the shipped jet path
+  (3626.8, 1320x666). `public/assets/models/loading-drone.glb` 129 KB (Draco 16/12).
+- Checked in the browser at 1440x900 (boot path drawn in red over the 3D loader: outlines coincide) and 390x844.
+- The flock/ops silhouette (`drone-lowpoly.glb`) is still the quad.
+
+## UI audit fixes (impeccable audit, 2026-10-31)
+
+- Phones: the footer's square `FooterDrone` box (as wide as the footer is tall) made the whole page 589px wide at
+  390px; the footer now clips horizontally. Parts track and counter get side padding/scroll-padding below 760px.
+- Contrast (WCAG 2.2 AA): footer meta line white/20 -> white/55, footer notice white/50 -> white/60, menu notice
+  white/40 -> white/65, form submit white/40 -> white/75, placeholders white/50 -> white/60. Chapter copy halo
+  0.25 -> 0.45 and a halo on the airframe callouts, because both sit on live terrain.
+- Form: errors are tied to fields with `aria-describedby`, focus moves to the first invalid field, the dialog
+  content is left-aligned (it inherited the footer's centring on phones), close button hit area 44px.
+- One button language: the shipped white/25 pill (`CTA_CLASS`) is now the homepage's square outlined CTA with a dark
+  frosted fill, shared by hero, chapter, footer and form; fields and dialog are square-edged to match.
+- Copy: the airframe callout said "Coaxial quad / Four arms carry paired upper and lower propellers"; it now
+  describes the hexa ("Six rotors / Six arms carry propellers that spin in alternating directions").
+- Focus ring 1px -> 2px white. Footer CTA line is an `h2`. Bar links never drop below 11px.
+- Checked with agent-browser + axe (wcag2a/aa, 21aa, 22aa) at 1440x900 and 390x844: 0 violations (was 1);
+  page width 390 on phones; form focus and announcements verified. Text over WebGL stays "needs review" in axe.
+
 ## Cleanup: unused files and dead code (user request, 2026-10-31)
 
 - Code removed (unreachable in the two-band story, see `lib/story-map.ts`): `Fire.tsx` (sprites showed only for

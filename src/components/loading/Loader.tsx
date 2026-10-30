@@ -41,7 +41,7 @@ function BootShape({ className }: { className?: string }) {
   );
 }
 
-/** Loader silhouette (Raven coaxial quad; same placement/material as the shipped delta). */
+/** Loader silhouette (Raven hexacopter; same placement/material as the shipped delta). */
 function LoadingDrone({ width }: { width: number }) {
   const { scene } = useGLB(ASSETS.loadingDrone);
   const object = useMemo(() => {
@@ -195,7 +195,7 @@ export function Loader() {
           )}
           style={{ background: "radial-gradient(120% 120% at 50% 45%, #0d1014 0%, #06070a 45%, #000 80%)" }}
         >
-          <BootShape className="relative h-[38.39vh] w-auto -translate-x-[0.67vh] -translate-y-[2.1vh] animate-[pulse_4s_ease-in-out_infinite] text-[#2d302e]/40 max-md:hidden" />
+          <BootShape className="relative h-[40.19vh] w-auto translate-x-[0.77vh] -translate-y-[1.1vh] animate-[pulse_4s_ease-in-out_infinite] text-[#2d302e]/40 max-md:hidden" />
           {width < 768 && (
             <div className="absolute inset-0 animate-[pulse_4s_ease-in-out_infinite]">
               <LoadingCanvas width={width} className="h-full w-full opacity-40" />
