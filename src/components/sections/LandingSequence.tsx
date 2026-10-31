@@ -5,23 +5,23 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import clsx from "clsx";
 import { useLenis } from "lenis/react";
 import { KawaseBlurPass, KernelSize } from "postprocessing";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { RavenModel } from "@/components/scene/Drone";
 import { ASSETS } from "@/lib/assets";
 import { useLoading } from "@/lib/loading";
-import { clamp, lerp, remap, smoothstep } from "@/lib/math";
+import { useMouse } from "@/lib/scenes";
+import { clamp, remap, smoothstep } from "@/lib/math";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { FLIGHT, FloatBob, landingPose, landingProgress, PointerLean, turretPivot, type LandingPose } from "./drone-flight";
 import { TEAM_TEXT } from "./Sections";
 import { WORDMARK, WORDMARK_BOXES, WORDMARK_CAP } from "./HeroLogo";
 
-/** Drone y-offset per frame in a 1920px frame (shipped module 90999). */
-const FRAME_Y = [
-  -162, -124, -86, -49, -12, 24, 60, 96, 131, 166, 201, 235, 269, 303, 336, 368, 401, 432, 464, 495, 525, 555, 585, 614, 643, 672, 700, 727, 754, 781, 807,
-  833, 858, 883, 907, 931, 955, 978, 1000, 1022, 1044, 1065, 1086, 1106, 1126, 1146, 1165, 1183, 1201, 1219, 1236, 1253, 1269, 1285, 1300, 1315, 1330, 1344,
-  1357, 1370, 1383, 1396, 1408, 1419, 1430, 1441, 1451, 1461, 1470, 1479, 1488, 1496, 1504, 1511, 1519, 1525, 1532, 1537, 1543, 1548, 1553, 1558, 1562, 1566,
-  1569, 1572, 1575, 1577, 1580, 1582, 1583, 1584, 1585, 1586, 1586, 1587,
-];
+/**
+ * Last drone y-offset of the shipped landing frames in a 1920px frame (module 90999, frame 96): the pad. The shipped
+ * scroll-stepped descent along those frames was replaced by the Raven flight model (drone-flight.ts, 2026-11-01).
+ */
+const FRAME_Y_LANDED = 1587;
 
 type Progress = {
   progress: React.RefObject<number>;
@@ -82,9 +82,12 @@ void main() {
     gl_FragColor.a = alpha * smoothstep(0.0, 0.1, uOpacity);
 }`;
 
-/** Landing frame count and the drone's place in a frame (FRAME_Y is offset to the drone centre, measured on frame 96). */
-const FRAMES = FRAME_Y.length;
+/** Drone centre offset in a frame (measured on frame 96) and its landed place inside the frame, as a share of the frame. */
 const FRAME_DRONE_Y = -284;
+const _e = new THREE.Euler();
+/** Share of the pointer drift/lift kept toward the footer copy (lower left). */
+const COPY_SIDE_DAMP = 0.4;
+const PAD_Y = 0.5 - (FRAME_Y_LANDED + FRAME_DRONE_Y) / 1920;
 /** Drone size as a fraction of the frame (the 96 renders showed it ~0.8 frame wide). */
 const DRONE_SCALE = 0.36;
 /** Base nose dip: enough that the spinning rotor discs read from the front instead of edge-on. */
@@ -106,11 +109,12 @@ function LandingLight() {
 }
 
 /**
- * Landing drone + jet capsule (shipped `y` in module 73560). Raven: the 96 pre-rendered frames (old quad) are replaced
- * by the live raven_hexa model following the same frame selection, FRAME_Y descent and frame travel, interpolated
- * between frames instead of stepped.
+ * Landing drone + capsule (shipped `y` in module 73560). Raven: the 96 pre-rendered frames (old quad) are replaced by
+ * the live raven_hexa model. The frame travel (scroll) still places the pad; the drone's flight onto it follows the
+ * drone.riotters.com character (drone-flight.ts): a timed banked glide-in and vertical let-down, a slow float, and a
+ * lean / landed tilt that follows the pointer.
  */
-function Sequence({ p }: { p: Progress }) {
+function Sequence({ p, active }: { p: Progress; active: boolean }) {
   const frame = useRef<THREE.Group>(null);
   const drone = useRef<THREE.Group>(null);
   const capsuleAnchor = useRef<THREE.Mesh>(null);
@@ -118,8 +122,19 @@ function Sequence({ p }: { p: Progress }) {
   const height = useThree((s) => s.size.height);
   const dpr = useThree((s) => s.viewport.dpr);
   const size = 0.95 * height;
-  const smoothed = useRef(0);
   const hover = useRef<THREE.Group>(null);
+  const turret = useRef<THREE.Group | null>(null);
+  const flight = useRef({ playing: false, t: 0 });
+  const floatBob = useRef(new FloatBob());
+  const lean = useRef(new PointerLean());
+  const pose = useRef<LandingPose>({ height: 0, scale: 1, yaw: 0, pitch: 0, roll: 0 });
+  const onObject = useCallback((object: THREE.Object3D) => {
+    turret.current = turretPivot(object);
+  }, []);
+  // The canvas stops rendering once the footer region has scrolled away: reset there, so the landing plays again.
+  useEffect(() => {
+    if (!active) flight.current.playing = false;
+  }, [active]);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   // The loader waits for the footer sequence; the model is already cached by the main scene.
   useEffect(() => {
@@ -145,40 +160,59 @@ function Sequence({ p }: { p: Progress }) {
     gl.render(scene, camera);
     gl.setRenderTarget(null);
     const c = p.progress.current;
-    // Non-linear remap (shipped): 0–.45 → 0–.1, .45–.7 → .1–.3, .7–1 → .3–1, then .25 smoothing.
-    let mapped = remap(c, 0, 0.45, 0, 0.1);
-    mapped = remap(c, 0.45, 0.7, mapped, 0.3);
-    mapped = remap(c, 0.7, 1, mapped, 1);
-    smoothed.current = lerp(smoothed.current, mapped, 0.25);
-    const idx = Math.min(FRAMES - 1, Math.floor(smoothed.current * FRAMES));
-    capsuleAnchor.current.position.y = (-FRAME_Y[idx] / 1920) * height + 8 + 20;
     capsuleAnchor.current.position.x = 0.5 * width;
     const travel = height - size;
     frame.current.position.y = remap(c, 0.75, 1, 0, -travel) - 0.5 * size + 0.05 * height + 20;
     frame.current.position.x = 0.5 * width;
-    // Drone inside the (now invisible) frame: continuous FRAME_Y, frame top = frame centre + size / 2.
-    const f = Math.min(smoothed.current * (FRAMES - 1), FRAMES - 1);
-    const i0 = Math.floor(f);
-    const y = lerp(FRAME_Y[i0], FRAME_Y[Math.min(i0 + 1, FRAMES - 1)], f - i0);
-    drone.current.position.y = 0.5 * size - ((y + FRAME_DRONE_Y) / 1920) * size;
-    // Hover: while airborne (also when the scroll stops) a slow bob with a second drift, small roll/pitch sway and
-    // heading wander, all settling out over the touchdown (last 8% of the footer scroll).
-    if (hover.current) {
-      const t = clock.getElapsedTime();
-      const air = reducedMotion ? 0 : 1 - smoothstep(0.92, 1, c);
-      // Model units (drone 2 wide; ~300 px per unit at 900 px tall): ~10 px bob, ~5 px drift.
-      hover.current.position.y = air * (0.032 * Math.sin(1.5 * t) + 0.014 * Math.sin(0.63 * t + 1.3));
-      hover.current.position.x = air * 0.016 * Math.sin(0.41 * t + 0.4);
-      hover.current.rotation.set(
-        DRONE_PITCH + air * 0.02 * Math.sin(0.9 * t + 1),
-        Math.PI + air * 0.045 * Math.sin(0.33 * t),
-        air * 0.03 * Math.sin(1.1 * t + 0.5),
-      );
+    // Raven flight (drone-flight.ts, after drone.riotters.com): the pad is the last FRAME_Y position inside the scrolling
+    // frame; the landing itself plays in time once the footer is 30% visible and replays after it has left the view.
+    drone.current.position.y = PAD_Y * size;
+    const footer = document.getElementById("footer")?.getBoundingClientRect();
+    const seen = footer && footer.height > 0 ? (Math.min(footer.bottom, height) - Math.max(footer.top, 0)) / footer.height : 0;
+    const f = flight.current;
+    if (!f.playing && seen >= FLIGHT.playVisible) {
+      f.playing = true;
+      f.t = 0;
+      floatBob.current.reset();
+      lean.current.reset();
+    } else if (f.playing && seen <= 0) f.playing = false;
+    const motion = hover.current;
+    if (motion) {
+      const unit = DRONE_SCALE * size; // px per model unit; the drone is 2 units (one drone width) across
+      if (reducedMotion) {
+        motion.visible = true;
+        motion.position.set(0, 0, 0);
+        motion.quaternion.identity();
+        motion.scale.setScalar(1);
+      } else {
+        motion.visible = f.playing;
+        if (f.playing) f.t += Math.min(dt, 1 / 20);
+        const n = landingProgress(f.t);
+        // Start above the top of the screen: pad height on screen + the drone's own half height, in drone widths.
+        const padTop = -(frame.current.position.y + drone.current.position.y);
+        landingPose(n, (padTop + 0.6 * unit) / (2 * unit), pose.current);
+        const { x, y } = useMouse.getState();
+        lean.current.update(dt, x, -y, n);
+        const bob = floatBob.current.update(dt);
+        // The footer copy and CTA sit lower left: drift and lift toward them are damped so the drone never slides over
+        // the text the pointer is heading for (Raven layout adaptation; right and up keep the reference range).
+        const sx = lean.current.shift.x < 0 ? COPY_SIDE_DAMP * lean.current.shift.x : lean.current.shift.x;
+        const sy = lean.current.shift.y < 0 ? COPY_SIDE_DAMP * lean.current.shift.y : lean.current.shift.y;
+        motion.position.set(2 * sx, 2 * (pose.current.height + bob + sy), 0);
+        motion.scale.setScalar(pose.current.scale);
+        _e.set(pose.current.pitch, pose.current.yaw, pose.current.roll, "YXZ");
+        motion.quaternion.setFromEuler(_e).premultiply(lean.current.offset);
+        const head = turret.current;
+        if (head) head.rotation.set(lean.current.head.pitch, lean.current.head.yaw, 0, "YXZ");
+      }
     }
     capsuleUniforms.uBlurredScene.value = blurred.texture;
     capsuleUniforms.uResolution.value.set(width * dpr, height * dpr);
     capsuleUniforms.uTime.value += dt;
-    capsuleUniforms.uOpacity.value = remap(c, 0.2, 0.3, 0, 1) * remap(c, 0.8, 1, 1, 0) * 0.15;
+    // Downwash shimmer under the drone while it glides in (was the jet capsule on the shipped descent).
+    const glide = flight.current.playing && !reducedMotion ? 1 - smoothstep(0.35, FLIGHT.approachEnd, landingProgress(flight.current.t)) : 0;
+    capsuleAnchor.current.position.y = frame.current.position.y + drone.current.position.y + (hover.current?.position.y ?? 0) * DRONE_SCALE * size - 0.05 * size;
+    capsuleUniforms.uOpacity.value = glide * 0.15;
   });
 
   return (
@@ -209,9 +243,12 @@ function Sequence({ p }: { p: Progress }) {
       </mesh>
       <group ref={frame}>
         <group ref={drone} scale={DRONE_SCALE * size}>
-          {/* Front to camera, nose dipped so the deck and rotor discs read; `hover` adds the airborne sway. */}
-          <group ref={hover} rotation={[DRONE_PITCH, Math.PI, 0]}>
-            <RavenModel span={2} />
+          {/* `hover`: landing flight, float and pointer lean (camera-space offsets). Inside: front to camera, nose dipped
+              so the deck and rotor discs read. */}
+          <group ref={hover}>
+            <group rotation={[DRONE_PITCH, Math.PI, 0]}>
+              <RavenModel span={2} onObject={onObject} />
+            </group>
           </group>
         </group>
       </group>
@@ -466,7 +503,7 @@ export function LandingSequence() {
           <AdaptiveDpr pixelated />
           <PixelCamera />
           <Suspense fallback={null}>
-            <Sequence p={p} />
+            <Sequence p={p} active={active} />
             <TopFade p={p} />
             <GroundGlow p={p} />
             <HeroLogoOutline p={p} />

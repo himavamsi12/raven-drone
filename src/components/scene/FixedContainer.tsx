@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { useLoading } from "@/lib/loading";
 import { remap } from "@/lib/math";
 import { SCENE, useMouse, useScenes } from "@/lib/scenes";
-import { measureStoryMap, stageTop, storyMap, useStage } from "@/lib/story-map";
+import { measureStoryMap, stageTop, storyMap, useStage, wipeClipPath, wipeProgress, wipeRatioAt } from "@/lib/story-map";
 import { ChapterCopy } from "./ChapterCopy";
 import { HudLog } from "./HudLog";
 import { MainScene } from "./MainScene";
@@ -46,11 +46,12 @@ function SceneCanvas() {
 
 /**
  * Full-viewport story stage (shipped `np`, a sticky child of the 6600dvh track). Raven: the story runs in two page
- * bands (story-map.ts), so the stage is fixed and placed per scroll: it scrolls away after each band and slides back in
- * before band 2, exactly as a sticky stage would at a band edge.
+ * bands joined by the diagonal wipe (story-map.ts), so the stage is fixed and covers both; it scrolls away after band 2,
+ * exactly as a sticky stage would.
  */
 export function FixedContainer() {
   const ref = useRef<HTMLDivElement>(null);
+  const overlay = useRef<HTMLDivElement>(null);
   const lenis = useLenis();
 
   useEffect(() => {
@@ -63,6 +64,10 @@ export function FixedContainer() {
       useStage.getState().setCover(top === null ? 0 : Math.max(0, 1 - Math.abs(top) / (storyMap.vh || window.innerHeight)));
       const multi = useScenes.getState()[SCENE.MULTI_THREAT_RESPONSE];
       el.style.opacity = String(remap(multi.hideRatio, 0, 0.8, 1, 0));
+      // Diagonal transition: Route copy and HUD are swept by the same edge as the frame (PostFX DiagonalWipeEffect).
+      const page = lenis?.actualScroll ?? window.scrollY;
+      const t = wipeProgress(page);
+      if (overlay.current) overlay.current.style.clipPath = t > 0 && t < 1 ? wipeClipPath(wipeRatioAt(page)) : "";
     };
     const onResize = () => {
       measureStoryMap();
@@ -89,8 +94,11 @@ export function FixedContainer() {
     <div ref={ref} className="pointer-events-none fixed top-0 left-0 flex h-dvh w-full justify-center will-change-transform">
       <div id="scene-container" className="relative flex h-dvh w-full flex-col items-center justify-center">
         <SceneCanvas />
-        <ChapterCopy />
-        <HudLog />
+        {/* Chapter copy + HUD share one full-stage layer so the diagonal wipe can clip them together. */}
+        <div ref={overlay} className="absolute inset-0">
+          <ChapterCopy />
+          <HudLog />
+        </div>
       </div>
     </div>
   );

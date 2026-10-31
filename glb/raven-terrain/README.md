@@ -1,7 +1,22 @@
 # Raven real-time terrain (Blender source)
 
-Brief: `RAVEN_REALTIME_TERRAIN_CLAUDE_PROMPT.md`. Status: **v03 look-dev natural tile live in the site** (default terrain;
+Brief: `RAVEN_REALTIME_TERRAIN_CLAUDE_PROMPT.md`. Status: **v09 (Windows look-dev v08 baked as-is) live in the site** (default terrain;
 `?terrain=original` shows the shipped tile). Settlement/clinic tile not built yet.
+
+### v09 (2026-11-01): Windows look-dev v08 baked as-is
+
+Ground look authored live in team-blender on the Windows workstation, not in these scripts: v05 `M_RT_GrassCliff`
+(grass/cliff look recreated from a Sketchfab reference, procedural only), v06 user pack Poly Haven
+`aerial_grass_rock` 2k lawns (two integer-scale samples 160/97), v07 24 `Cottage_FREE` cottages (TurboSquid,
+Gerhald3D) on stone plinths, v08 BlenderKit "Mossy Ground" 2K forest floor (three samples 1500/1213/1361).
+`12_v09_webport.py` (docstring has the steps): `Houses` = 16-tri gable proxies at the 24 recovered placements +
+plinths (1,056 tris, was 624), atlas baked selected-to-active from the detailed cottages; the ground map is the
+usual orthographic appearance render (repo 10 lighting, 11, fix_edges) of the v08 tile. 501 s with OptiX.
+The raw export also carried the file's second scene (`PREVIEW_trees`, node `PV_ground`): dropped and pruned on the
+Mac before `encode.sh`. Shipped: 2,848,968 bytes, sha256 `489988f3976d8acf9eeddcc9d90cd894c9e46a141291a0dbfcf1cdec03d1d6bf`,
+checker PASS, geometry and `DETECTION_GROUND_Y` unchanged. Base map ~18% darker than v03 (median luma 0.191 vs
+0.233) and the lawns read straw/gold (the texture is dry grass under the golden bake sun). To reproduce from the repo,
+`M_RT_GrassCliff` still has to be ported into 09.
 
 ### v03 (2026-10-31): leaf-card tree crowns
 

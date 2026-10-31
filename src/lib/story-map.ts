@@ -1,26 +1,36 @@
 import { create } from "zustand";
+import { easeInOutCubic } from "./math";
 import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange } from "./scenes";
 
 /**
- * Raven homepage: the shipped scroll story is split into two page bands with regular sections between them.
- *   band 1: intro → real-time-detection (Route)       page [0, E1]           story [0, E1]
- *   gap:    #parts (scroll-driven horizontal track)     page (E1 + vh, X)      story held
- *   band 2: end of phalanx-ai (Care teams frame) → multi-threat    page [X, X + L2]    story [S2, S2 + L2]
- * Skipped while the stage is off screen: thermal, ignition (fire) and the phalanx satellite/city transition. Band 2
- * opens on the finished "Keep the care team informed" map (user choice, 2026-10-30): story jumps E1 ↔ S2 = end of
- * phalanx-ai. Scene ranges, progress and every component keep working in story coordinates; only the scroll ↔ story
+ * Raven homepage: the shipped scroll story runs as two page bands joined by the shipped diagonal Phalanx wipe.
+ *   opening: live 3D camera move (scene/opening.ts)    page [0, P]            story held at 0
+ *   band 1: intro → real-time-detection (Route)       page [P, P + E1]       story [0, E1]
+ *   wipe:   first half of phalanx-ai's page range      page [X, X + W]        story held at E1 (Route stays live)
+ *   band 2: phalanx-ai .5 → multi-threat               page [X + W, X + L2]   story S2 + (page - X), X = P + E1
+ * Skipped: thermal and ignition (fire). User, 2026-11-01: the #parts section between the bands was removed and the
+ * shipped diagonal transition joins Route to the Care teams map, with the terrain and drone still moving under it.
+ * Through the wipe the story holds on Route; PostFX lays the Care teams map (phalanx .5, rendered once off screen: it is
+ * static in the shipped scene) over the swept side, `ratio = wipeRatio`. At X + W the story switches to that same map
+ * frame. Scene ranges, progress and every component keep working in story coordinates; only the scroll ↔ story
  * conversion knows about the bands.
  */
 export const BAND_1_END: SceneId = SCENE.REAL_TIME_DETECTION;
-/** Band 2 starts at the END of this scene (its last frame is the opening frame). */
-export const BAND_2_OPEN: SceneId = SCENE.PHALANX_AI;
+/** Band 2 starts at the END of this scene (ignition-verified ends where phalanx-ai, the diagonal wipe, begins). */
+export const BAND_2_OPEN: SceneId = SCENE.IGNITION_VERIFIED;
 export const BAND_1 = SCENE_ORDER.slice(0, SCENE_ORDER.indexOf(BAND_1_END) + 1);
 export const BAND_2 = SCENE_ORDER.slice(SCENE_ORDER.indexOf(BAND_2_OPEN) + 1);
-/** Spacer heights in vh: story span + one screen for the stage to scroll away (matches page.tsx). */
-export const BAND_1_VH = 2600; // 1px intro + 5 × 500 + 100
-export const BAND_2_VH = 2700; // 5 × 500 + 100 (zone) + 100
+/** Spacer heights in vh (match page.tsx). Band 1 hands straight to band 2, so only band 2 adds a screen to scroll away. */
+export const BAND_1_VH = 2500; // 1px intro + 5 × 500
+export const BAND_2_VH = 3200; // phalanx 500 + 5 × 500 + 100 (zone) + 100
+/**
+ * Raven opening (user, 2026-11-01): page [0, P] flies the live camera from a low wide-angle shot under the hovering
+ * drone up into the hero frame (story 0, scene/opening.ts), then band 1 starts at P. Matches the `#opening` spacer in
+ * page.tsx.
+ */
+export const OPENING_VH = 300;
 
-export const storyMap = { vh: 0, E1: 0, S2: 0, L2: 0, X: 0 };
+export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, preroll: false };
 
 /** Re-measure from the layout (band 2 spacer position depends on the sections above it). */
 export function measureStoryMap() {
@@ -28,54 +38,90 @@ export function measureStoryMap() {
   const ranges = computeSceneRanges(vh);
   const end = (id: SceneId) => ranges[SCENE_ORDER.indexOf(id)].end;
   storyMap.vh = vh;
+  const band1 = document.getElementById("story-band-1");
+  storyMap.P = band1 ? band1.getBoundingClientRect().top + window.scrollY : (OPENING_VH / 100) * vh;
   storyMap.E1 = end(BAND_1_END);
   storyMap.S2 = end(BAND_2_OPEN);
   storyMap.L2 = ranges[ranges.length - 1].end - storyMap.S2;
+  storyMap.W = 0.5 * ranges[SCENE_ORDER.indexOf(SCENE.PHALANX_AI)].height; // shipped wipe = phalanx-ai 0 → .5
   const band2 = document.getElementById("story-band-2");
-  storyMap.X = band2 ? band2.getBoundingClientRect().top + window.scrollY : storyMap.E1 + vh;
+  storyMap.X = band2 ? band2.getBoundingClientRect().top + window.scrollY : storyMap.P + storyMap.E1;
   return ranges;
 }
 
-/** Page scroll → story scroll. In the gap the story holds at the band edge nearest the stage that is on screen. */
+/** Page scroll → story scroll. Route holds through the wipe [X, X + W); then the story continues at phalanx .5. */
 export function toStory(page: number) {
-  const { vh, E1, S2, X } = storyMap;
-  if (page <= E1) return page;
-  if (page < X - vh) return E1;
-  if (page < X) return S2;
+  const { P, E1, S2, X, W } = storyMap;
+  if (page <= P) return 0;
+  if (page <= P + E1) return page - P;
+  if (page < X + W) return E1;
   return S2 + (page - X);
 }
 
+/** Story position the wipe lands on (phalanx-ai .5: map fully swept, outline not drawn yet). */
+export const mapStory = () => storyMap.S2 + storyMap.W;
+
 /** Story scroll → page scroll (skipped scenes clamp to the nearest band edge). */
 export function toPage(story: number) {
-  const { E1, S2, X } = storyMap;
-  if (story <= E1) return story;
-  if (story < S2) return story - E1 < S2 - story ? E1 : X;
+  const { P, E1, S2, X } = storyMap;
+  if (story <= E1) return P + story;
+  if (story < S2) return story - E1 < S2 - story ? P + E1 : X;
   return X + (story - S2);
 }
 
 /**
- * Stage offset for the fixed story stage: it scrolls away after each band like the shipped sticky stage, and slides
- * back in from below before band 2. Returns the stage top in px (0 = covering the viewport) or null when off screen.
+ * Stage offset for the fixed story stage: it covers the viewport through both bands (joined by the diagonal wipe) and
+ * scrolls away after band 2 like the shipped sticky stage. Returns the stage top in px (0 = covering) or null when off
+ * screen.
  */
 export function stageTop(page: number): number | null {
-  const { vh, E1, X, L2 } = storyMap;
-  if (page <= E1) return 0;
-  if (page < E1 + vh) return -(page - E1);
-  if (page <= X - vh) return null;
-  if (page < X) return X - page;
+  const { vh, X, L2 } = storyMap;
   if (page <= X + L2) return 0;
   if (page < X + L2 + vh) return -(page - X - L2);
   return null;
 }
 
-/** Story scene ranges grouped into page-space bands (for chapter snapping). */
+/** Story scene ranges in page space (for chapter snapping): one band from the opening to the end of the story. */
 export function pageBands(ranges: SceneRange[]) {
   const map = (r: SceneRange) => ({ ...r, start: toPage(r.start), end: toPage(r.end) });
   const pick = (ids: SceneId[]) => ranges.filter((r) => ids.includes(r.id)).map(map);
-  return [pick(BAND_1), pick(BAND_2)];
+  // Band 1 opens with the opening move (page 0 → end of the 1px intro), so one gesture plays the whole move.
+  const intro = map(ranges[SCENE_ORDER.indexOf(SCENE.INTRO_SCENE)]);
+  const opening: SceneRange = { ...intro, start: 0, height: intro.end, end: intro.end };
+  // The wipe (phalanx-ai) is band 2's first range, so one gesture from Route plays the whole transition.
+  return [[opening, ...pick(BAND_1).filter((r) => r.id !== SCENE.INTRO_SCENE), ...pick(BAND_2)]];
 }
 
-/** Share of the viewport the story stage covers (0 between bands); written on scroll by FixedContainer. */
+/** Diagonal wipe progress for a page scroll (0 = Route, 1 = Care teams map fully swept). */
+export const wipeProgress = (page: number) => (storyMap.W > 0 ? Math.min(Math.max((page - storyMap.X) / storyMap.W, 0), 1) : 0);
+/**
+ * Swept share of the frame (shipped terrain/grid/fire `hideRatio = remapEased(phalanx, 0, .5, 0, 1, easeInOutCubic)`;
+ * phalanx .5 is exactly W of page, so the same curve over the wipe progress).
+ */
+export const wipeRatioAt = (page: number) => easeInOutCubic(wipeProgress(page));
+/** Swept share now (root Lenis scrolls the window, so scrollY is the smoothed page scroll). */
+export const wipeNow = () => (typeof window === "undefined" ? 0 : wipeRatioAt(window.scrollY));
+/**
+ * Shipped `computeScreenUv` x for a screen point (u, v in 0..1, v up): (uv - .5) / √2 + .5 rotated 225° about the centre
+ * reduces to .5 + (v - u) / 2. A point is swept when this is below the ratio.
+ */
+export const wipeX = (u: number, v: number) => 0.5 + (v - u) / 2;
+/** CSS clip-path keeping the unswept part of a full-viewport layer (u + y ≤ 2 - 2·ratio, y down). */
+export function wipeClipPath(ratio: number) {
+  const c = 2 - 2 * ratio;
+  if (c >= 2) return "none";
+  const pc = (v: number) => `${(v * 100).toFixed(3)}%`;
+  return c >= 1
+    ? `polygon(0 0, 100% 0, 100% ${pc(c - 1)}, ${pc(c - 1)} 100%, 0 100%)`
+    : `polygon(0 0, ${pc(c)} 0, 0 ${pc(c)})`;
+}
+
+/** Opening progress for a page scroll (0 = low wide shot, 1 = hero frame). */
+export const openingProgress = (page: number) => (storyMap.P > 0 ? Math.min(Math.max(page / storyMap.P, 0), 1) : 1);
+/** Opening progress now (root Lenis scrolls the window, so scrollY is the smoothed page scroll). */
+export const openingNow = () => (typeof window === "undefined" ? 0 : storyMap.preroll ? 1 : openingProgress(window.scrollY));
+
+/** Share of the viewport the story stage covers (0 after the story); written on scroll by FixedContainer. */
 export const useStage = create<{ cover: number; setCover: (v: number) => void }>()((set, get) => ({
   cover: 1,
   setCover: (v) => {

@@ -16,6 +16,7 @@ import { DroneRig } from "./DroneRig";
 import { Flock } from "./Flock";
 import { GridRow } from "./Grid";
 import { HeroPlate, heroPlateEnabled } from "./HeroPlate";
+import { OpeningSky } from "./OpeningSky";
 import { Perimeters } from "./Perimeters";
 import { PowerStation } from "./PowerStation";
 import { usePostFX } from "./PostFX";
@@ -207,6 +208,7 @@ export function MainScene() {
       <HeroAudio />
       <DroneRig />
       {plate && <HeroPlate />}
+      <OpeningSky />
       <group position={[0, -2.5, -8.6]}>
         <Terrain />
         <GridRow offset={2 * TILE} isCity />

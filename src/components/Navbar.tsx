@@ -31,16 +31,14 @@ const CHAPTERS: [SceneId, string][] = [
 /** In-page destinations (the shipped menu linked to other products). `null` = top of the story. */
 const MENU_LINKS: { label: string; target: string | null }[] = [
   { label: "The delivery story", target: null },
-  { label: "Airframe up close", target: "#parts" },
-  { label: "Care teams and network", target: "#story-band-2" },
+  { label: "Care teams and network", target: "#care-teams" },
   { label: "About Raven", target: "#our-team" },
 ];
 
 /** Homepage bar links (asset/html/raven_homepage.html `.links`): in-page destinations. */
 const BAR_LINKS: { label: string; target: string | null }[] = [
   { label: "Story", target: null },
-  { label: "Parts", target: "#parts" },
-  { label: "Network", target: "#story-band-2" },
+  { label: "Network", target: "#care-teams" },
   { label: "About", target: "#our-team" },
 ];
 
@@ -108,7 +106,7 @@ function ChapterNav() {
     }),
   );
   const leaving = useScenes((s) => s[SCENE.MULTI_THREAT_RESPONSE].hideRatio > 0);
-  const offStage = useStage((s) => s.cover < 0.5); // between the story bands (parts section)
+  const offStage = useStage((s) => s.cover < 0.5); // after the story (team, footer)
   const active = pending ?? touched ?? hovered ?? current ?? CHAPTERS[0][0];
 
   const clear = useCallback(() => {

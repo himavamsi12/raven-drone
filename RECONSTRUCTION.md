@@ -205,6 +205,87 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
 - Idle hero motion blur is subtle by design: the terrain only moves ~0.5 units/s on screen, so a physical shutter
   gives a sub-pixel to ~2 px streak; Shift boost (6x) and scrolling show clear streaks.
 
+## Footer drone: flight and float after drone.riotters.com (user, 2026-11-01)
+
+- Studied (scratch only, nothing vendored): the reference's prettified app chunk (constants module + per-frame drone
+  update) and `drone.glb` root/camera tracks. Float: `camera.y += sin(t·0.3Hz·2π)·1` on a 35-unit drone, faded in at 2/s.
+  Flight follow: pointer smoothed `1-(1-.03)^(60dt)`, yaw x·2.5°, pitch y·4°, roll -x·3.5°, shift 6%/4% view height.
+  Landing: clip frames 855-995 played over 4 s ease-out-cubic when the section is 30% visible, reset when it leaves;
+  glide from (y 204, z -322) banked -31°/yaw 21°/pitch -12° levelling by 64% (pitch 50%), then a vertical let-down to
+  y 0.27. Landed tilt from 47%: pitch y·8°+5°, roll x·7°, yaw x·5°, lerp .04, drift τ .4 s (5 s near edges), shift 15%/10%,
+  camera head yaw 45° / pitch 40° down, 12° up. Propellers keep spinning (75.4 rad/s).
+- Raven (`sections/drone-flight.ts`): the same behaviour as fitted curves in drone widths (not the reference keyframes):
+  `landingPose`, `FloatBob`, `PointerLean`, `turretPivot` (re-pivots `Hexa_EOIR_Turret` at its mount, per instance).
+  Desktop `LandingSequence`: the old scroll-stepped FRAME_Y descent and multi-sine sway are gone; the pad, frame travel,
+  capsule (now a downwash shimmer during the glide) and the rest of the footer are unchanged. Mobile `FooterDrone`: the
+  same flight (was parked). `RavenModel` gained `onObject`.
+- Checked (agent-browser): 1440×900 glide-in burst (small banked drone from the top, nose-up flare, levels, let-down),
+  landed float, pointer top-right / bottom-left (drift, bank, lift; copy stays on top and readable), replay after
+  leaving and returning, 61 fps; 390×844 glide-in and landed; reduced motion parked and static. Typecheck/build pass.
+- Known: the glide happens in screen space on our pixel-space canvas (apparent size + height), not as a 3D dolly; the
+  reference's drone stays one continuous object through its page, ours appears for the footer landing only.
+
+## Diagonal wipe joins the story bands; #parts removed (user, 2026-11-01)
+
+- Shipped evidence (prettified copy of `page-33beb1af07230f28.js`, scratch only; REA static graph
+  `ev_2fe051321e2fd4966f907c877c0e3dc002c3e3e1d59924f79b519a9dcdcfd174` confirms the module set, it does not index the GLSL):
+  terrain/city/fire/grid `hideRatio = remapEased(phalanx-ai, 0, .5, 0, 1, easeInOutCubic)`; `computeScreenUv` rotates
+  `gl_FragCoord / resolution` by 225° about the centre after a 1/√2 shrink, `x < hideRatio` = swept (near-black lit
+  ground + 0.1 border line); grid group only after ignition > .99; HUD switches header → body at phalanx > .15.
+  Reference capture 1440×900: satellite overhead (Camera06 end) swept bottom-right → top-left at 32400-33525.
+- Raven: band 2 now starts at the start of phalanx-ai, directly after band 1 (no gap, `#parts` and its nav/menu links
+  deleted). Our Route frame (Camera04-02 end) is not the shipped satellite frame. First version (frozen Route frame)
+  stopped the terrain and drone (user: "should feel more seamless"), so: through the wipe (first half of phalanx's page
+  range) the story holds on Route and everything keeps moving; the swept side shows the Care teams map at phalanx .5,
+  which the shipped scene holds still, rendered once off screen (store set without notifying React, final pass
+  disabled so the canvas keeps its last frame, `CopyPass` capture after 3 settle frames, store restored, lens history
+  reset; repeated after a resize). At the end of the wipe the story switches to the same live map: grid, relief and
+  darkness match the capture. Chapter copy + HUD sit in one layer clipped by the same diagonal (`wipeClipPath`), and each
+  Route label hides as the edge passes its screen point (`wipeX`). One gesture: Route 25201 → Care teams 29701 and back.
+  `#care-teams` anchor (500dvh into band 2) for the Network links.
+- Checked (agent-browser 1440×900): two frames 0.6 s apart mid-wipe differ (terrain/labels moving), switch frames
+  27440/27460 match, wheel forward/back, 61 fps on Route / mid-wipe / map (one 41 fps reading right after a jump),
+  1280×800 resize re-captures, reload inside the wipe works (capture behind the loader); 390×844 mid-wipe.
+  `npm run typecheck`, `npm run build` pass.
+- Known: the off-screen map render holds the picture for ~4 frames (on load behind the loader; on resize visible as a
+  short hold); the yellow points appear right after the switch (shipped phalanx > .5 behaviour); portrait edge is steeper
+  (same normalized-uv maths as shipped).
+
+## Opening: live low shot rising into the hero (user, 2026-11-01)
+
+Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, removed; Blender sources stay in
+`raven-terrain-v04-sky.blend` `15_TAKEOFF` on the Windows workstation).
+- Camera (`scene/opening.ts`, applied in `DroneRig` after the Camera01 clip): spherical path about the hero aim
+  point (the drone), elevation -8° (kept above y -0.42, over the one-sided cloud layers) → hero 33°, azimuth hero
+  -24° → hero, smootherstep. Dolly zoom: fov 75° → 20° with radius following tan(fov/2), drone 0.62× → 1× hero size.
+  Orientation slerps onto the clip quaternion over p .85–1. Works from the live clip pose, so desktop and mobile
+  tracks both land exactly.
+- Lens: `FisheyeEffect` (PostFX, after the terrain lens) barrel 0.32 → 0, corners pinned; pass disabled at p = 1.
+- World: `OpeningSky` dome (SKY_COLOR at/below horizon, #6f9fdc zenith, sun glow from `sunlight.direction`, fbm
+  high cloud) and two ridge rings (r 78 / 130, ridged integer harmonics, haze to SKY_COLOR), no depth writes.
+  Terrain adds rows -1..-3 (cols -1..2) and col 2 rows 0..2 while opening < 1; fog blends to start 9 / end 40 /
+  density 1 / blend 0 by (1 - ease). The flank drones (2, 3) are hidden until it lands (user: no second drone in the low shot).
+- Checked (agent-browser, 1440×900 and 390×844): low shot at 0, continuous climb (900/1800/2400), hero frame at
+  2701 with headline; one wheel gesture 0 → 2701 in ~5 s and back to 0; 60 fps at 0 and 2701; `npm run typecheck`,
+  `npm run build` pass. Not checked: Safari/iOS, low-end GPUs (wide fov draws ~15 extra tiles during the opening).
+
+## Terrain v09: Windows look-dev v08 on the site (user, 2026-11-01)
+
+- `raven-terrain.glb` v09: grass/cliff, Poly Haven lawns, BlenderKit moss forest floor, 24 web cottages (16-tri
+  proxies baked from Cottage_FREE). Checker PASS, 2.85 MB, same geometry/rim/detection heights as v03. Build notes in
+  `glb/raven-terrain/README.md`. Checked 1440×900: opening, hero 2701, Airframe 7201, Route 25201, Care teams 31130.
+- Gaps: lawns read straw/orange after the site grade; moss caps on outcrops show as bright green flecks; the base map
+  is darker than v03; Cottage_FREE licence (TurboSquid Royalty Free) may not allow a public, extractable GLB; the
+  ground material is not in the repo builder scripts yet.
+- Opening: the flank drones (2, 3) stay hidden until the opening lands (user).
+- Opening: the hero headline shows from the first opening frame (user), not only once the camera lands.
+
+## Larger drones (user, 2026-10-31)
+
+- `DroneRig.tsx` `DRONE_SCALE` 1.2 multiplies all three drone movers' shipped scales in every scene, desktop and
+  mobile. Checked 1440×900 hero, Airframe overhead (spec callouts still line up), Connection, Prepare, Route; hero at
+  375×812 (earlier hero-only version). Not a shipped value.
+
 ## Raven terrain v03: leaf-card tree crowns (user: "trees are looking like blobs", 2026-10-31)
 
 - Same contract and geometry as v02; only the baked base map changed. Broadleaf crowns (`07_masters.py`) are now built

@@ -17,9 +17,11 @@ import {
 import { easeInOutCubic, remap, remapEased, wrap } from "@/lib/math";
 import { SCENE, scenes, type SceneId } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
+import { openingNow } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { TerrainMaterial } from "./materials/TerrainMaterial";
 import { getNoiseTexture } from "./textures";
+import { openingEase } from "./opening";
 import { DetectionPoints } from "./DetectionPoints";
 import { RAVEN_DETECTION_Y, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
@@ -44,6 +46,13 @@ const FOG: Partial<Record<SceneId, FogValues>> = {
   [SCENE.IGNITION_VERIFIED]: { uFogStart: 36, uFogEnd: 56, uFogDensity: 0, uFogExponent: 1, uFogBlendFactor: 0.2 },
 };
 const FOG_INTRO_MOBILE: FogValues = { ...FOG[SCENE.INTRO_SCENE]!, uFogStart: 16 };
+/**
+ * Raven opening: the low shot looks across the ground, so fog thickens to full sky colour before the tiles end
+ * (opening tiles reach ~48 units) and the far ridges (OpeningSky) rise out of the haze. Blends out to the scene fog
+ * by the hero frame.
+ */
+const FOG_OPENING: FogValues = { uFogStart: 9, uFogEnd: 40, uFogDensity: 1, uFogExponent: 1.25, uFogBlendFactor: 0 };
+const FOG_KEYS = Object.keys(FOG_OPENING) as (keyof FogValues)[];
 
 type FogStep = { scene: SceneId; start?: number; end?: number; from: FogValues; to: FogValues; always?: boolean };
 
@@ -195,6 +204,7 @@ export function Terrain() {
   const groupCity = useRef<THREE.Group>(null);
   const groupWide = useRef<THREE.Group>(null);
   const groupAfter = useRef<THREE.Group>(null);
+  const groupOpening = useRef<THREE.Group>(null);
   const steps = useMemo(() => fogSteps(isMd), [isMd]);
 
   useFrame((_, dt) => {
@@ -253,6 +263,15 @@ export function Terrain() {
     applyFog(natural, steps);
     applyFog(urban, steps);
     applyFog(village, steps);
+
+    const opening = openingNow();
+    if (groupOpening.current) groupOpening.current.visible = opening < 1;
+    const w = 1 - openingEase(opening);
+    if (w > 0) {
+      for (const m of materials) {
+        for (const k of FOG_KEYS) m.uniforms[k].value += (FOG_OPENING[k] - m.uniforms[k].value) * w;
+      }
+    }
   });
 
   const detectionY = isRaven ? RAVEN_DETECTION_Y : undefined;
@@ -292,6 +311,13 @@ export function Terrain() {
         {tile([-1, 4], { desktopOnly: true })}
         {tile([0, 4])}
         {tile([1, 4])}
+      </group>
+      {/* Raven opening: ground ahead of and beside the low wide shot (hidden from the hero frame on). */}
+      <group ref={groupOpening}>
+        {[-1, -2, -3].flatMap((row) => [-1, 0, 1, 2].map((col) => tile([col, row])))}
+        {tile([2, 0])}
+        {tile([2, 1])}
+        {tile([2, 2])}
       </group>
       <group ref={groupAfter}>
         {tile([2, 3], { desktopOnly: true })}

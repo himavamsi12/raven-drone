@@ -1,14 +1,15 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { BlendFunction, Effect, EffectComposer, EffectPass, RenderPass, SMAAEffect } from "postprocessing";
+import { BlendFunction, CopyPass, Effect, EffectComposer, EffectPass, RenderPass, SMAAEffect } from "postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { BG_COLOR, SKY_COLOR, terrainOffset } from "@/lib/constants";
 import { damp, remap } from "@/lib/math";
-import { SCENE, scenes } from "@/lib/scenes";
-import { useStage } from "@/lib/story-map";
+import { computeSceneRanges, SCENE, sceneDataAt, scenes, useScenes, type SceneData, type SceneId } from "@/lib/scenes";
+import { mapStory, openingNow, storyMap, useStage, wipeProgress, wipeRatioAt } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { fisheyeAt } from "./opening";
 import { TerrainLensEffect } from "./TerrainLensEffect";
 
 /** Flock scene radial-blur crossfade (shipped module 8743 + shader 79755). */
@@ -83,6 +84,100 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   set nextSceneProgress(v: number) {
     this.uniforms.get("uNextSceneProgress")!.value = v;
   }
+}
+
+/**
+ * Raven opening lens (not in the shipped bundle): barrel distortion for the wide low shot. Centre magnified, edges
+ * compressed, corners pinned to the corners so nothing outside the render is sampled. Strength 0 = identity; the pass
+ * is disabled at the hero frame and after.
+ */
+class FisheyeEffect extends Effect {
+  constructor() {
+    super(
+      "FisheyeEfx",
+      /* glsl */ `
+uniform float uStrength;
+uniform float uAspect;
+void mainUv(inout vec2 uv) {
+  vec2 d = (uv - 0.5) * vec2(uAspect, 1.0);
+  float rMax2 = 0.25 * (uAspect * uAspect + 1.0);
+  d *= (1.0 + uStrength * dot(d, d) / rMax2) / (1.0 + uStrength);
+  uv = 0.5 + d / vec2(uAspect, 1.0);
+}`,
+      {
+        uniforms: new Map<string, THREE.Uniform>([
+          ["uStrength", new THREE.Uniform(0)],
+          ["uAspect", new THREE.Uniform(1)],
+        ]),
+      },
+    );
+  }
+  u(name: string) {
+    return this.uniforms.get(name)!;
+  }
+}
+
+/**
+ * Raven: diagonal transition from story band 1 (Route) into band 2 (Care teams map), user 2026-11-01. The shipped
+ * Phalanx wipe (terrain/grid/fire shaders, `computeScreenUv` + `hideRatio`) restyles one continuous overhead view; Raven
+ * skips the thermal/ignition flight that led there. So the Route stays live (terrain travel, drone hover) and the
+ * swept side shows the Care teams map at phalanx .5, rendered once off screen (`Preroll` in `usePostFX`): in the shipped scene
+ * that frame is static (terrain stopped, camera parked). Same edge maths as `computeScreenUv` on the composer uv
+ * (= gl_FragCoord / drawing-buffer size, as in the terrain shader) and the same 0.1 border on the swept side.
+ */
+class DiagonalWipeEffect extends Effect {
+  constructor(capture: THREE.Texture) {
+    super(
+      "DiagonalWipeEfx",
+      /* glsl */ `
+uniform sampler2D uCapture;
+uniform float uRatio;
+uniform float uBorder;
+void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+  vec2 s = (uv - 0.5) / sqrt(2.0) + 0.5;
+  float a = radians(5.0 * 45.0);
+  float x = cos(a) * (s.x - 0.5) - sin(a) * (s.y - 0.5) + 0.5;
+  if (x < uRatio) {
+    vec3 map = texture2D(uCapture, uv).rgb;
+    if (x > uRatio - uBorder) map += vec3(0.1);
+    outputColor = vec4(map, 1.0);
+  } else {
+    outputColor = inputColor;
+  }
+}`,
+      {
+        uniforms: new Map<string, THREE.Uniform>([
+          ["uCapture", new THREE.Uniform(capture)],
+          ["uRatio", new THREE.Uniform(0)],
+          ["uBorder", new THREE.Uniform(0.001)],
+        ]),
+      },
+    );
+  }
+  u(name: string) {
+    return this.uniforms.get(name)!;
+  }
+}
+
+/** Frames rendered in the map state before the capture (clip seekers, terrain travel and fog settle in one). */
+const MAP_SETTLE_FRAMES = 3;
+type Preroll = { state: "idle" | "running" | "done"; frame: number; saved: { id: SceneId; ref: SceneData; val: SceneData }[]; warm: number };
+
+/** Puts the store into `data` without notifying React (DOM chapter copy, HUD and nav never see it); returns undo info. */
+function enterSilently(data: Record<SceneId, SceneData>) {
+  const st = useScenes.getState();
+  const saved: Preroll["saved"] = [];
+  for (const id of Object.keys(data) as SceneId[]) {
+    const ref = st[id];
+    saved.push({ id, ref, val: { ...ref } });
+    Object.assign(ref, data[id]);
+  }
+  return saved;
+}
+/** Restores what `enterSilently` replaced, unless a real scroll update already swapped that scene's object. */
+function leaveSilently(saved: Preroll["saved"]) {
+  const st = useScenes.getState();
+  for (const { id, ref, val } of saved) if (st[id] === ref) Object.assign(ref, val);
 }
 
 /** Grade, grain and vignette (shipped module 98894 + shader 25460; thermal palette box dropped with the thermal chapter). */
@@ -210,22 +305,39 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   // `?lens=off` disables the Raven lens pass (comparison).
   const [lensOn] = useState(() => typeof window === "undefined" || new URLSearchParams(window.location.search).get("lens") !== "off");
   const lensState = useRef({ prevVP: new THREE.Matrix4(), prevOffset: 0, step: 0, first: true, frame: 0, drone: null as THREE.Object3D | null });
-  const [composer, final, mix, lens] = useMemo(() => {
+  const pre = useRef<Preroll>({ state: "idle", frame: 0, saved: [], warm: 0 });
+  const lastSide = useRef(0);
+  const [composer, final, mix, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] = useMemo(() => {
     const composer = new EffectComposer(gl, { multisampling: 0 });
     const final = new FinalEffect();
     const mix = new RenderTargetMixEffect(flockTarget);
     const lens = new TerrainLensEffect();
+    const fisheye = new FisheyeEffect();
+    const fisheyePass = new EffectPass(camera, fisheye);
     composer.addPass(new RenderPass(scene, camera));
     composer.addPass(new EffectPass(camera, lens)); // needs the scene depth: first pass after the render
+    composer.addPass(fisheyePass); // Raven opening: bends the finished frame, before AA and grade
     composer.addPass(new EffectPass(camera, mix));
     // Shipped bundle constructs a default effect here (minified `eF`); SMAA is inferred.
     composer.addPass(new EffectPass(camera, new SMAAEffect()));
-    composer.addPass(new EffectPass(camera, final));
-    return [composer, final, mix, lens] as const;
+    // Raven band 1 → band 2: the Care teams map is captured here once (off screen, no swap), then laid over the live
+    // Route on the swept side; both before the grade, so grain and vignette stay live across the edge.
+    const capturePass = new CopyPass();
+    const wipe = new DiagonalWipeEffect(capturePass.texture);
+    const wipePass = new EffectPass(camera, wipe);
+    capturePass.enabled = false;
+    wipePass.enabled = false;
+    composer.addPass(capturePass);
+    composer.addPass(wipePass);
+    const finalPass = new EffectPass(camera, final);
+    composer.addPass(finalPass);
+    return [composer, final, mix, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] as const;
   }, [gl, scene, camera, flockTarget]);
 
   useEffect(() => {
     composer.setSize(size.width, size.height);
+    // The capture target was resized (cleared) and the camera track may have switched (mobile/desktop): re-render.
+    if (pre.current.state === "done") pre.current = { state: "idle", frame: 0, saved: [], warm: 0 };
   }, [composer, size]);
   useEffect(() => () => composer.dispose(), [composer]);
   useEffect(() => {
@@ -236,23 +348,69 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   // A positive-priority frame callback disables R3F's automatic render.
   useFrame(() => {}, 1);
   useFrame((state, dt) => {
+    const p = pre.current;
+    // Off-screen map render: the store was put into the map state at the end of the previous frame, so every scene
+    // component has already updated for it this frame. Nothing reaches the canvas (final pass off) and the DOM never
+    // re-renders (silent store), so the visitor keeps seeing the last presented frame for these few frames.
+    if (p.state === "running") {
+      p.frame++;
+      const capture = p.frame >= MAP_SETTLE_FRAMES;
+      runFrame(state, dt, { capture, offscreen: true });
+      if (capture) {
+        leaveSilently(p.saved);
+        storyMap.preroll = false;
+        lensState.current.first = true;
+        p.state = "done";
+      }
+      return;
+    }
+    runFrame(state, dt, { capture: false, offscreen: false });
+    // Start the map render once the scene has rendered a few frames and the layout is measured (behind the loader on
+    // a normal load; on resize it costs a few frames of a held picture).
+    if (p.state === "idle" && storyMap.W > 0 && ++p.warm > 10) {
+      const vh = storyMap.vh || window.innerHeight;
+      storyMap.preroll = true;
+      p.saved = enterSilently(sceneDataAt(mapStory(), computeSceneRanges(vh), vh));
+      p.frame = 0;
+      p.state = "running";
+    }
+  }, 100);
+
+  function runFrame(state: { clock: THREE.Clock; camera: THREE.Camera }, dt: number, o: { capture: boolean; offscreen: boolean }) {
     const s = scenes();
     const multi = s[SCENE.MULTI_THREAT_RESPONSE];
-    if (multi.hideRatio > 0.8) return;
-    if (useStage.getState().cover === 0) return; // Raven: stage off screen between the two story bands
+    if (!o.offscreen) {
+      if (multi.hideRatio > 0.8) return;
+      if (useStage.getState().cover === 0) return; // Raven: stage off screen after the story
+    }
     mix.mixFactor = remap(s[SCENE.FLOCK_SCENE].progress, 0.75, 1, 0, 1);
     mix.nextSceneProgress = s[SCENE.REAL_TIME_DETECTION].progress;
     final.u("uVignetteAspect").value.copy(aspect.current);
     final.u("uTime").value = state.clock.getElapsedTime();
     final.u("uOpacity").value = remap(multi.hideRatio, 0, 0.25, 1, 0);
     updateLens(state.camera, dt);
+    const barrel = fisheyeAt(openingNow());
+    fisheyePass.enabled = barrel > 1e-4;
+    fisheye.u("uStrength").value = barrel;
+    fisheye.u("uAspect").value = size.width / size.height;
+    // Diagonal transition (Route live, map captured): active strictly inside the wipe range of the page.
+    const page = window.scrollY;
+    const t = wipeProgress(page);
+    const side = t <= 0 ? 0 : t >= 1 ? 2 : 1;
+    if ((side === 2) !== (lastSide.current === 2)) lensState.current.first = true; // camera cut at the switch: no history
+    lastSide.current = side;
+    capturePass.enabled = o.capture;
+    finalPass.enabled = !o.offscreen;
+    wipePass.enabled = !o.offscreen && side === 1 && pre.current.state === "done";
+    wipe.u("uRatio").value = wipeRatioAt(page);
+    wipe.u("uBorder").value = 2 / size.width; // shipped: uDpr / uResolution.x * 2 in drawing-buffer pixels
     gl.outputColorSpace = THREE.LinearSRGBColorSpace;
     const night = s[SCENE.IGNITION_VERIFIED].progress > 0.99;
     gl.setClearColor(night ? BG_COLOR : SKY_COLOR, 1);
     gl.outputColorSpace = THREE.SRGBColorSpace;
     composer.render(dt);
     lensState.current.prevVP.copy(_vp);
-  }, 100);
+  }
 
   function updateLens(cam: THREE.Camera, dt: number) {
     const st = lensState.current;

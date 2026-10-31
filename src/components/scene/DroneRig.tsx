@@ -12,9 +12,11 @@ import { useLoading } from "@/lib/loading";
 import { damp, lerp, remap } from "@/lib/math";
 import { SCENE, scenes, useMouse } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
+import { openingNow } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CAMERA_BINDINGS, ClipSeeker, DRONE1_BINDINGS, DRONE2_BINDINGS, DRONE3_BINDINGS } from "./ClipSeeker";
 import { Drone } from "./Drone";
+import { applyOpening } from "./opening";
 import { SpecsCallouts } from "./overlays/SpecsCallouts";
 import { SwarmTags } from "./overlays/SwarmTags";
 import { useGLB } from "./types";
@@ -60,6 +62,11 @@ function CameraShake({ children }: { children: ReactNode }) {
 }
 
 type Pose = { position: THREE.Vector3; rotation: THREE.Vector3 };
+/** Hero lens (shipped `<PerspectiveCamera fov={20}>`); the Raven opening widens it before the hero frame. */
+const HERO_FOV = 20;
+/** Raven (user, 2026-10-31): all three drones 1.2x the shipped scale in every scene. */
+const DRONE_SCALE = 1.2;
+
 const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Vector3() });
 
 /** Procedural idle hover offsets (shipped `tO`). */
@@ -123,6 +130,7 @@ export function DroneRig() {
 
   const cameraMover = useRef<THREE.Group>(null);
   const cameraDolly = useRef<THREE.Group>(null);
+  const camera = useRef<THREE.PerspectiveCamera>(null);
   const droneRoot = useRef<THREE.Group>(null);
   const mover1 = useRef<THREE.Group>(null);
   const mover2 = useRef<THREE.Group>(null);
@@ -153,8 +161,12 @@ export function DroneRig() {
     const set = isMd ? seekers.desktop : seekers.mobile;
     if (mover1.current) set.d1?.apply(mover1.current);
     if (cameraMover.current) set.camera?.apply(cameraMover.current);
-    if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = true;
-    if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = true;
+    // Raven opening: fly from the low wide shot into the clip's hero pose (scene/opening.ts). The wide lens would show
+    // the flank drones (off frame from the hero shot on), so they stay hidden until it lands (user, 2026-11-01).
+    const opening = openingNow();
+    if (cameraMover.current && camera.current) applyOpening(cameraMover.current, camera.current, opening, HERO_FOV);
+    if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = opening >= 1;
+    if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = opening >= 1;
   }, 1);
 
   useFrame((state, dt) => {
@@ -249,7 +261,7 @@ export function DroneRig() {
     }
     if (mover1.current) {
       const sc = remap(swarm, 0, 0.5, 0.0075, 0.0085) - 0.001 * mission;
-      mover1.current.scale.setScalar(isMd ? sc : 0.0075);
+      mover1.current.scale.setScalar((isMd ? sc : 0.0075) * DRONE_SCALE);
     }
   });
 
@@ -258,7 +270,7 @@ export function DroneRig() {
       <group ref={cameraMover}>
         <group ref={cameraDolly}>
           <CameraShake>
-            <PerspectiveCamera makeDefault fov={20} />
+            <PerspectiveCamera ref={camera} makeDefault fov={HERO_FOV} />
           </CameraShake>
         </group>
       </group>
@@ -280,17 +292,17 @@ export function DroneRig() {
         <meshBasicMaterial colorWrite={false} depthWrite={false} />
       </mesh>
       <group ref={droneRoot}>
-        <group ref={mover1} scale={0.0075}>
+        <group ref={mover1} scale={0.0075 * DRONE_SCALE}>
           <group ref={drone1} name="Drone1Group">
             <Drone envMap={env} />
           </group>
         </group>
-        <group ref={mover2} scale={isMd ? 0.007 : 0.004} visible={false}>
+        <group ref={mover2} scale={(isMd ? 0.007 : 0.004) * DRONE_SCALE} visible={false}>
           <group ref={drone2} name="Drone2Group">
             <Drone envMap={env} />
           </group>
         </group>
-        <group ref={mover3} scale={isMd ? 0.007 : 0.0025} visible={false}>
+        <group ref={mover3} scale={(isMd ? 0.007 : 0.0025) * DRONE_SCALE} visible={false}>
           <group ref={drone3} name="Drone3Group">
             <Drone envMap={env} />
           </group>

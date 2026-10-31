@@ -39,7 +39,18 @@ type LiveMaterial = { material: THREE.MeshStandardMaterial; coat: number; glints
  * Raven adapter: only the visual child changes; shipped flight/camera trackers stay intact.
  * `still` parks the rotors and shows the real blades (studio close-ups), as reduced motion does.
  */
-export function RavenModel({ envMap, span = 200, still = false }: { envMap?: THREE.Texture; span?: number; still?: boolean }) {
+export function RavenModel({
+  envMap,
+  span = 200,
+  still = false,
+  onObject,
+}: {
+  envMap?: THREE.Texture;
+  span?: number;
+  still?: boolean;
+  /** Receives this instance's cloned scene once mounted (footer: turret pivot). */
+  onObject?: (object: THREE.Object3D) => void;
+}) {
   const { scene } = useGLB(ASSETS.raven);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const spin = !reducedMotion && !still;
@@ -78,6 +89,7 @@ export function RavenModel({ envMap, span = 200, still = false }: { envMap?: THR
     return { object, rotors, blur, ownedMaterials, live, envRotation, scale: span / Math.max(size.x, size.z) };
   }, [scene, envMap, span]);
   useEffect(() => () => ownedMaterials.forEach((material) => material.dispose()), [ownedMaterials]);
+  useEffect(() => onObject?.(object), [object, onObject]);
   // Still rotors (reduced motion, close-ups) show the real blades instead of the blur.
   useEffect(() => setRotorBlur(blur, spin), [blur, spin]);
   useFrame(({ camera, clock }, dt) => {

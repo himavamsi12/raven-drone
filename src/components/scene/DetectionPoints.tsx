@@ -6,6 +6,7 @@ import { useRef } from "react";
 import * as THREE from "three";
 import { useShallow } from "zustand/react/shallow";
 import { SCENE, useScenes } from "@/lib/scenes";
+import { wipeNow, wipeX } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
@@ -78,12 +79,14 @@ function DetectionBox({ position, label, show }: { position: [number, number, nu
     }
     anchor.current.getWorldPosition(projected);
     projected.project(camera);
-    const visible = show && (Math.abs(projected.x) > zone.x || Math.abs(projected.y) > zone.y);
+    // Raven: a label goes with the ground under it when the diagonal wipe sweeps past (story-map wipeX).
+    const swept = wipeX((projected.x + 1) / 2, (projected.y + 1) / 2) < wipeNow();
+    const visible = show && !swept && (Math.abs(projected.x) > zone.x || Math.abs(projected.y) > zone.y);
     const dx = projected.x - last.current.x;
     const dy = projected.y - last.current.y;
     last.current.x = projected.x;
     last.current.y = projected.y;
-    const dur = dx * dx + dy * dy > 0.25 && !visible ? "0s" : "350ms";
+    const dur = (dx * dx + dy * dy > 0.25 || swept) && !visible ? "0s" : "350ms";
     if (transition.current !== dur) {
       wrapper.current.style.transitionDuration = dur;
       transition.current = dur;

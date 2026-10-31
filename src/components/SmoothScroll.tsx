@@ -2,9 +2,9 @@
 
 import { ReactLenis, useLenis } from "lenis/react";
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
-import { SCENE, SCENE_ORDER, SCENE_SPAN, useScenes, type SceneId, type SceneRange } from "@/lib/scenes";
-import { measureStoryMap, pageBands, toPage, toStory } from "@/lib/story-map";
-import { clamp, linear } from "@/lib/math";
+import { SCENE, SCENE_ORDER, SCENE_SPAN, sceneDataAt, useScenes, type SceneId, type SceneRange } from "@/lib/scenes";
+import { measureStoryMap, pageBands, storyMap, toPage, toStory } from "@/lib/story-map";
+import { linear } from "@/lib/math";
 import { useLoading } from "@/lib/loading";
 import { isScrollLocked, LOCK_EVENT } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -21,6 +21,9 @@ export function useScrollToScene(id: SceneId) {
     lenis?.scrollTo(toPage(target), { duration: 3, easing: linear });
   };
 }
+
+/** Snap duration for the whole opening move (page 0 → hero frame). */
+const OPENING_MS = 5000;
 
 const findRangeIndex = (scroll: number, ranges: SceneRange[]) => {
   for (let i = 0; i < ranges.length; i++) if (scroll < ranges[i].end) return i;
@@ -54,25 +57,10 @@ function useSceneProgressDriver() {
     };
     const update = ({ scroll: page }: { scroll: number }) => {
       if (isScrollLocked()) return;
-      const scroll = toStory(page);
-      const list = ranges.current;
       const vh = vhRef.current || window.innerHeight;
+      const data = sceneDataAt(toStory(page), ranges.current, vh);
       const { updateSceneData } = useScenes.getState();
-      for (let i = 0; i < list.length; i++) {
-        const { id, start, height, end } = list[i];
-        const showStart = i === 0 ? start - vh : start;
-        const progress = (scroll - start) / height;
-        const show = (scroll - showStart) / vh;
-        const hide = (scroll - end) / vh;
-        let isActive = show > 0 && hide <= 1;
-        if (id === SCENE.INTRO_SCENE) isActive = hide <= 1;
-        updateSceneData(id, {
-          progress: clamp(progress, 0, 1),
-          isActive,
-          showRatio: clamp(show, 0, 1),
-          hideRatio: clamp(hide, 0, 1),
-        });
-      }
+      for (const r of ranges.current) updateSceneData(r.id, data[r.id]);
     };
     const current = () => ({ scroll: lenis.actualScroll || lenis.scroll || 0 });
     measure();
@@ -98,7 +86,7 @@ function useSceneProgressDriver() {
   }, [lenis]);
 }
 
-/** The page-space band holding `scroll`, and the scene index inside it (null between bands / after the story). */
+/** The page-space band holding `scroll`, and the scene index inside it (null outside the story). */
 const findBand = (scroll: number, bands: SceneRange[][]) => {
   for (let b = 0; b < bands.length; b++) {
     const list = bands[b];
@@ -143,7 +131,7 @@ function SceneController() {
   useEffect(measure, [measure]);
   useStoryMeasure(measure);
 
-  // Snapping works inside each story band (page space); between bands and after the story the page scrolls freely.
+  // Snapping works inside the story band (page space, opening → end of the story); after it the page scrolls freely.
   const pickTarget = useCallback(
     (dir: number) => {
       if (!lenis) return;
@@ -205,7 +193,9 @@ function SceneController() {
         if (Math.abs(delta) <= 0.05) target.current = null;
         else if (vel < 2 * dt && !scrollbarDrag.current && (!isTouchPhone || !touching.current)) {
           const sign = delta > 0 ? 1 : -1;
-          const stepPx = 2 * sign * dt;
+          // Raven: the opening move plays over OPENING_MS whatever the viewport height; the story keeps 2px/ms.
+          const rate = scroll < storyMap.P + 1 && t <= storyMap.P + 1 ? Math.max(storyMap.P / OPENING_MS, 0.2) : 2;
+          const stepPx = rate * sign * dt;
           const next = sign > 0 ? Math.min(scroll + stepPx, t) : Math.max(scroll + stepPx, t);
           lenis.scrollTo(next, { immediate: true });
         }
@@ -304,13 +294,8 @@ function SceneController() {
     lenis.scrollTo(0, { immediate: true, force: true });
   }, [lenis, loadingHidden]);
 
-  // On reveal, advance into the first chapter automatically (shipped behavior).
-  useEffect(() => {
-    if (lenis && loadingHidden) {
-      pickTarget(1);
-      run();
-    }
-  }, [lenis, loadingHidden, pickTarget, run]);
+  // Shipped: on reveal, advance into the first chapter automatically. Raven: the page opens on the low opening shot
+  // and waits for the first scroll (the opening move is band 1's first range), so there is no auto-advance.
 
   // After a modal/menu unlocks, settle on the nearest scene end.
   useEffect(() => {

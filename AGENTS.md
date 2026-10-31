@@ -64,7 +64,7 @@ Key shipped modules (in `page-33beb1af07230f28.js` unless noted): `7370` main sc
 
 ```
 src/app/layout.tsx          fonts, <SmoothScroll>, <Navbar>
-src/app/page.tsx            Loader, FixedContainer (fixed stage), story band 1 spacer, Parts, story band 2 spacer, team, footer, LandingSequence
+src/app/page.tsx            Loader, FixedContainer (fixed stage), opening, story band 1 + band 2 spacers (contiguous), team, footer, LandingSequence
 src/lib/
   scenes.ts                 SCENE ids, SCENE_SPAN (vh), SCENE_ORDER, computeSceneRanges, zustand store
   constants.ts              shared mutable refs (terrain travel), RENDER_ORDER, sun, colors
@@ -92,7 +92,7 @@ src/components/
     overlays/               SpecsCallouts, SwarmTags, GroundHtml
     materials/              TerrainMaterial
     shaders/screen-uv.ts    shared GLSL (diagonal scan wipe, grid AA)
-  sections/                 Parts (live 3D close-ups, drei View), Sections (team, footer), FooterDrone, LandingSequence, HeroLogo
+  sections/                 Sections (team, footer), FooterDrone, LandingSequence, HeroLogo
 public/assets/              mirrored reference assets (same paths as live site); images/media = _next/static/media
 public/draco/               Draco decoder copied from three/examples (do not CDN)
 scripts/asset-manifest.mjs  manifest generator
@@ -100,15 +100,29 @@ scripts/asset-manifest.mjs  manifest generator
 
 ### Scroll / progress model (do not break)
 
-- Homepage layout (user decisions 2026-10-30, reference `asset/html/raven_homepage.html`): the shipped story runs in
-  two page bands (`lib/story-map.ts`). Band 1 = intro → real-time-detection (Route). Then `#parts`. Band 2 opens on the
-  finished Care teams map (end of phalanx-ai) and runs analysis → multi-threat. Thermal, ignition and the phalanx
-  satellite/city transition are skipped: story time jumps while the stage is off screen. Scene ranges and every scene
-  component stay in story coordinates; `toStory`/`toPage` convert page scroll, `stageTop` places the fixed stage
-  (it scrolls away after each band and slides in before band 2, like the shipped sticky stage), `useStage.cover`
-  gates PostFX and the bar background. Snapping works per band; between bands and after the story the page is free.
+- Opening (user, 2026-11-01; replaced the pad takeoff film): page [0, P] (`#opening`, `OPENING_VH` 300) flies the
+  live camera from a low wide shot under the hovering drone (sky dome + far ridges, `scene/OpeningSky.tsx`) into the
+  Camera01 hero pose in one move (`scene/opening.ts`: dolly zoom fov 75 → 20, barrel pass in PostFX, extra ground
+  tiles + fog in Terrain), story held at 0. At P everything opening-only is off and the hero frame is unchanged. The hero
+  copy shows from the first opening frame and leaves at delta .075, as before (user). Band 1 opens with an opening range (page 0 → P+1): one
+  gesture plays it over `OPENING_MS` (5 s), reverse returns to the low shot; no auto-advance on reveal.
+- Homepage layout (user decisions 2026-10-30/11-01): the shipped story runs in two contiguous page bands
+  (`lib/story-map.ts`). Band 1 = intro → real-time-detection (Route). Band 2 starts right after it, at the START of
+  phalanx-ai, and runs phalanx → multi-threat. The `#parts` section was removed (2026-11-01). Thermal and ignition are
+  skipped. The bands are joined by the shipped diagonal Phalanx wipe with the Route still live: over the first half of
+  phalanx's page range (`storyMap.W`) the story holds on Route (terrain travel and drone hover keep running) and PostFX
+  `DiagonalWipeEffect` lays the Care teams map (phalanx .5) over the swept side (`wipeRatioAt` = shipped
+  `remapEased(phalanx, 0, .5, 0, 1, easeInOutCubic)`, same `computeScreenUv` edge + 0.1 border). That map is static in
+  the shipped scene, so it is rendered once off screen (PostFX `Preroll`: store set silently with
+  `sceneDataAt(mapStory())`, final pass off, `CopyPass` capture, store restored; again after a resize) and at X + W
+  the story switches to the identical live map. Chapter copy + HUD are clipped by `wipeClipPath`; Route labels hide
+  where `wipeX` < ratio. Scene
+  ranges and every scene component stay in story coordinates; `toStory`/`toPage` convert page scroll, `stageTop` keeps
+  the fixed stage covering through both bands and scrolls it away after band 2, `useStage.cover` gates PostFX and the
+  bar background. Snapping is one band from the opening to the end of the story; after it the page is free.
 - Scene spans unchanged (intro 1px, 12 × 500vh, zone 100vh, multi 500vh, in story px). Spacers: band 1
-  `calc(2600dvh + 1px)` (story to Route + one screen), band 2 `2700dvh` (analysis → multi + one screen).
+  `calc(2500dvh + 1px)` (story to Route), band 2 `3200dvh` (phalanx → multi + one screen, `#care-teams` anchor at
+  500dvh = finished map frame, target of the Network links).
 - Per scene: `progress=(scroll-start)/height`, `showRatio`, `hideRatio`, `isActive`, clamped 0–1, written on every
   Lenis scroll event. Everything reads `useScenes.getState()` in frame loops (no React state per frame).
 - One progress source, one Lenis. Do not add GSAP ScrollTrigger scrub or a second smoothing layer.
@@ -124,10 +138,14 @@ scripts/asset-manifest.mjs  manifest generator
 - Clear color: sky `#c9e0f7`, black after ignition > .99. Final grade fades to black with multi-threat hideRatio.
 - Custom ShaderMaterials output raw values: textures sampled there must not be sRGB-decoded unless the source did
   (landing frames use `NoColorSpace`).
-- Landing sequence (≥1024px only): the live `raven_hexa` model (Raven, 2026-10-30) replaces the 96 quad frames,
-  following the shipped mapping 0–.45→0–.1, .45–.7→.1–.3, .7–1→.3–1, smoothed .25, along FRAME_Y (interpolated;
-  `FRAME_DRONE_Y`, `DRONE_SCALE` in LandingSequence.tsx). Canvas now has a depth buffer. Below 1024px: `FooterDrone`
-  (live hexa at rest, rotors parked).
+- Footer drone flight (user, 2026-11-01, after drone.riotters.com; `sections/drone-flight.ts`): the live `raven_hexa`
+  lands on the pad (last shipped FRAME_Y position, frame travel still scroll-driven) with a timed 4 s ease-out-cubic
+  landing once `#footer` is 30% visible (banked glide-in from above the screen: roll -31°, yaw 21°, pitch -12°, size
+  0.19 → 1, then a vertical let-down), a 0.3 Hz float (1/35 drone width), and pointer response (flight lean while
+  airborne, landed tilt + drift + EO/IR turret head after 47% of the landing). Replays after the footer has left the
+  view. Desktop (≥1024px) in `LandingSequence` (copy-side drift/lift damped ×0.4 so the drone keeps clear of the CTA);
+  below 1024px the same flight in `FooterDrone`. Reduced motion: parked on the pad, rotors still. No GSAP: per-frame
+  maths in the existing R3F loops, like the reference. Canvas has a depth buffer.
 
 ## Design tokens (from shipped CSS, in `globals.css @theme`)
 
@@ -149,10 +167,10 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Verification tips
 
-- Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): delta end 4501, swarm 9001, mission
-  13501, flock 18001, Route 22501, `#parts` 23401, band 2 / Care teams frame 28430, analysis end 32930, notifications
-  37430, interdrone 41930, extra 46430, zone 47330, multi end 51830, page height ~54176. Test snapping with real wheel
-  events (agent-browser `mouse wheel`, not `scroll`).
+- Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
+  delta end 7201, swarm 11701, mission 16201, flock 20701, Route 25201 (= band 2 start, wipe 25201 → 27451),
+  Care teams frame 29701, analysis end 34201, notifications 38701, interdrone 43201, extra 47701, zone 48601, multi end
+  53101, page height ~55447. Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
 - Up to the story end, same vh on reference and local gives identical scrollY ↔ scene mapping (verified before the
   homepage change; the later shipped chapters are no longer on the page).
 - Built-in preview pane throttles RAF between tool calls: wait a few seconds before screenshots; FPS dips there are
@@ -168,16 +186,16 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Open work (see RECONSTRUCTION.md for full list)
 
-- Homepage layout (2026-10-30): hero composition, bar and `#parts` follow `asset/html/raven_homepage.html` (local
-  only); its map section was replaced by story band 2 (user). The reference's specs (prop size, km/h, AGL, kg, ETA,
-  altitudes) were not carried over. Parts cards are live views of `raven_hexa.glb` (`RavenModel still`), framed from
-  the GLB node bounds in `Parts.tsx` `SHOTS`. The fire sprites, thermal HUD/palette box and the thermal/fire copy and HUD lines were deleted (2026-10-31); the thermal and ignition scenes still exist in story coordinates because later scenes read their progress.
+- Homepage layout (2026-10-30): hero composition and bar follow `asset/html/raven_homepage.html` (local only); its
+  map section was replaced by story band 2 (user). The reference's specs (prop size, km/h, AGL, kg, ETA, altitudes)
+  were not carried over. The `#parts` live close-up track was removed on 2026-11-01 (user); the diagonal wipe now
+  joins the bands. The fire sprites, thermal HUD/palette box and the thermal/fire copy and HUD lines were deleted (2026-10-31); the thermal and ignition scenes still exist in story coordinates because later scenes read their progress.
 
 - Raven follow-up: all jet imagery is replaced (silhouettes, mission cards, demo, footer sequence). The footer wordmark is "RAVEN" (Geist text: SVG on mobile/tablet, canvas texture for the desktop WebGL outline). The third-party team-logos texture, the USAvionix legal copy and the Notes link were removed. Preserve current camera/scroll choreography.
 - Story/content Phase 1 is done (copy only, 2026-10-30): one illustrative health-centre → hill-clinic delivery across chapters, HUD, scene labels, nav, menu and sections. Inventory and claim status: `RAVEN_CONTENT_MAP.md`. Chapter/HUD text lives beside its timing (`ChapterCopy.tsx`, `HudLog.tsx`); repeated notice/CTA copy lives in `src/lib/copy.ts`. Keep labels display-only: no fake confirmations ("delivered", "clinic notified", "cold chain maintained"), no numbers (temperature, confidence, speed).
 - Story Phase 2 (visual, plan only): `RAVEN_VISUAL_STORY_PLAN.md`. The fire/thermal detour is the main replacement candidate; preparation, launch, handoff and return are not animated yet. Product decisions D1–D5 in that file are open.
 - Quad site-imagery renders (`glb/raven-quad/render_media.py` + `encode_media.mjs`: cards, demo, 96 landing frames) are no longer used by the page; their outputs were deleted in the 2026-10-31 cleanup.
-- Raven terrain (default since 2026-10-30; v03 look-dev map since 2026-10-31: baked leaf-card trees/rock/golden light, 4K WebP q80, 2.68 MB; built on the Windows workstation, encoded on the Mac because Windows sharp fails): natural tiles use `public/assets/models/raven-terrain.glb` (`Land-A` + `Houses`, built by `glb/raven-terrain/build_all.py` then `encode.sh`, validated by `glb/raven-terrain/check_terrain.py`; rebuild/check commands in `glb/raven-terrain/README.md`). Same footprint, flat 2.189 rim and planar-UV contract as the shipped tile; houses ride each natural tile with their own `TerrainMaterial` (fog/scan). The city tile is still the shipped one (settlement/clinic tile not built). `DetectionPoints` heights come from `RAVEN_DETECTION_Y` in `scene/raven-terrain.ts` (re-sample with the checker if the relief changes). `?terrain=original` and `?plate=h00` use the shipped natural tile.
+- Raven terrain (default since 2026-10-30; v09 since 2026-11-01: the Windows look-dev file v08 baked as-is, i.e. v05 grass/cliff, v06 Poly Haven `aerial_grass_rock` lawns, v08 BlenderKit moss forest floor, and 24 Cottage_FREE cottages as 16-tri web proxies baked from the detailed model; 4K WebP q80, 2.85 MB; built on the Windows workstation by `glb/raven-terrain/12_v09_webport.py`, encoded on the Mac because Windows sharp fails. The v09 ground material lives only in that .blend, not in 09_lookdev_material.py; the Cottage_FREE (TurboSquid) licence is unconfirmed for a public GLB): natural tiles use `public/assets/models/raven-terrain.glb` (`Land-A` + `Houses`, v03 built by `glb/raven-terrain/build_all.py` then `encode.sh`, validated by `glb/raven-terrain/check_terrain.py`; rebuild/check commands in `glb/raven-terrain/README.md`). Same footprint, flat 2.189 rim and planar-UV contract as the shipped tile; houses ride each natural tile with their own `TerrainMaterial` (fog/scan). The city tile is still the shipped one (settlement/clinic tile not built). `DetectionPoints` heights come from `RAVEN_DETECTION_Y` in `scene/raven-terrain.ts` (re-sample with the checker if the relief changes). `?terrain=original` and `?plate=h00` use the shipped natural tile.
 - Environment plate prototype (opt-in `?plate=h00`, `scene/HeroPlate.tsx`): three Seedance clips of one flight behind the drones. Hero loop `raven-h00-loop.mp4` (time-driven); Airframe tilt `raven-s01-airframe.mp4` (all-intra, scrubbed: DELTA_DRONE progress -> measured camera pitch -> clip time, flow-map drift when idle); Connection `raven-s02-connection.mp4` (straight down past the health centre, plays from frame 0 when the tilt ends, then loops 5.5-12.04 s so the building never repeats). Fades to live terrain at the end of SWARM_SCENE; shader adds parallax, motion blur and haze on oblique views. The live terrain moves away from the camera (it retreats ahead of the drone): prompts must say the ground recedes toward the top of the frame. While it shows, `scene/plate-light.ts` swaps the drone to plate-matched light (high late-morning sun beyond the frame, hazy sky, the plate's own terrain as reflected ground) instead of the sunset `env.exr`. The sun casts soft shadows (2048 PCF) on the drones only: its shadow camera is refitted around `Drone1Group` in `MainScene`; terrain is unlit and never receives. Brief: `RAVEN_ENVIRONMENT_FILM_SEEDANCE_PROMPT.md`; sources in `research/raven-film/h00/` (local only).
 - Terrain lens (`scene/TerrainLensEffect.ts`, first EffectPass after the RenderPass in `PostFX.tsx`): depth-reconstructed motion blur (terrain travel + camera reprojection, 1/30 s shutter) and thin-lens DoF focused on `Drone1Group`, applied only below world y -1.55 so drones stay sharp. Exaggerated for a high-speed look (travel streak x`SPEED_GAIN` 3, cap 16 px; `COC_INF_PX` 5, disc cap 16 px): tune those constants in `PostFX.tsx`. Anything drawn after the terrain must not write depth (the clouds did, which hid the ground from the lens). `?lens=off` disables it. If drones ever fly lower or the terrain parent moves, re-check `TERRAIN_TOP`.
 - Silhouette assets: `drone-lowpoly.glb` (nodes `mainBody` + `outlineHull`, jet axis contract) and `loading-drone.glb`; the boot SVG is traced to sit over the 3D loader. Rebuild with `glb/raven-quad/build_silhouettes.py` (see its README section).
