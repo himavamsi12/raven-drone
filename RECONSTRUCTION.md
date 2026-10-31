@@ -205,6 +205,19 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
 - Idle hero motion blur is subtle by design: the terrain only moves ~0.5 units/s on screen, so a physical shutter
   gives a sub-pixel to ~2 px streak; Shift boost (6x) and scrolling show clear streaks.
 
+## Raven terrain v03: leaf-card tree crowns (user: "trees are looking like blobs", 2026-10-31)
+
+- Same contract and geometry as v02; only the baked base map changed. Broadleaf crowns (`07_masters.py`) are now built
+  from the Blend Swap 5671 leaf card: crown blob shrunk to 0.6 (fills gaps only), 46 clumps of 3 outward-facing cards
+  at 0.82-1.08 of the lobe radius, leaves 30% translucent, 16 transparent bounces in the appearance render.
+- Built on the Windows workstation (OptiX, RTX 3060, 304 s at 4096); Windows `encode.cmd` fails in sharp/libvips
+  ("colourspace: parameter space not set"), so the raw GLB was copied over and encoded on the Mac with `encode.sh`.
+- `public/assets/models/raven-terrain.glb` 2,677,716 bytes (v02 2,468,236), sha256 `f0285fcb…b5e664`. Checker PASS
+  (edges 0.0123 / 0.0137 vs interior 0.0179); `DETECTION_GROUND_Y` unchanged.
+- Base map luma (stored sRGB): mean 0.319 (v02 0.352); forest pixels 9% darker than v02, open ground also ~9% darker.
+- Checked in the dev preview (1440×900): hero and DELTA overhead load the new file, no console errors. Not checked:
+  mobile, production build, fps.
+
 ## Raven terrain v02 look-dev map (user reference: golden-hour aerial of green karst hills, 2026-10-30)
 
 - Same `raven-terrain.glb` contract and geometry; only the baked appearance changed. New base map (4096, WebP q80) is an

@@ -1,7 +1,17 @@
 # Raven real-time terrain (Blender source)
 
-Brief: `RAVEN_REALTIME_TERRAIN_CLAUDE_PROMPT.md`. Status: **v02 look-dev natural tile live in the site** (default terrain;
+Brief: `RAVEN_REALTIME_TERRAIN_CLAUDE_PROMPT.md`. Status: **v03 look-dev natural tile live in the site** (default terrain;
 `?terrain=original` shows the shipped tile). Settlement/clinic tile not built yet.
+
+### v03 (2026-10-31): leaf-card tree crowns
+
+`07_masters.py`: broadleaf crowns built from the Blend Swap 5671 leaf card (crown blob at 0.6 fills gaps, 46 clumps of
+3 outward-facing cards, 30% translucent leaves); `11_appearance_bake.py` raises transparent bounces to 16. Built on the
+Windows workstation (`C:\Users\india\Documents\raven-terrain\build-scripts`, `build\build_and_encode.cmd`, 304 s with
+OptiX). Its `encode.cmd` fails in sharp/libvips ("colourspace: parameter space not set"): copy
+`build\raven-terrain-raw.glb` to `glb/raven-terrain/build/` and run `encode.sh` and the checker on the Mac.
+Shipped: 2,677,716 bytes, sha256 `f0285fcb0e8fbfe9158699b8af1928af66c004c73d706a5e90b655e895b5e664`, checker PASS,
+same geometry and detection heights as v02; base map ~9% darker than v02.
 
 ## Rebuild and check (Mac, from the repo root)
 

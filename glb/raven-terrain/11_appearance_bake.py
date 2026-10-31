@@ -62,6 +62,7 @@ def render_appearance(res, out_png, samples=128):
     sc.render.use_compositing = False
     sc.cycles.samples = samples; sc.cycles.use_denoising = True
     sc.cycles.filter_width = 1.0
+    sc.cycles.transparent_max_bounces = max(sc.cycles.transparent_max_bounces, 16)  # stacked alpha leaf cards (07)
     sc.render.image_settings.file_format = 'PNG'; sc.render.image_settings.color_depth = '16'
     sc.render.filepath = out_png
     bpy.ops.render.render(write_still=True)

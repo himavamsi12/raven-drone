@@ -1,11 +1,13 @@
 """Raven terrain 07 (look-dev): vegetation and rock masters in collections LD_Set_Trees / LD_Set_Bushes / LD_Set_Rocks
 (excluded from the view layer; used only through the 08 instancers). Three broadleaf crowns + one fir, two bushes,
 three limestone rocks. Colour variation per instance via Object Info > Random.
-v03: broadleaf crowns use the CC0 Blend Swap 5671 leaf card (textures/blendswap-5671/, RAVEN_LEAF_TEX overrides):
-box-projected onto the crown blob as leaf detail (`M_LD_Crown`, keeps the v02 shading and brightness) plus a few small
-crossed leaf cards on the rim to break the outline. Dense full-size cards self-shaded in the low bake sun and merged
-neighbouring crowns into one dark mass (forest patch ~40% darker than v02), so the cards stay sparse: 8 rim clumps
-leave the forest ~9% darker than v02 (none: matched; measured on 1024 test bakes).
+v03: broadleaf crowns use the CC0 Blend Swap 5671 leaf card (textures/blendswap-5671/, RAVEN_LEAF_TEX overrides).
+2026-10-31 (user: v03 crowns read as blobs from the hero camera): the crown blobs shrink to CROWN_CORE of their size
+and only fill the gaps (`M_LD_Crown`, leaf card box-projected, tint x0.8); LEAF_CLUMPS clumps of three cards sit at
+0.82-1.08 of the lobe radius facing outward, so the cards make the outline and the top. Leaves are 30% translucent
+(back-lit cards glow instead of going black) and need transparent bounces >= 16. Earlier note: dense cards self-shaded
+in the low bake sun (forest patch ~40% darker than v02 with full-size cards inside a full-size blob); re-check the
+appearance bake brightness after this change.
 """
 import bpy, bmesh, math, os, random
 from mathutils import Matrix, Vector, noise
@@ -13,6 +15,8 @@ from mathutils import Matrix, Vector, noise
 LEAF_TEX = os.environ.get('RAVEN_LEAF_TEX') or os.path.join(
     os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd(),
     'textures', 'blendswap-5671', 'tree_leaves_128.webp')
+CROWN_CORE = 0.6
+LEAF_CLUMPS = 46
 
 
 def _coll(name, parent=None, exclude=False):
@@ -73,11 +77,12 @@ def _leaf_tex(nt, box=False):
     return tex
 
 
-def _tint(nt):
+def _tint(nt, k=1.0):
     oi = nt.nodes.new('ShaderNodeObjectInfo'); ramp = nt.nodes.new('ShaderNodeValToRGB')
     nt.links.new(oi.outputs['Random'], ramp.inputs[0])
     e = ramp.color_ramp.elements
-    e[0].color = (0.016, 0.034, 0.010, 1); e[1].color = (0.075, 0.105, 0.022, 1); e.new(0.55).color = (0.035, 0.068, 0.016, 1)
+    e[0].color = (0.016 * k, 0.034 * k, 0.010 * k, 1); e[1].color = (0.075 * k, 0.105 * k, 0.022 * k, 1)
+    e.new(0.55).color = (0.035 * k, 0.068 * k, 0.016 * k, 1)
     return ramp.outputs[0]
 
 
@@ -90,44 +95,50 @@ def _leaf_shade(nt, tex, gain):
 
 def _crown(nt, bs):
     tex = _leaf_tex(nt, box=True); shade = _leaf_shade(nt, tex, 7.0)
-    # same balance as _canopy (ramp x 0.55 detail mix), the leaf card replacing the Voronoi cells
-    nt.links.new(_mix_mul(nt, _tint(nt), shade, 0.55), bs.inputs['Base Color'])
+    # same balance as _canopy (ramp x 0.55 detail mix), the leaf card replacing the Voronoi cells; darker: crown interior
+    nt.links.new(_mix_mul(nt, _tint(nt, 0.8), shade, 0.55), bs.inputs['Base Color'])
     bump = nt.nodes.new('ShaderNodeBump'); bump.inputs['Strength'].default_value = 0.6
     nt.links.new(shade, bump.inputs['Height']); nt.links.new(bump.outputs[0], bs.inputs['Normal'])
     bs.inputs['Roughness'].default_value = 0.85
 
 
 def _leaves(nt, bs):
+    # mix: Transparent (alpha cut-out) <- [Principled 70% / Translucent 30%]; the template Principled stays the main lobe
+    out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
     tex = _leaf_tex(nt)
-    nt.links.new(_mix_mul(nt, _tint(nt), _leaf_shade(nt, tex, 7.0), 0.55), bs.inputs['Base Color'])
-    nt.links.new(tex.outputs['Alpha'], bs.inputs['Alpha'])
-    bs.inputs['Roughness'].default_value = 0.8
+    col = _mix_mul(nt, _tint(nt, 1.15), _leaf_shade(nt, tex, 7.0), 0.55)
+    nt.links.new(col, bs.inputs['Base Color']); bs.inputs['Roughness'].default_value = 0.6
+    tr = nt.nodes.new('ShaderNodeBsdfTranslucent'); nt.links.new(col, tr.inputs['Color'])
+    mx = nt.nodes.new('ShaderNodeMixShader'); mx.inputs[0].default_value = 0.3
+    nt.links.new(bs.outputs[0], mx.inputs[1]); nt.links.new(tr.outputs[0], mx.inputs[2])
+    tp = nt.nodes.new('ShaderNodeBsdfTransparent'); cut = nt.nodes.new('ShaderNodeMixShader')
+    nt.links.new(tex.outputs['Alpha'], cut.inputs[0]); nt.links.new(tp.outputs[0], cut.inputs[1])
+    nt.links.new(mx.outputs[0], cut.inputs[2]); nt.links.new(cut.outputs[0], out.inputs[0])
 
 
-def _leaf_cards(bm, seed, canopy=0, leaves=2, clumps=8, core=1.0):
-    """Sparse clumps of three small leaf cards (two crossed upright, one flat) on the crown rim, like the source
-    pack's hand-placed clumps; they break the blob outline without shading the crown."""
-    cv = {v for f in bm.faces if f.material_index == canopy for v in f.verts}
-    c = sum((v.co for v in cv), Vector()) / len(cv)
-    R = max((v.co - c).length for v in cv)
-    for v in cv:
-        v.co = c + (v.co - c) * core
+def _leaf_cards(bm, seed, lobes, leaves=2, clumps=LEAF_CLUMPS):
+    """Clumps of three fanned leaf cards facing outward from the crown lobes (two thirds on the main lobe), placed
+    just inside to just outside each lobe surface so they form the silhouette and the top seen from the air."""
     uv = bm.loops.layers.uv.get('UVMap') or bm.loops.layers.uv.new('UVMap')
     rng = random.Random(seed)
 
     def card(p, rot, size):
         h = size / 2
-        f = bm.faces.new([bm.verts.new(p + rot @ Vector(co)) for co in ((-h, 0, -h), (h, 0, -h), (h, 0, h), (-h, 0, h))])
+        f = bm.faces.new([bm.verts.new(p + rot @ Vector(co)) for co in ((-h, -h, 0), (h, -h, 0), (h, h, 0), (-h, h, 0))])
         f.material_index = leaves
         for loop, t in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
             loop[uv].uv = t
 
-    for _ in range(clumps):
-        d = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1) * 0.75 + 0.25)).normalized()
-        p = c + d * R * rng.uniform(0.8, 0.98); size = R * rng.uniform(0.4, 0.6); yaw = rng.uniform(0, math.pi)
-        for q in range(2):
-            card(p, Matrix.Rotation(yaw + q * math.pi / 2, 3, 'Z') @ Matrix.Rotation(rng.uniform(-0.6, 0.6), 3, 'X'), size)
-        card(p, Matrix.Rotation(rng.uniform(0, 2 * math.pi), 3, 'Z') @ Matrix.Rotation(math.pi / 2 + rng.uniform(-0.3, 0.3), 3, 'X'), size)
+    for i in range(clumps):
+        cen, rad, sq = lobes[0] if i < clumps * 0.68 else lobes[1]
+        d = Vector((rng.gauss(0, 1), rng.gauss(0, 1), abs(rng.gauss(0, 1)) * 0.9 + 0.15)).normalized()
+        p = Vector(cen) + Vector((d.x * rad, d.y * rad, d.z * rad * sq)) * rng.uniform(0.82, 1.08)
+        size = rad * rng.uniform(0.55, 0.8)
+        base = d.to_track_quat('Z', 'Y').to_matrix()
+        for _ in range(3):
+            rot = base @ Matrix.Rotation(rng.uniform(-0.7, 0.7), 3, 'X') @ Matrix.Rotation(rng.uniform(-0.7, 0.7), 3, 'Y') \
+                @ Matrix.Rotation(rng.uniform(0, 2 * math.pi), 3, 'Z')
+            card(p + d * rng.uniform(-0.08, 0.08) * rad, rot, size)
 
 
 def _conifer(nt, bs):
@@ -190,16 +201,21 @@ def build_masters():
 
     def broadleaf(seed):
         def b(bm):
-            _blob(bm, (0, 0, 1.45), 1.0, 0.82, seed, 0.28, 2)
+            lobes = (((0, 0, 1.45), 1.0, 0.82, seed, 0.28, 2),
+                     ((0.45 * math.cos(seed), 0.45 * math.sin(seed), 1.9), 0.62, 0.8, seed + 5, 0.3, 1))  # second lobe
+            for lobe in lobes:
+                c = Vector(lobe[0])
+                for v in _blob(bm, *lobe):
+                    v.co = c + (v.co - c) * CROWN_CORE
             for f in bm.faces:
                 f.material_index = 0
-            r = bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.09, radius2=0.06, depth=1.0)
-            bmesh.ops.translate(bm, verts=r['verts'], vec=(0, 0, 0.5))
+            r = bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.09, radius2=0.06, depth=1.2)
+            bmesh.ops.translate(bm, verts=r['verts'], vec=(0, 0, 0.6))  # taller: the smaller core no longer hides it
+            rv = set(r['verts'])
             for f in bm.faces:
-                if all(v in r['verts'] for v in f.verts):
+                if all(v in rv for v in f.verts):
                     f.material_index = 1
-            _blob(bm, (0.45 * math.cos(seed), 0.45 * math.sin(seed), 1.9), 0.62, 0.8, seed + 5, 0.3, 1)  # second lobe
-            _leaf_cards(bm, int(seed * 1000))
+            _leaf_cards(bm, int(seed * 1000), [lobe[:3] for lobe in lobes])
         return b
 
     def fir(seed):
