@@ -67,19 +67,27 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   float coc = min(uCocInf * uPxScale * abs(1.0 - uFocus / dist), uMaxCocPx);
   if (length(vel / uTexel) < 0.5 && coc < 0.5) return;
 
+  // Nearer-object test (drone: never smear it into the ground) is linearDepth(tap) < 0.8 * lin. linearDepth is
+  // monotonic in depth, so it is done on raw depth against that threshold mapped back once (perf: no per-tap divide).
   float lin = linearDepth(depth);
+  float nearDepth = 0.5 * ((uFar + uNear - 2.0 * uNear * uFar / (0.8 * lin)) / (uFar - uNear) + 1.0);
   vec3 sum = inputColor.rgb;
   float total = 1.0;
   const int TAPS = 24; // long streaks: fewer taps band visibly
+  const float GOLDEN = 2.39996;
   float jitter = fract(sin(dot(uv * 913.7 + uFrame, vec2(12.9898, 78.233))) * 43758.5453);
+  // Tap i sits at angle (i + jitter) * GOLDEN + jitter * 6.2832: start there and rotate by GOLDEN per tap.
+  float a0 = jitter * (GOLDEN + 6.2832);
+  vec2 dir = vec2(cos(a0), sin(a0));
+  mat2 STEP = mat2(cos(GOLDEN), sin(GOLDEN), -sin(GOLDEN), cos(GOLDEN));
+  vec2 discPx = coc * 0.5 * uTexel;
   for (int i = 0; i < TAPS; i++) {
     float fi = float(i) + jitter;
     float t = fi / float(TAPS) - 0.5;
     float r = sqrt(fi / float(TAPS));
-    float a = fi * 2.39996 + jitter * 6.2832;
-    vec2 tapUv = uv + vel * t + vec2(cos(a), sin(a)) * r * coc * 0.5 * uTexel;
-    float tapLin = linearDepth(readDepth(tapUv));
-    if (tapLin < lin * 0.8) continue; // nearer object (drone): never smear it into the ground
+    vec2 tapUv = uv + vel * t + dir * r * discPx;
+    dir = STEP * dir;
+    if (readDepth(tapUv) < nearDepth) continue;
     sum += texture2D(inputBuffer, tapUv).rgb;
     total += 1.0;
   }

@@ -307,7 +307,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const lensState = useRef({ prevVP: new THREE.Matrix4(), prevOffset: 0, step: 0, first: true, frame: 0, drone: null as THREE.Object3D | null });
   const pre = useRef<Preroll>({ state: "idle", frame: 0, saved: [], warm: 0 });
   const lastSide = useRef(0);
-  const [composer, final, mix, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] = useMemo(() => {
+  const [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] = useMemo(() => {
     const composer = new EffectComposer(gl, { multisampling: 0 });
     const final = new FinalEffect();
     const mix = new RenderTargetMixEffect(flockTarget);
@@ -317,7 +317,8 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     composer.addPass(new RenderPass(scene, camera));
     composer.addPass(new EffectPass(camera, lens)); // needs the scene depth: first pass after the render
     composer.addPass(fisheyePass); // Raven opening: bends the finished frame, before AA and grade
-    composer.addPass(new EffectPass(camera, mix));
+    const mixPass = new EffectPass(camera, mix);
+    composer.addPass(mixPass);
     // Shipped bundle constructs a default effect here (minified `eF`); SMAA is inferred.
     composer.addPass(new EffectPass(camera, new SMAAEffect()));
     // Raven band 1 → band 2: the Care teams map is captured here once (off screen, no swap), then laid over the live
@@ -331,7 +332,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     composer.addPass(wipePass);
     const finalPass = new EffectPass(camera, final);
     composer.addPass(finalPass);
-    return [composer, final, mix, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] as const;
+    return [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] as const;
   }, [gl, scene, camera, flockTarget]);
 
   useEffect(() => {
@@ -383,8 +384,13 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
       if (multi.hideRatio > 0.8) return;
       if (useStage.getState().cover === 0) return; // Raven: stage off screen after the story
     }
-    mix.mixFactor = remap(s[SCENE.FLOCK_SCENE].progress, 0.75, 1, 0, 1);
-    mix.nextSceneProgress = s[SCENE.REAL_TIME_DETECTION].progress;
+    const mixFactor = remap(s[SCENE.FLOCK_SCENE].progress, 0.75, 1, 0, 1);
+    const nextProgress = s[SCENE.REAL_TIME_DETECTION].progress;
+    mix.mixFactor = mixFactor;
+    mix.nextSceneProgress = nextProgress;
+    // Perf: the shader passes the input through unchanged when mixFactor <= 0 or its fadeOut (1 - smoothstep(.05, .15,
+    // next)) is 0; skip the full-screen pass then.
+    mixPass.enabled = mixFactor > 0 && nextProgress < 0.15;
     final.u("uVignetteAspect").value.copy(aspect.current);
     final.u("uTime").value = state.clock.getElapsedTime();
     final.u("uOpacity").value = remap(multi.hideRatio, 0, 0.25, 1, 0);

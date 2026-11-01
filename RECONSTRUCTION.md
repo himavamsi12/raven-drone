@@ -12,6 +12,24 @@ User direction: Raven is a medical delivery drone concept for remote mountain vi
 
 Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HUD details, fire/emergency simulations, mission card/demo imagery, reference legal/Notes content, and baked footer sequence/wordmarks still come from the source reconstruction. They need a separate medical-delivery art/content pass. The existing terrain has not been replaced with snow/tundra. This first pass is model integration and core copy, not a finished Raven site.
 
+## GPU performance pass, same output (user request, 2026-11-01)
+
+Measured in headless Chrome on an Apple M3 at 1440×900, DPR 2 (canvas 2160×1350), vsync off, interleaved A/B,
+median of 5 runs. Airframe frame (scroll 7201): 11.3 → 10.1 ms per frame. Terrain lens 3.6 → 2.5 ms.
+- `TerrainLensEffect`: the per-tap nearer-object test compares raw depth against `0.8 × lin` mapped back to depth
+  once per pixel (linearDepth is monotonic), and the golden-angle disc direction is rotated by a constant matrix
+  instead of computing sin/cos for every tap. Same taps, same weights.
+- `PostFX`: the flock crossfade `EffectPass` is disabled whenever its shader would pass the input through
+  (`mixFactor <= 0` or real-time-detection progress >= .15).
+- `Clouds`: fragments whose alpha bound (`cloud × 0.875 × uFade × 0.3 − uIndex × 0.01`) is <= 0 are discarded
+  before the second fbm. The 8-bit composer target clamps alpha to 0 there, so nothing is drawn either way.
+- Checked side by side against the previous build at the hero, Airframe, flock crossfade and Route frames: no
+  visible change.
+- Remaining cost (not changed, it would change the look): the full-screen chain (scene → lens → SMAA ×3 → grade
+  → canvas) is about 5 ms of fixed fill at this size. The two cloud layers cost about 1.5–2.5 ms. JS runs at
+  1.6–3.1 ms per frame.
+- `AdaptiveDpr` in `FixedContainer` has no effect: nothing calls `regress()`, and there is no `PerformanceMonitor`.
+
 ## Raven story and content rewrite (Phase 1, copy only, 2026-10-30)
 
 - Rewrote every visible string around one illustrative delivery, from a regional health centre to a hill clinic. Brief: `RAVEN_STORY_CONTENT_PROMPT.md`; full inventory: `RAVEN_CONTENT_MAP.md`.

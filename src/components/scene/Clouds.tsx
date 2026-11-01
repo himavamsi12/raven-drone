@@ -81,6 +81,9 @@ void main() {
   pos.z += uTime * uCloudSpeed;
   float cloud = fbm(pos + uOffset);
   cloud = smoothstep(uCloudDensity - 0.2, uCloudDensity + 0.2, cloud);
+  // Perf (Raven): depth fbm <= 0.875 (octave amplitudes), so alpha <= cloud * 0.875 * uFade * 0.3 - uIndex * 0.01.
+  // Where that bound is <= 0 the colour target (8-bit, clamps alpha to 0) is left untouched: skip the second fbm.
+  if (cloud * 0.875 * uFade * 0.3 <= uIndex * 0.01) discard;
   float depth = fbm(pos * 0.5 + vec3(0.0, (uTime + uOffset) * 0.02, 0.0));
   cloud *= depth;
   vec3 sunDir = normalize(uSunPosition);
