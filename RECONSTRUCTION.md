@@ -443,6 +443,24 @@ then "not this top-down view only ... directly show this view")
   landscape. Typecheck and build pass. Not checked: mobile widths, Support/multi-threat chapters, scrolling back up
   through the hand-back with wheel snapping. Not ported: the reference's pins, dashed routes and drag-to-turn.
 
+## Wipe into the landscape, second pass (user, 2026-11-03: "the extra during the diagonal transition is still coming")
+
+- Found by recording the wheel-driven wipe (agent-browser `record`, 30 fps contact sheets); the 3D frame was already
+  identical across the switch. The extras were the overlay layer: (1) pins and the altitude tag were DOM, so the
+  capture was bare and they popped in ~0.4 s after the cut; (2) the Route HUD lines flashed for a frame when the clip
+  came off; (3) village scan frames anchored just off screen were never counted as swept, and swept ones faded 500 ms.
+- Fixes: pins and altitude tag are WebGL now (`scene/ClayMarkers.tsx`: camera-facing, 1 unit = 1 CSS px, Geist Mono
+  via drei `Text`, font copied to `public/assets/3d-fonts/GeistMono-Regular.ttf`), so they are in the capture; the copy
+  and HUD layer stays clipped until phalanx .7 (`FixedContainer`); HUD lines leaving their section drop instantly;
+  `sweptByWipe` clamps the anchor to the screen, sweeps everything once the ratio reaches .995, and swept scan frames
+  skip their fade. Re-recorded: Route → wipe → landscape with pins, no flash, nothing lingers.
+- Bare Route frame mid-wipe (user screenshot, 2026-11-03): any viewport resize (or a dev hot reload) cleared the map
+  capture (CopyPass auto-resized with the composer) and the wipe overlay stayed off until the recapture ~13 frames
+  later, so the live Route showed with nothing on the swept side. The capture now has its own target (`CopyPass(target,
+  false)`), resized only when the next capture starts; the wipe shows whenever a capture exists (`captured`), and with
+  no capture at all while on the wipe the preroll starts after 2 frames instead of 10. Reproduced by resizing during a
+  wheel-driven wipe at 1990×1125 before the fix; after it, every recorded frame keeps the map; forward/back clean.
+
 ## Story ends at the Care teams landscape (user, 2026-11-03: Review, Support, Network "remove this sections completely")
 
 - Band 2 ends at the ridge village stop (Review .5): `storyMap.L2` = that point, `toStory` clamps there while the

@@ -19,6 +19,8 @@ export const ASSETS = {
   openingLand: "/assets/textures/environment/raven-opening-land.webp", // glb/raven-sky/01_opening_panorama.py (land)
   env: "/assets/textures/environment/env.exr",
   geistSemiBold: "/assets/3d-fonts/Geist-SemiBold.woff",
+  /** Geist Mono (OFL, from the `geist` package) for WebGL labels on the clay landscape (ClayFlight). */
+  geistMono: "/assets/3d-fonts/GeistMono-Regular.ttf",
 } as const;
 
 export const DRACO_PATH = "/draco/";

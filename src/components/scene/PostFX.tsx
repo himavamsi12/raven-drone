@@ -323,9 +323,11 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const [lensOn] = useState(() => typeof window === "undefined" || new URLSearchParams(window.location.search).get("lens") !== "off");
   const lensState = useRef({ prevVP: new THREE.Matrix4(), prevOffset: 0, step: 0, first: true, frame: 0, drone: null as THREE.Object3D | null });
   const pre = useRef<Preroll>({ state: "idle", frame: 0, saved: [], warm: 0 });
+  /** A capture of the Care teams map exists (survives resizes; replaced by each new preroll). */
+  const captured = useRef(false);
   const lastSide = useRef(0);
   const mixWarm = useRef(3);
-  const [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] = useMemo(() => {
+  const [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] = useMemo(() => {
     const composer = new EffectComposer(gl, { multisampling: 0 });
     const final = new FinalEffect();
     const mix = new RenderTargetMixEffect(flockTarget);
@@ -341,7 +343,16 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     composer.addPass(new EffectPass(camera, new SMAAEffect()));
     // Raven band 1 → band 2: the Care teams map is captured here once (off screen, no swap), then laid over the live
     // Route on the swept side; both before the grade, so grain and vignette stay live across the edge.
-    const capturePass = new CopyPass();
+    // Own-size capture target (autoResize off): a resize must not clear the map the wipe is showing. It keeps the
+    // previous capture (stretched) until the new one is taken (user, 2026-11-03: a live Route frame showed mid-wipe
+    // after a resize, while the old code waited ~13 frames for the recapture with the wipe overlay switched off).
+    const captureTarget = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: false,
+      stencilBuffer: false,
+    });
+    const capturePass = new CopyPass(captureTarget, false);
     const wipe = new DiagonalWipeEffect(capturePass.texture);
     const wipePass = new EffectPass(camera, wipe);
     capturePass.enabled = false;
@@ -350,7 +361,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     composer.addPass(wipePass);
     const finalPass = new EffectPass(camera, final);
     composer.addPass(finalPass);
-    return [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] as const;
+    return [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] as const;
   }, [gl, scene, camera, flockTarget]);
 
   useEffect(() => {
@@ -358,7 +369,13 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     // The capture target was resized (cleared) and the camera track may have switched (mobile/desktop): re-render.
     if (pre.current.state === "done") pre.current = { state: "idle", frame: 0, saved: [], warm: 0 };
   }, [composer, size]);
-  useEffect(() => () => composer.dispose(), [composer]);
+  useEffect(
+    () => () => {
+      composer.dispose();
+      captureTarget.dispose(); // not owned by the composer (own size)
+    },
+    [composer, captureTarget],
+  );
   useEffect(() => {
     const k = size.height / Math.sqrt(size.width * size.width + size.height * size.height);
     aspect.current.set((size.width / size.height) * k, k);
@@ -380,14 +397,19 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
         storyMap.preroll = false;
         lensState.current.first = true;
         p.state = "done";
+        captured.current = true;
       }
       return;
     }
     runFrame(state, dt, { capture: false, offscreen: false });
     // Start the map render once the scene has rendered a few frames and the layout is measured (behind the loader on
     // a normal load; on resize it costs a few frames of a held picture).
-    if (p.state === "idle" && storyMap.W > 0 && ++p.warm > 10) {
+    // Without any capture yet (first load, or a remount) and the wipe on screen, capture at once.
+    const urgent = !captured.current && wipeProgress(window.scrollY) > 0;
+    if (p.state === "idle" && storyMap.W > 0 && (++p.warm > 10 || (urgent && p.warm > 1))) {
       const vh = storyMap.vh || window.innerHeight;
+      // Size the capture to the drawing buffer now (this clears it; nothing is shown until the capture frame).
+      captureTarget.setSize(composer.inputBuffer.width, composer.inputBuffer.height);
       storyMap.preroll = true;
       p.saved = enterSilently(sceneDataAt(mapStory(), computeSceneRanges(vh), vh));
       p.frame = 0;
@@ -432,7 +454,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     lastSide.current = side;
     capturePass.enabled = o.capture;
     finalPass.enabled = !o.offscreen;
-    wipePass.enabled = !o.offscreen && side === 1 && pre.current.state === "done";
+    wipePass.enabled = !o.offscreen && side === 1 && captured.current;
     wipe.u("uRatio").value = wipeRatioAt(page);
     wipe.u("uBorder").value = 2 / size.width; // shipped: uDpr / uResolution.x * 2 in drawing-buffer pixels
     gl.outputColorSpace = THREE.LinearSRGBColorSpace;

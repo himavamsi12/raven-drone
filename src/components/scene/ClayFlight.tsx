@@ -1,14 +1,14 @@
 "use client";
 
-import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { easeInOutCubic } from "@/lib/math";
 import { SCENE, scenes } from "@/lib/scenes";
-import { CLIMB_STOPS, storyMap } from "@/lib/story-map";
+import { CLIMB_STOPS } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CLAY, CLAY_CENTRE, clayHeight, clayState, type HeightField } from "./clay-map";
+import { AltitudeTag, Pin, type AltitudeState } from "./ClayMarkers";
 import { LowPolyDrone } from "./LowPolyDrone";
 
 /**
@@ -81,12 +81,8 @@ export function ClayFlight({ field }: { field: HeightField }) {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
-  const label = useRef<HTMLDivElement>(null);
-  const fill = useRef<HTMLDivElement>(null);
-  const text = useRef<HTMLSpanElement>(null);
-  const shown = useRef("");
   const pins = useRef<(THREE.Group | null)[]>([]);
-  const pinEls = useRef<(HTMLDivElement | null)[]>([]);
+  const altitude = useMemo<AltitudeState>(() => ({ climb: 0, dir: 1, status: "READY" }), []);
   const routeW = useRef(-1);
   const route = useMemo(() => {
     const geometry = new THREE.BufferGeometry();
@@ -149,13 +145,9 @@ export function ClayFlight({ field }: { field: HeightField }) {
     if (!g || !b) return;
     const w = clayState.weight;
     const analysis = scenes()[SCENE.ANALYSIS_EVALUATION].progress;
-    // The drone and route are in the wipe's map capture (preroll), so the cut shows them; the DOM label and pins
-    // cannot be captured and fade in once the live map takes over.
+    // Everything here is WebGL (ClayMarkers), so the wipe's map capture (preroll) holds the same frame as the live map.
     const visible = clayState.on && w > 0.5;
-    const domVisible = visible && !storyMap.preroll;
     g.visible = visible;
-    if (label.current) label.current.style.opacity = domVisible ? "1" : "0";
-    for (const el of pinEls.current) if (el) el.style.opacity = domVisible ? "1" : "0";
     if (!visible) return;
 
     // route: the whole flight path, re-sampled when the relief height changes
@@ -203,15 +195,17 @@ export function ClayFlight({ field }: { field: HeightField }) {
     const y0 = height(0, w);
     let yTop = y0;
     for (let i = 1; i < WAYPOINTS.length; i++) yTop = Math.max(yTop, height(i, w));
-    if (fill.current) fill.current.style.transform = `scaleY(${THREE.MathUtils.clamp((y - y0) / Math.max(yTop - y0, 1e-3), 0, 1).toFixed(3)})`;
+    altitude.climb = THREE.MathUtils.clamp((y - y0) / Math.max(yTop - y0, 1e-3), 0, 1);
     const slope = (pose(leg, Math.min(t + 0.02, 1), w, tmp.ahead).y - pose(leg, Math.max(t - 0.02, 0), w, tmp.prev).y) / 0.04;
-    let state: string;
-    if (leg === 0 && t <= 0) state = "▲ Ready";
-    else if (atStop) state = leg === WAYPOINTS.length - 2 && t >= 1 ? "— Holding above ridge village" : "— Holding above village";
-    else state = slope > LEVEL ? "▲ Climbing" : slope < -LEVEL ? "▼ Descending" : "— Level";
-    if (text.current && shown.current !== state) {
-      shown.current = state;
-      text.current.textContent = state;
+    if (leg === 0 && t <= 0) {
+      altitude.status = "READY";
+      altitude.dir = 1;
+    } else if (atStop) {
+      altitude.status = leg === WAYPOINTS.length - 2 && t >= 1 ? "HOLDING ABOVE RIDGE VILLAGE" : "HOLDING ABOVE VILLAGE";
+      altitude.dir = 0;
+    } else {
+      altitude.dir = slope > LEVEL ? 1 : slope < -LEVEL ? -1 : 0;
+      altitude.status = altitude.dir > 0 ? "CLIMBING" : altitude.dir < 0 ? "DESCENDING" : "LEVEL";
     }
   });
 
@@ -220,45 +214,14 @@ export function ClayFlight({ field }: { field: HeightField }) {
       <primitive object={route} />
       {WAYPOINTS.map((wp, i) => (
         <group key={wp.name} ref={(el) => void (pins.current[i] = el)}>
-          <Html transform={false} zIndexRange={[190, 200]} className="pointer-events-none">
-            <div
-              ref={(el) => void (pinEls.current[i] = el)}
-              className="flex -translate-x-1/2 -translate-y-full flex-col items-center opacity-0 transition-opacity duration-300"
-            >
-              <div className="relative flex size-9 items-center justify-center rounded-full border border-white/30 bg-[#161616]/90 text-white">
-                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" className="size-3.5" aria-hidden="true">
-                  <path d="M7 1.5v11M1.5 7h11" />
-                </svg>
-                <span className="text-d-mono absolute top-1/2 left-full ml-3 -translate-y-1/2 font-mono tracking-[0.12em] whitespace-nowrap text-white/70 uppercase">
-                  {wp.name}
-                </span>
-              </div>
-              <div className="w-px bg-white/50" style={{ height: wp.stem }} />
-            </div>
-          </Html>
+          <Pin name={wp.name} stem={wp.stem} />
         </group>
       ))}
       <group ref={body}>
         <group scale={SCALE}>
           <LowPolyDrone />
         </group>
-        <Html transform={false} zIndexRange={[200, 300]} className="pointer-events-none">
-          <div
-            ref={label}
-            className="text-d-mono flex translate-x-7 -translate-y-1/2 items-center gap-2 font-mono whitespace-nowrap uppercase opacity-0 transition-opacity duration-300"
-          >
-            {/* relative climb gauge: start height at the bottom, the village at the top */}
-            <div className="relative h-10 w-1.5 border border-white/40" aria-hidden="true">
-              <div ref={fill} className="absolute inset-0 origin-bottom scale-y-0 bg-white" />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="text-white/60">Altitude</span>
-              <span ref={text} className="text-white">
-                ▲ Ready
-              </span>
-            </div>
-          </div>
-        </Html>
+        <AltitudeTag state={altitude} />
       </group>
     </group>
   );

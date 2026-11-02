@@ -69,7 +69,10 @@ export function FixedContainer() {
       // Diagonal transition: Route copy and HUD are swept by the same edge as the frame (PostFX DiagonalWipeEffect).
       const page = lenis?.actualScroll ?? window.scrollY;
       const t = wipeProgress(page);
-      if (overlay.current) overlay.current.style.clipPath = t > 0 && t < 1 ? wipeClipPath(wipeRatioAt(page)) : "";
+      // After the wipe the layer stays fully clipped for a short stretch (Care teams copy and HUD start later, at
+      // phalanx .75): unclipping right at the switch showed the Route HUD for the frame before React swapped it.
+      const settling = t >= 1 && page < storyMap.X + 1.4 * storyMap.W;
+      if (overlay.current) overlay.current.style.clipPath = settling ? wipeClipPath(1) : t > 0 && t < 1 ? wipeClipPath(wipeRatioAt(page)) : "";
     };
     const onResize = () => {
       measureStoryMap();

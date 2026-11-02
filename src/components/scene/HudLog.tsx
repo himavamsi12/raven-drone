@@ -86,7 +86,9 @@ export function HudLog() {
               <motion.p
                 key={i}
                 animate={{ opacity }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
+                // Lines of the other section leave at once: at the end of the diagonal wipe the clip comes off as the
+                // story jumps from Route to Care teams, and a fade let the Route lines flash back (user, 2026-11-03).
+                transition={{ duration: inSection ? 0.25 : 0, ease: "easeOut" }}
                 className="text-d-mono relative origin-center font-mono whitespace-nowrap uppercase"
                 style={{ height: 16 }}
               >

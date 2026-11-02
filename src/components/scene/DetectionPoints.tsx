@@ -7,6 +7,19 @@ import * as THREE from "three";
 import { useShallow } from "zustand/react/shallow";
 import { SCENE, useScenes } from "@/lib/scenes";
 import { wipeNow, wipeX } from "@/lib/story-map";
+
+/**
+ * A label goes with the ground under it when the diagonal wipe sweeps past. The anchor is clamped to the screen: a
+ * label anchored just off screen (its box still visible) was never counted as swept and stayed after the cut (user,
+ * 2026-11-03). Once the wipe has covered the frame every label is swept.
+ */
+function sweptByWipe(ndc: { x: number; y: number }) {
+  const ratio = wipeNow();
+  if (ratio >= 0.995) return true;
+  const u = Math.min(Math.max((ndc.x + 1) / 2, 0), 1);
+  const v = Math.min(Math.max((ndc.y + 1) / 2, 0), 1);
+  return wipeX(u, v) < ratio;
+}
 import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
@@ -80,8 +93,7 @@ function DetectionBox({ position, label, show }: { position: [number, number, nu
     }
     anchor.current.getWorldPosition(projected);
     projected.project(camera);
-    // Raven: a label goes with the ground under it when the diagonal wipe sweeps past (story-map wipeX).
-    const swept = wipeX((projected.x + 1) / 2, (projected.y + 1) / 2) < wipeNow();
+    const swept = sweptByWipe(projected);
     const visible = show && !swept && (Math.abs(projected.x) > zone.x || Math.abs(projected.y) > zone.y);
     const dx = projected.x - last.current.x;
     const dy = projected.y - last.current.y;
@@ -159,7 +171,7 @@ function VillageScan({ settlement, show, index }: { settlement: (typeof SETTLEME
     if (!a || !w || !f) return;
     a.getWorldPosition(projected);
     projected.project(camera);
-    const swept = wipeX((projected.x + 1) / 2, (projected.y + 1) / 2) < wipeNow();
+    const swept = sweptByWipe(projected);
     let visible = show && projected.z < 1 && !swept && (Math.abs(projected.x) > zone.x || Math.abs(projected.y) > zone.y);
     if (visible) {
       // Screen rectangle of the footprint box (ground to roof height), placed relative to the anchor's point.
@@ -185,6 +197,8 @@ function VillageScan({ settlement, show, index }: { settlement: (typeof SETTLEME
     }
     const op = visible ? "1" : "0";
     if (opacity.current !== op) {
+      // Swept by the diagonal wipe: leave at once, as the ground under it does (the 500 ms fade trailed the cut).
+      w.style.transitionDuration = swept ? "0s" : "";
       w.style.opacity = op;
       opacity.current = op;
     }
