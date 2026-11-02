@@ -823,6 +823,107 @@ Draco decoder is served locally from `public/draco/`; nothing is hotlinked.
 Hot paths use refs and uniforms. Per-frame React state is avoided except where the source does the same
 (threshold booleans via zustand selectors). One Lenis instance drives every progress value.
 
+## Mountain terrain, phases 0-2 (user, 2026-11-03: "terrain looks like a valley ... form mountains like" everest.suraj.work)
+
+- Opt-in `?terrain=mountain`; default page unchanged (MountainMaterial and the lens's far rule are only created/enabled
+  in that mode). Plan: `RAVEN_MOUNTAIN_TERRAIN_PLAN.md` (decisions D1-D6 taken as the recommended defaults: corridor
+  kept low, procedural textures, clay map and city tile untouched).
+- Phase 0, height budget (`?probe=terrain`, 163 samples over band 1 at 1440x900): drone 1 at map y 2.50 throughout,
+  flank drones ~3.05 at x -9.4 / +11.1, camera never below 2.13 (opening low shot), chapters look 31-40 deg down and
+  see x ~ -8..+8. Old ground peaks at map 0.69. Corridor ground now capped at local ~34 (map 1.36).
+- Phases 1-2: see AGENTS.md "Mountain terrain". Checked in agent-browser (headless Chrome, Metal): opening, hero 2701,
+  Connection 11701, Route 20500, mid-wipe 23000 (clay landscape reveal unchanged), 390x844 hero; 60 fps in the
+  opening, hero and Route on an M3 for both the mountain and the current terrain (vsync-capped, so not a cost
+  comparison); typecheck and build pass.
+- Not checked: seams under a grazing light at every tile join (none seen in the captures), reverse scrolling through
+  every chapter, a slower GPU. Known gaps: houses and village terraces repeat on every tile; cast shadows use the
+  unlifted heights; forest is still the baked canopy (no instanced trees yet).
+
+## Mountain terrain: Everest texture and roughness (user, 2026-11-03, reference frame of the Everest site)
+
+- Relief: 7 octaves (finest cell ~2 grid samples) and periodic droplet erosion (0.3 droplets per sample, 36 steps,
+  brush radius 2) carve gullies and spurs; horizon lift lowered 4 -> 2.5 (the 5x lift had turned fine ridges into
+  needles). Shading: rock relief + micro normal maps (procedural 256^2, `getMountainDetailTextures`), triplanar,
+  distance-faded; palette moved to grey-brown with little green; snowline 15, streaks on steep faces, shaded snow
+  blue-grey; sun 1.75 / sky 0.32-0.58 for more contrast; 0.8 saturation.
+- Cost: erosion doubled the build, so the maths moved to a worker (1.6 s on `next start`, 3.3 s in dev; main thread
+  free; same output as the inline path, compared by the height stats). Captured at 1440x900: opening, hero 2701,
+  Route 20500. Typecheck and build pass.
+
+## Far ranges and mountain default (user, 2026-11-03: "fix this far away mountain ranges", then "host this site in this link")
+
+- The opening's far mountains were OpeningSky's two flat ridge-silhouette rings (sine-harmonic profile; the cone on
+  the left) and the Blender land panorama: smooth blue cut-outs next to the eroded terrain. In mountain mode both are
+  replaced by `MountainRanges` (3D, depth-writing, drawn before the tiles). First pass was needle-spiky and uniform
+  (frequency 1/38, ridged^1.25): now 1/80, ridged^1.5, massif modulation 0.25-1.35, calm foothills. A comb of stripes
+  along the range foot (seen with `?lens=off` too) was the farthest opening tiles' fogged jagged skyline against the
+  ranges' darker foot: valley haze now ramps up to y ~22, so that skyline melts into the same sky colour.
+- Mountain terrain is the homepage default; `?terrain=v09` keeps the old look. Typecheck and build pass; checked at
+  1440x900: opening (plain URL), hero.
+
+## Mountain sky (user, 2026-11-03, Everest site frames: "make the sky bright and blue", "make them move")
+
+- Mountain mode uses its own sky dome shader (`mountainSkyFragment` in OpeningSky): pale SKY_COLOR horizon (same as the
+  terrain fog and far-range haze), mid `#5f8fca`, zenith `#2a5c9e`; domain-warped billow cumulus on a gently curved
+  projection (a flat plane stretched the low sky into streaks), self-shadowed toward the sun, grey bases, thinning
+  into the horizon haze. Motion: wind drift ~1 cloud width / 40 s with a slow veer, the warp field evolving (heaps
+  grow and thin), fine billows faster than the masses; held still under reduced motion. `?terrain=v09` keeps the old
+  sky. Checked: two captures 10 s apart (drift + reshaping); build passes.
+
+## Mountain clarity (user, 2026-11-03: "increase the clarity of the landscape, currently it feels low quality")
+
+- Cause measured with `?lens=off` at 1440x900, same frame: the lens (DoF 5 px on all far ground, 60 px in top views;
+  travel streak x1.5, cap 9 px) was the main softening; daylight grain 0.25 added noise; the shipped sharpen kernel
+  offset (14e-5 uv, ~0.2 px) had no visible effect.
+- Mountain mode only (`MOUNTAIN_CLARITY` in PostFX; v09 keeps the user-tuned values): DoF 1.5 px base / 26 px top
+  views (still drone-focused), streak x0.9 cap 5 px, grain 0.1 (hero 0.04), a real 1 px sharpen at 0.18 (0.35 drew
+  halos round the drone and copy). Detail maps 512^2 (were 256), anisotropy 8, stronger micro relief; generated in the
+  worker with the heights (395 ms on the main thread otherwise) and shared through `mountainDetailUniforms`.
+- Side effect fixed: the ground now sits close under the drone, so the drone-shadow map stretched into a streaky
+  ghost on steep faces (Route); in MountainMaterial the shadow fades on steep slopes (n.y 0.55-0.85).
+- Checked: hero 1500/2701 and Route 20500 crops before/after; build passes.
+
+## Mountain shadows (user, 2026-11-03: "increase the shadows like the Everest site terrain, more dramatic")
+
+- Terrain sun lowered 30 -> 17 deg (same azimuth as SUN_POSITION, so drone light and terrain still agree); cast
+  shadows ray-marched to 260 local units (was 150) and take 94% of direct light (was 80%): shadowed ground 13% -> 34%.
+  Warm sun (1, .9, .74) x2.45, low cool fill (.48, .56, .74) x0.2-0.4: lit faces tan, shaded faces blue-grey. Far
+  ranges get the same light.
+- The sharper ground exposed the drone-shadow map's low-res silhouette (legs, rotor discs) as a striped ghost on gentle
+  ground too: MountainMaterial samples it with its own wider, three-ring soft kernel (`mountainDroneShadow`, 3x the
+  penumbra). Checked: opening, hero 2701, Route 20500; build passes.
+
+## Mountain terrain at load (user, 2026-11-03: "while starting the site the old terrain is coming and can be seen")
+
+- Cause: the loader only waited for the scene's first frame (`mainAppLoaded`) and the image sequence; the mountain
+  slices arrive ~1.5-2 s later from the worker, so the reveal showed the baked Raven tiles first and then swapped.
+- Fix: `terrainReady` in `lib/loading.ts` (default true). Mountain mode sets it false when the build starts and true
+  two frames after the slices are set (tiles swapped, MountainMaterial compiled behind the loader); a failed build
+  releases it too (Raven tiles stay), and the loader's 20 s degraded fallback still applies.
+- Build speed: erosion loop allocation-free with compare-wrapped indices, shadow-march offsets precomputed: dev
+  1.70 -> 1.41 s CPU in the worker, same output (shadowed share 0.3419 -> 0.3417, same extremes).
+- Checked: boot captured every 0.7 s from navigation (blank, loader, loader, then the mountain frame; no Raven-tile
+  frame); build passes.
+
+## Drone clarity, hero size, rotor speed, frame budget (user, 2026-11-03)
+
+- Requests: "increase the clarity of the drone and its size in the hero", "no pixelation should happen with the
+  drone", "increase the speed of the rotors".
+- Drone: anisotropy 8 on every map (GLTFLoader left 1: decals and panels shimmered at the oblique hero angle);
+  `HERO_SCALE` 1.25 through the opening and hero frame, eased out over DELTA_DRONE 0-0.2; rotor-blur sweep 13 -> 26
+  rad/s (0.43 rad/frame at 60 Hz, under half the two-blade period, so no strobing) with a longer tail (exp -2.4).
+- Pixelation: the canvas was capped at DPR 1.5 (Retina upscaled) and drei AdaptiveDpr ran in `pixelated` mode
+  (nearest-neighbour upscale whenever it adapted down). Now an adaptive DPR: start min(1.5, device), up to native 2
+  while the GPU holds the refresh rate, back to the start value otherwise.
+- Frame budget, measured headless (Metal, M3) on `next start`, 1440x900, 4 s per frame position, two runs:
+  MSAA 4x was tried and removed (8-20 fps with the depth-reading lens). The mountain terrain itself was 26-45 fps in
+  the opening/Connection vs 60 for v09; with `?lens=off` it held 60, i.e. the lens + mountain shader overran 16.7 ms
+  together. Fixes: lens 12 taps in mountain mode (blur is small now), far rule off (the far ranges' band cost ~15 fps
+  for a 1.5 px DoF), sub-1 px blur skipped (`uMinBlur` 1.0); terrain shader ~30 -> ~21 texture reads; slice meshes
+  frustum-culled (bounds include the horizon lift); the sky's cloud self-shadow reuses the warp (2 of 5 fBm saved).
+  Result: 60 fps at every measured position at 1x, 58-60 at 2x (v09: 60).
+- Not checked: a slower GPU, Safari, phone hardware.
+
 ## Verification done
 
 - `tsc --noEmit` and `next build` pass.

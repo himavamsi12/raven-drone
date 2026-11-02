@@ -15,8 +15,12 @@ import { sunlight } from "./sunlight";
  *  - the painted yellow tips leave a faint ring.
  */
 const BLADE_MATERIAL = /^PROP_/;
-/** Visible sweep of the blade images (rad/s). Real rpm is far above what 60 Hz can show. */
-const IMAGE_SPEED = 13;
+/**
+ * Visible sweep of the blade images (rad/s). Real rpm is far above what 60 Hz can show. 26 since 2026-11-03 (user:
+ * "increase the speed of the rotors"; was 13): 0.43 rad per frame at 60 Hz, under half the two-blade period (PI), so
+ * the sweep never strobes or appears to run backwards.
+ */
+const IMAGE_SPEED = 26;
 const _box = new THREE.Box3();
 const _inverse = new THREE.Matrix4();
 const _local = new THREE.Matrix4();
@@ -63,7 +67,8 @@ void main() {
   float ang = atan(-vDisc.y, vDisc.x) * uDirection;
   float sweep = uTime * ${IMAGE_SPEED.toFixed(1)} * uSpeed + uPhase;
   float lead = mod(sweep - ang, PI); // 0 at a blade, grows behind it (two blades: period PI)
-  float image = exp(-lead * 3.4) * band(0.0, 0.05, lead) + exp(-(PI - lead) * 16.0); // crisp front, long tail
+  // Crisp front, long tail; the tail is longer at the faster sweep (2.4, was 3.4) so the speed reads as motion blur.
+  float image = exp(-lead * 2.4) * band(0.0, 0.05, lead) + exp(-(PI - lead) * 16.0);
   float presence = clamp(image, 0.0, 1.0);
 
   // Sun flash. A twisted, cambered blade offers surface normals tilted 0.15-0.75 rad against its travel somewhere

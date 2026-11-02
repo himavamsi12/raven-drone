@@ -11,6 +11,11 @@ type LoadingStore = {
   loadingCanvasIsHiding: boolean;
   mainAppLoaded: boolean;
   imageSequenceLoaded: boolean;
+  /**
+   * Raven mountain terrain: false while its slices are built (worker), so the loader never reveals the old Raven tiles
+   * first (user 2026-11-03: "the old terrain is coming and can be seen, then the tundra terrain"). True otherwise.
+   */
+  terrainReady: boolean;
   degraded: boolean;
   setCanRemoveLoading: () => void;
   setMainAppLoaded: (v: boolean) => void;
@@ -23,6 +28,7 @@ export const useLoading = create<LoadingStore>()((set) => ({
   loadingCanvasIsHiding: false,
   mainAppLoaded: false,
   imageSequenceLoaded: false,
+  terrainReady: true,
   degraded: false,
   setCanRemoveLoading: () => set({ loadingCanvasIsHiding: true }),
   setMainAppLoaded: (v) => set({ mainAppLoaded: v }),

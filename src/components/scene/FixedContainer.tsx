@@ -1,9 +1,9 @@
 "use client";
 
-import { AdaptiveDpr, KeyboardControls, type KeyboardControlsEntry } from "@react-three/drei";
+import { KeyboardControls, PerformanceMonitor, type KeyboardControlsEntry } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useLenis } from "lenis/react";
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useLoading } from "@/lib/loading";
 import { remap } from "@/lib/math";
@@ -19,9 +19,25 @@ const KEYS: KeyboardControlsEntry<string>[] = [
   { name: "shift", keys: ["ShiftLeft"] },
 ];
 
+/**
+ * Adaptive pixel ratio (user 2026-11-03: "no pixelation should happen with the drone, it should be immersive"):
+ * starts at the previous fixed cap (1.5, or the screen's own density if lower), climbs to native (up to 2) while the
+ * GPU holds the refresh rate, and falls back to the start value, never below it; settles after 3 flip-flops.
+ * Replaces drei AdaptiveDpr, whose `pixelated` mode upscaled with hard nearest-neighbour pixels when it adapted down.
+ */
+function useAdaptiveDpr() {
+  const [range] = useState(() => {
+    const device = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+    return { base: Math.min(1.5, device), max: Math.min(2, device) };
+  });
+  const [dpr, setDpr] = useState(range.base);
+  return { dpr, up: () => setDpr(range.max), down: () => setDpr(range.base) };
+}
+
 /** WebGL canvas shown once the loader has the boot splash up (shipped `t8`). */
 function SceneCanvas() {
   const loaded = useLoading((s) => s.loadingCanvasLoaded);
+  const adaptive = useAdaptiveDpr();
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   if (!loaded) return null;
   return (
@@ -30,12 +46,12 @@ function SceneCanvas() {
     <div className={hiding ? "absolute inset-0 touch-auto!" : "invisible absolute inset-0 touch-auto!"}>
       <Canvas
         camera={{ position: [0, 5, 0], fov: 60 }}
-        dpr={[1, 1.5]}
+        dpr={adaptive.dpr}
         shadows="soft" // drone self-shadowing only (sun shadow camera is fitted to the hero drone in MainScene)
         gl={{ powerPreference: "high-performance", antialias: false, stencil: false, depth: false, outputColorSpace: THREE.SRGBColorSpace }}
         onCreated={({ gl }) => gl.setClearColor(0x000000, 1)}
       >
-        <AdaptiveDpr pixelated />
+        <PerformanceMonitor flipflops={3} onIncline={adaptive.up} onDecline={adaptive.down} onFallback={adaptive.down} />
         <KeyboardControls map={KEYS}>
           <Suspense fallback={null}>
             <MainScene />

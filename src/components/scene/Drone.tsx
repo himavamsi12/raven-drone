@@ -40,6 +40,10 @@ type LiveMaterial = { material: THREE.MeshStandardMaterial; coat: number; glints
  * Raven adapter: only the visual child changes; shipped flight/camera trackers stay intact.
  * `still` parks the rotors and shows the real blades (studio close-ups), as reduced motion does.
  */
+const DRONE_MAP_KEYS = ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap", "clearcoatNormalMap"];
+/** 8 is the widely supported maximum (three clamps to the GPU limit). */
+const DRONE_ANISOTROPY = 8;
+
 export function RavenModel({
   envMap,
   span = 200,
@@ -70,6 +74,16 @@ export function RavenModel({
       child.castShadow = child.receiveShadow = true;
       const copy = (source: THREE.Material) => {
         const material = source.clone();
+        // Anisotropic filtering on every map (GLTFLoader leaves 1): the oblique hero/tilt views minified the decals and
+        // panel maps into shimmer (user 2026-11-03: "no pixelation should happen with the drone"). Textures are shared
+        // between clones, so this only re-uploads them once.
+        for (const key of DRONE_MAP_KEYS) {
+          const tex = (material as unknown as Record<string, THREE.Texture | null | undefined>)[key];
+          if (tex && tex.anisotropy !== DRONE_ANISOTROPY) {
+            tex.anisotropy = DRONE_ANISOTROPY;
+            tex.needsUpdate = true;
+          }
+        }
         if (material instanceof THREE.MeshStandardMaterial && envMap) {
           material.envMap = envMap;
           material.envMapIntensity = ENV_INTENSITY;

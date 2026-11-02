@@ -12,6 +12,8 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { clayState } from "./clay-map";
 import { fisheyeAt } from "./opening";
 import { TerrainLensEffect } from "./TerrainLensEffect";
+import { mountainTerrainEnabled } from "./mountain-terrain";
+import { terrainVariant } from "./raven-terrain";
 import { DAYLIGHT, HERO_LIGHT, heroLight } from "./hero-light";
 import { cameraTilt } from "./camera-tilt";
 
@@ -310,6 +312,20 @@ const _camDir = new THREE.Vector3();
 const topViewState = { value: 0 };
 /** Top of the terrain band in world Y (parent -2.5 + 0.04 x highest roof ~20 local = -1.7); drones fly above. */
 const TERRAIN_TOP = -1.55;
+/**
+ * Mountain terrain (`?terrain=mountain`): the corridor ground reaches local ~34 (world -1.14) and the lifted peaks
+ * away from the flight path rise above the drones, so the band is raised to just under the drones (world 0) and
+ * anything beyond 1.8x the focus distance counts as terrain at any height (the drones sit at the focus distance).
+ */
+const MOUNTAIN_TERRAIN_TOP = -0.4;
+const MOUNTAIN_TERRAIN_FAR = 1.8;
+/**
+ * Mountain terrain clarity (user, 2026-11-03: "increase the clarity of the landscape, currently it feels low quality").
+ * Measured with `?lens=off`: the lens's depth of field (5 px on all far ground, 60 in top views) and travel streaks were
+ * the main softening; the 0.25 daylight grain and a sharpen whose kernel offset was ~0.2 px (no visible effect) added
+ * noise without crispness. The v09 tiles keep the values above.
+ */
+const MOUNTAIN_CLARITY = { cocBase: 1.5, cocTop: 26, speedGain: 0.9, maxBlurPx: 5, grain: 0.1, heroGrain: 0.04, sharpen: 0.18 };
 const _vp = new THREE.Matrix4();
 const _drone = new THREE.Vector3();
 const _eye = new THREE.Vector3();
@@ -321,6 +337,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   // `?lens=off` disables the Raven lens pass (comparison).
   const [lensOn] = useState(() => typeof window === "undefined" || new URLSearchParams(window.location.search).get("lens") !== "off");
+  const [mountainLens] = useState(() => terrainVariant() === "raven" && mountainTerrainEnabled());
   const lensState = useRef({ prevVP: new THREE.Matrix4(), prevOffset: 0, step: 0, first: true, frame: 0, drone: null as THREE.Object3D | null });
   const pre = useRef<Preroll>({ state: "idle", frame: 0, saved: [], warm: 0 });
   /** A capture of the Care teams map exists (survives resizes; replaced by each new preroll). */
@@ -328,6 +345,8 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const lastSide = useRef(0);
   const mixWarm = useRef(3);
   const [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] = useMemo(() => {
+    // No MSAA: tried 4x (2026-11-03) for the drone's edges; with the depth-reading lens it cost ~3x the frame (8-20 fps
+    // headless at 1x). Edges use SMAA plus the adaptive pixel ratio (FixedContainer).
     const composer = new EffectComposer(gl, { multisampling: 0 });
     const final = new FinalEffect();
     const mix = new RenderTargetMixEffect(flockTarget);
@@ -438,8 +457,15 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     final.u("uTime").value = state.clock.getElapsedTime();
     // Hero preset (hero-light.ts): grain and sharpen from the user's panel in the hero, shipped values after.
     const h = heroLight.weight;
-    final.u("uGrainAmount").value = DAYLIGHT.grain + (HERO_LIGHT.post.grain - DAYLIGHT.grain) * h;
-    final.u("uSharpenOpacity").value = DAYLIGHT.sharpen + (HERO_LIGHT.post.sharpen - DAYLIGHT.sharpen) * h;
+    if (mountainLens) {
+      // A real 1 px unsharp kernel (in drawing-buffer pixels) at a fixed strength; light grain.
+      final.u("uGrainAmount").value = MOUNTAIN_CLARITY.grain + (MOUNTAIN_CLARITY.heroGrain - MOUNTAIN_CLARITY.grain) * h;
+      final.u("uSharpenOpacity").value = MOUNTAIN_CLARITY.sharpen;
+      final.u("uSharpenKernelOffset").value = 1 / Math.max(size.width * gl.getPixelRatio(), 1);
+    } else {
+      final.u("uGrainAmount").value = DAYLIGHT.grain + (HERO_LIGHT.post.grain - DAYLIGHT.grain) * h;
+      final.u("uSharpenOpacity").value = DAYLIGHT.sharpen + (HERO_LIGHT.post.sharpen - DAYLIGHT.sharpen) * h;
+    }
     final.u("uOpacity").value = remap(multi.hideRatio, 0, 0.25, 1, 0);
     updateLens(state.camera, dt);
     const barrel = fisheyeAt(openingNow());
@@ -498,7 +524,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     // Streak = per-frame screen motion scaled to the exposure: velocity x shutter time.
     lens.u("uShutter").value = dt > 0 ? Math.min(SHUTTER_S / dt, 4) : 0;
     lens.u("uMotion").value = reducedMotion || !lensOn ? 0 : 1;
-    lens.u("uSpeedGain").value = SPEED_GAIN;
+    lens.u("uSpeedGain").value = mountainLens ? MOUNTAIN_CLARITY.speedGain : SPEED_GAIN;
     lens.u("uFocus").value = focus;
     pc.getWorldDirection(_camDir);
     // Top views, and the overhead chapters now shown obliquely (camera-tilt.ts).
@@ -507,10 +533,19 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     const topView = topViewState.value;
     // Raven clay map (clay-map.ts): a sharp model, no depth of field (its contours and dots are the content).
     const dof = lensOn && !clayState.on;
-    lens.u("uCocInf").value = dof ? COC_INF_PX_BASE + (COC_INF_PX - COC_INF_PX_BASE) * topView : 0;
-    lens.u("uMaxBlurPx").value = MAX_BLUR_PX * ((size.height * ratio) / 1080);
+    const [cocBase, cocTop] = mountainLens ? [MOUNTAIN_CLARITY.cocBase, MOUNTAIN_CLARITY.cocTop] : [COC_INF_PX_BASE, COC_INF_PX];
+    lens.u("uCocInf").value = dof ? cocBase + (cocTop - cocBase) * topView : 0;
+    lens.u("uMaxBlurPx").value = (mountainLens ? MOUNTAIN_CLARITY.maxBlurPx : MAX_BLUR_PX) * ((size.height * ratio) / 1080);
     lens.u("uMaxCocPx").value = MAX_COC_PX * ((size.height * ratio) / 1080);
-    lens.u("uTerrainTop").value = TERRAIN_TOP;
+    lens.u("uTerrainTop").value = mountainLens ? MOUNTAIN_TERRAIN_TOP : TERRAIN_TOP;
+    // Far rule off (perf, 2026-11-03): with the mountain's 1.5 px DoF the far ranges gain nothing visible from the lens,
+    // and processing that whole band cost the opening ~15 fps. Kept for reference: MOUNTAIN_TERRAIN_FAR.
+    lens.u("uTerrainFar").value = 0;
+    void MOUNTAIN_TERRAIN_FAR;
+    lens.u("uMinBlur").value = mountainLens ? 1.0 : 0.5;
     lens.u("uFrame").value = st.frame = (st.frame + 1) % 997;
+    // Mountain terrain: its small blur (1.5 px DoF base, 5 px streak cap) needs half the taps; with the heavier
+    // mountain ground shader, 24 taps pushed the frame past 16.7 ms (26-38 fps measured, 60 with the lens off).
+    lens.u("uTaps").value = mountainLens ? 12 : 24;
   }
 }

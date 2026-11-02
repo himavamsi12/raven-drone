@@ -37,6 +37,9 @@ uniform float uFocus;
 uniform float uCocInf;
 uniform float uMaxBlurPx;
 uniform float uTerrainTop;
+uniform float uTerrainFar; // > 0: points this far from the camera count as terrain at any height (mountain peaks)
+uniform int uTaps;         // <= TAPS (mountain terrain: 12)
+uniform float uMinBlur;    // px: below this (streak and disc) the pixel is left as is (0.5; mountain terrain 1.0)
 uniform float uFrame;
 
 float linearDepth(float d) {
@@ -51,6 +54,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   view /= view.w;
   vec3 world = (uCamWorld * vec4(view.xyz, 1.0)).xyz;
   float terrain = 1.0 - smoothstep(uTerrainTop - 0.08, uTerrainTop + 0.08, world.y);
+  if (uTerrainFar > 0.0) terrain = max(terrain, smoothstep(uTerrainFar, uTerrainFar * 1.2, length(view.xyz)));
   if (terrain <= 0.0) return;
 
   // Motion: where was this ground point last frame? (terrain slid -Z by uTerrainStep)
@@ -65,7 +69,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   // Depth of field (thin lens), in pixels.
   float dist = length(view.xyz);
   float coc = min(uCocInf * uPxScale * abs(1.0 - uFocus / dist), uMaxCocPx);
-  if (length(vel / uTexel) < 0.5 && coc < 0.5) return;
+  if (length(vel / uTexel) < uMinBlur && coc < uMinBlur) return;
 
   // Nearer-object test (drone: never smear it into the ground) is linearDepth(tap) < 0.8 * lin. linearDepth is
   // monotonic in depth, so it is done on raw depth against that threshold mapped back once (perf: no per-tap divide).
@@ -81,10 +85,12 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   vec2 dir = vec2(cos(a0), sin(a0));
   mat2 STEP = mat2(cos(GOLDEN), sin(GOLDEN), -sin(GOLDEN), cos(GOLDEN));
   vec2 discPx = coc * 0.5 * uTexel;
+  float taps = float(uTaps);
   for (int i = 0; i < TAPS; i++) {
+    if (i >= uTaps) break;
     float fi = float(i) + jitter;
-    float t = fi / float(TAPS) - 0.5;
-    float r = sqrt(fi / float(TAPS));
+    float t = fi / taps - 0.5;
+    float r = sqrt(fi / taps);
     vec2 tapUv = uv + vel * t + dir * r * discPx;
     dir = STEP * dir;
     if (readDepth(tapUv) < nearDepth) continue;
@@ -113,6 +119,9 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
           ["uCocInf", new THREE.Uniform(0)],
           ["uMaxBlurPx", new THREE.Uniform(36)],
           ["uTerrainTop", new THREE.Uniform(-1.5)],
+          ["uTerrainFar", new THREE.Uniform(0)],
+          ["uTaps", new THREE.Uniform(24)],
+          ["uMinBlur", new THREE.Uniform(0.5)],
           ["uFrame", new THREE.Uniform(0)],
         ]),
       },

@@ -18,8 +18,11 @@ import { easeInOutCubic, remap, remapEased, wrap } from "@/lib/math";
 import { SCENE, scenes, type SceneId } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
 import { openingNow } from "@/lib/story-map";
+import { useLoading } from "@/lib/loading";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { MountainMaterial } from "./materials/MountainMaterial";
 import { TerrainMaterial } from "./materials/TerrainMaterial";
+import { buildMountainSlices, mountainSlice, mountainTerrainEnabled, type MountainSlices } from "./mountain-terrain";
 import { getNoiseTexture } from "./textures";
 import { openingEase } from "./opening";
 import { useOpeningPanorama } from "./OpeningSky";
@@ -27,6 +30,7 @@ import { DetectionPoints } from "./DetectionPoints";
 import { RAVEN_DETECTION_Y, RAVEN_TILE_MAPS, ravenTileVariant, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
 import { clayOn, clayState } from "./clay-map";
+import { TerrainProbe, probeEnabled } from "./TerrainProbe";
 
 /** Distance between tile origins (shipped `X`). */
 export const TILE_STEP = 2 * TERRAIN_SCALE * 200 - 0.01;
@@ -108,6 +112,8 @@ type TileProps = {
   detectionY?: readonly number[];
   /** Raven tree-layout variants: the tile picks one by column and ground strip (see `ravenTileVariant`). */
   variants?: readonly THREE.Material[];
+  /** Mountain terrain (`?terrain=mountain`): the tile shows its super-tile slice for its column and ground strip. */
+  slices?: MountainSlices | null;
 };
 
 /** Tile rows the wrapped travel has advanced: a ground strip keeps its variant when the tiles jump back a row. */
@@ -126,6 +132,7 @@ function Tile({
   houses,
   detectionY,
   variants,
+  slices,
 }: TileProps) {
   const is2xl = useMediaQuery("(min-width: 1536px)");
   const ref = useRef<THREE.Group>(null);
@@ -142,13 +149,17 @@ function Tile({
     if (!ref.current) return;
     ref.current.position.z = z - (terrainWrapped.current || 0);
     if (desktopOnly) ref.current.visible = is2xl;
-    if (variants && land.current) land.current.material = variants[ravenTileVariant(col, row + wrapsTravelled())];
+    const strip = row + wrapsTravelled();
+    if (variants && land.current) land.current.material = variants[ravenTileVariant(col, strip)];
+    if (slices && land.current) land.current.geometry = mountainSlice(slices, col, strip);
   });
   return (
     <group ref={ref}>
       <mesh
         ref={land}
-        frustumCulled={false}
+        // Mountain slices carry bounds that include the vertex-shader lift, so they can be culled (~30 tiles, a few
+        // in view); the GLB tiles keep the shipped no-culling.
+        frustumCulled={!!slices && !isCity}
         renderOrder={RENDER_ORDER.TERRAIN}
         geometry={geometries[isCity ? 1 : 0]}
         material={material}
@@ -171,7 +182,9 @@ export function Terrain() {
   const raven = useGLB(ASSETS.ravenTerrain);
   // Canvas children render on the client only, so the query string is readable on first render.
   const [variant] = useState(terrainVariant);
+  const [probe] = useState(probeEnabled);
   const isRaven = variant === "raven";
+  const [mountainOn] = useState(() => isRaven && mountainTerrainEnabled());
   const [, getKeys] = useKeyboardControls();
   const dpr = useThree((s) => s.viewport.dpr);
   const isMd = useMediaQuery("(min-width: 768px)");
@@ -207,8 +220,16 @@ export function Terrain() {
   const [village] = useState(() => new TerrainMaterial(getNoiseTexture()));
   // Raven tree-layout variants of the natural tile: one material per base map, same fog/scan as `natural`.
   const [naturalVariants] = useState(() => [natural, ...RAVEN_TILE_MAPS.map(() => new TerrainMaterial(getNoiseTexture()))]);
-  const materials = useMemo(() => [urban, village, ...naturalVariants], [urban, village, naturalVariants]);
-  const variants = isRaven ? naturalVariants : undefined;
+  // Mountain terrain: same base maps, MountainMaterial; used once the slices are built (old tiles until then).
+  const [mountainVariants] = useState(() =>
+    mountainOn ? naturalVariants.map(() => new MountainMaterial(getNoiseTexture())) : ([] as TerrainMaterial[]),
+  );
+  const [slices, setSlices] = useState<MountainSlices | null>(null);
+  const materials = useMemo(
+    () => [urban, village, ...naturalVariants, ...mountainVariants],
+    [urban, village, naturalVariants, mountainVariants],
+  );
+  const variants = isRaven ? (slices ? mountainVariants : naturalVariants) : undefined;
   const houses = useMemo(
     () => (isRaven ? { geometry: ravenHouses.geometry, material: village } : undefined),
     [isRaven, ravenHouses, village],
@@ -223,9 +244,40 @@ export function Terrain() {
       m.uniforms.uPanorama.value = panorama;
     }
     for (const m of naturalVariants) m.uniforms.uBaseTexture.value = naturalMap;
+    for (const m of mountainVariants) m.uniforms.uBaseTexture.value = naturalMap;
     urban.uniforms.uBaseTexture.value = baseMap;
     village.uniforms.uBaseTexture.value = housesMap;
-  }, [baseMap, naturalMap, housesMap, cityTex, materials, naturalVariants, urban, village, panorama]);
+  }, [baseMap, naturalMap, housesMap, cityTex, materials, naturalVariants, mountainVariants, urban, village, panorama]);
+
+  // Mountain slices are built off the critical path (a few hundred ms of CPU, yielding between rows).
+  useEffect(() => {
+    if (!mountainOn) return;
+    let alive = true;
+    let built: MountainSlices | null = null;
+    // Hold the loader until the mountain ground has rendered (never reveal the old tiles first).
+    useLoading.setState({ terrainReady: false });
+    const release = () => requestAnimationFrame(() => requestAnimationFrame(() => useLoading.setState({ terrainReady: true })));
+    const segments = window.innerWidth < 768 ? 96 : 160;
+    buildMountainSlices(ravenLand.geometry, ravenHouses.geometry, segments)
+      .then((s) => {
+        built = s;
+        if (alive) {
+          setSlices(s);
+          // Two frames: React swaps the tiles to their slices and MountainMaterial compiles behind the loader.
+          release();
+        } else for (const g of s.flat()) g.dispose();
+      })
+      // On failure the Raven tiles simply stay (and the loader is released).
+      .catch((err) => {
+        console.error("Mountain terrain build failed; keeping the Raven tiles.", err);
+        release();
+      });
+    return () => {
+      alive = false;
+      useLoading.setState({ terrainReady: true });
+      if (built) for (const g of built.flat()) g.dispose();
+    };
+  }, [mountainOn, ravenLand, ravenHouses]);
 
   // Variant maps load after the scene is up (not behind the loader); until then those tiles show the GLB map.
   useEffect(() => {
@@ -243,14 +295,16 @@ export function Terrain() {
         tex.anisotropy = 4;
         loaded.push(tex);
         naturalVariants[i + 1].uniforms.uBaseTexture.value = tex;
+        if (mountainVariants[i + 1]) mountainVariants[i + 1].uniforms.uBaseTexture.value = tex;
       });
     });
     return () => {
       alive = false;
       for (const tex of loaded) tex.dispose();
       for (const m of naturalVariants.slice(1)) m.uniforms.uBaseTexture.value = naturalMap;
+      for (const m of mountainVariants.slice(1)) m.uniforms.uBaseTexture.value = naturalMap;
     };
-  }, [isRaven, naturalMap, naturalVariants]);
+  }, [isRaven, naturalMap, naturalVariants, mountainVariants]);
 
   useEffect(() => {
     for (const m of materials) m.uniforms.uDpr.value = dpr;
@@ -325,7 +379,8 @@ export function Terrain() {
     const w = 1 - openingEase(opening);
     for (const m of materials) {
       // Opening: far tiles dissolve into the panorama behind them (OpeningSky), not into a flat haze colour.
-      m.uniforms.uPanoMix.value = w;
+      // Mountain terrain: no land layer behind the tiles (MountainRanges), so the opening fog goes to the sky haze.
+      m.uniforms.uPanoMix.value = mountainOn ? 0 : w;
       m.uniforms.uCloudTime.value = clock.elapsedTime; // cloud sea drift, same clock as OpeningSky
       if (w > 0) for (const k of FOG_KEYS) m.uniforms[k].value += (FOG_OPENING[k] - m.uniforms[k].value) * w;
     }
@@ -341,12 +396,14 @@ export function Terrain() {
       houses={houses}
       detectionY={detectionY}
       variants={variants}
+      slices={slices}
       {...extra}
     />
   );
 
   return (
     <group ref={tiles}>
+      {probe && <TerrainProbe />}
       <group ref={groupA}>
         {tile([-1, 0], { desktopOnly: true })}
         {tile([0, 0], { withPoints: true })}
@@ -362,7 +419,7 @@ export function Terrain() {
       </group>
       <group ref={groupCity}>
         {tile([-1, 3])}
-        {tile([0, 3], { material: urban, isCity: true, variants: undefined })}
+        {tile([0, 3], { material: urban, isCity: true, variants: undefined, slices: undefined })}
         {tile([1, 3])}
       </group>
       <group ref={groupWide}>

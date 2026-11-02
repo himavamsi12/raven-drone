@@ -75,6 +75,12 @@ const DRONE_SCALE = 1.2;
  * points near the drone centre, so they still point into the larger airframe.
  */
 const TOP_VIEW_SCALE = 1.35;
+/**
+ * Hero section (opening and the hero frame; user 2026-11-03: "increase the size of the drone in the hero section"):
+ * the hero drone reads 1.25x larger, easing back over DELTA_DRONE 0 -> 0.2 so it has gone before the top-view
+ * enlargement (TOP_VIEW_SCALE) builds up in the tilt; the two never stack.
+ */
+const HERO_SCALE = 1.25;
 const _topDir = new THREE.Vector3();
 const _zoomCam = new THREE.Vector3();
 const _zoomDrone = new THREE.Vector3();
@@ -336,7 +342,8 @@ export function DroneRig() {
     if (mover1.current) {
       const sc = remap(swarm, 0, 0.5, 0.0075, 0.0085) - 0.001 * mission;
       const top = 1 + (TOP_VIEW_SCALE - 1) * topView.current;
-      let scale = (isMd ? sc : 0.0075) * DRONE_SCALE * top;
+      const hero = 1 + (HERO_SCALE - 1) * (1 - THREE.MathUtils.smoothstep(delta, 0, 0.2));
+      let scale = (isMd ? sc : 0.0075) * DRONE_SCALE * top * hero;
       // Prepare -> Route (Journey range, desktop track): hold the drone's apparent size (scale / camera distance) on
       // an even path from the Prepare frame to the Route frame. Measured at 1440×900: the clip camera moves in
       // (17.2 -> 13.7) while the top-view enlargement fades out, which read as a zoom in, then out (user, 2026-11-02).

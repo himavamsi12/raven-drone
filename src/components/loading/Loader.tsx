@@ -137,6 +137,7 @@ export function Loader() {
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   const main = useLoading((s) => s.mainAppLoaded);
   const seq = useLoading((s) => s.imageSequenceLoaded);
+  const terrain = useLoading((s) => s.terrainReady);
   const [width, setWidth] = useState(1280);
 
   useEffect(() => {
@@ -153,8 +154,8 @@ export function Loader() {
   }, []);
 
   useEffect(() => {
-    if (main && seq) useLoading.getState().setCanRemoveLoading();
-  }, [main, seq]);
+    if (main && seq && terrain) useLoading.getState().setCanRemoveLoading();
+  }, [main, seq, terrain]);
 
   useEffect(() => {
     if (!loaded || hiding) return;

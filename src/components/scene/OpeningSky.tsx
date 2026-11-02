@@ -2,12 +2,16 @@
 
 import { useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
 import { resolution, SKY_COLOR } from "@/lib/constants";
 import { openingNow } from "@/lib/story-map";
+import { MountainRanges } from "./MountainRanges";
+import { mountainTerrainEnabled } from "./mountain-terrain";
+import { terrainVariant } from "./raven-terrain";
 import { panoramaLookup } from "./shaders/panorama";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { sunlight } from "./sunlight";
 
 /**
@@ -20,6 +24,8 @@ import { sunlight } from "./sunlight";
  * procedural (the Blender sky was tried and rejected), Blender far ranges removed, and the two procedural ridge rings
  * (the far mountains of the first opening) kept behind the land layer.
  * Order: sky dome -> ridge rings (far first) -> land dome (alpha) -> terrain.
+ * Mountain terrain (`?terrain=mountain`): the rings and the land layer are replaced by MountainRanges (3D, lit,
+ * snow-shaded far ranges); the terrain fog then fades to the sky haze instead of the land layer (Terrain `uPanoMix`).
  * Does not write depth (the terrain lens treats it as sky). Hidden once the camera reaches the hero frame, where it
  * is out of frame (the hero view tops out 23 deg below the horizon).
  */
@@ -74,6 +80,75 @@ void main() {
   vec2 uv = d.xz / max(d.y, 0.06) * 0.9 + vec2(uTime * 0.004, uTime * 0.0015);
   float c = smoothstep(0.52, 0.82, fbm(uv)) * smoothstep(0.03, 0.3, d.y);
   col = mix(col, mix(vec3(1.0), uHorizon, 0.25), 0.75 * c);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/**
+ * Mountain terrain sky (user 2026-11-03, the Everest site's frame: "make the sky bright and blue like this"): deep
+ * saturated blue overhead, a pale bright band at the horizon (SKY_COLOR, the colour the terrain fog and the far-range
+ * haze end at), and fair-weather cumulus on a plane above the camera: domain-warped billows, lit from the sun side
+ * (density sampled toward the sun = self-shadow), grey bases, thinning into the horizon haze.
+ */
+const mountainSkyFragment = /* glsl */ `
+uniform vec3 uHorizon;
+uniform vec3 uMid;
+uniform vec3 uZenith;
+uniform vec3 uSun;
+uniform float uTime;
+varying vec3 vDir;
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+float fbm(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 6; i++) { v += a * noise(p); p = p * 2.07 + 17.1; a *= 0.5; }
+  return v;
+}
+// Billowy cumulus density: warped fBm with rounded (squared) tops. t = seconds: the warp field evolves slowly (the
+// heaps grow, thin and change shape) and the fine billows drift a little faster than the masses (depth).
+// Perf (2026-11-03): the warp w is computed once per pixel and shared with the self-shadow sample (was a full
+// second cumulus() call: 2 x 4 fBm per sky pixel at up to 2x density).
+vec2 cumulusWarp(vec2 uv, float t) {
+  return vec2(fbm(uv * 0.45 + 3.1 + vec2(t * 0.011, 0.0)), fbm(uv * 0.45 + 7.7 - vec2(0.0, t * 0.009)));
+}
+float cumulus(vec2 uv, vec2 w, float t) {
+  float n = fbm(uv + 1.6 * w);
+  // Coverage threshold plus a second billow octave: rounded heaps with clear gaps between them.
+  float b = fbm(uv * 2.3 + 1.6 * w + 5.0 + vec2(t * 0.02, t * 0.006));
+  float d = smoothstep(0.47, 0.72, n + 0.12 * (b - 0.5));
+  return d * d * (3.0 - 2.0 * d);
+}
+
+void main() {
+  vec3 d = normalize(vDir);
+  float h = max(d.y, 0.0);
+  vec3 col = mix(uHorizon, uMid, smoothstep(0.0, 0.2, h));
+  col = mix(col, uZenith, smoothstep(0.12, 0.62, h));
+  float s = max(dot(d, uSun), 0.0);
+  col += vec3(1.0, 0.95, 0.85) * (0.1 * pow(s, 8.0) + 0.6 * pow(s, 600.0)) * smoothstep(-0.02, 0.06, d.y);
+
+  // Cloud layer: a gently curved projection (offset 0.45, not a flat plane) so the low sky the opening camera sees
+  // keeps round puffs instead of radial streaks.
+  // Wind: about one cloud width every ~40 s, slightly veering.
+  vec2 drift = vec2(uTime * 0.024, uTime * 0.008 + 0.02 * sin(uTime * 0.01));
+  vec2 uv = d.xz / (d.y + 0.45) * 2.6 + drift;
+  vec2 w = cumulusWarp(uv, uTime);
+  float dens = cumulus(uv, w, uTime);
+  vec2 toSun = normalize(uSun.xz + 1e-4) * 0.12;
+  // Self-shadow: density a little toward the sun, same warp (the warp varies slowly over that offset).
+  float occl = smoothstep(0.47, 0.72, fbm(uv + toSun + 1.6 * w));
+  float lit = clamp(0.55 + 0.45 * (dens - occl) * 3.0 + 0.25 * (1.0 - dens), 0.0, 1.0);
+  vec3 cloud = mix(vec3(0.62, 0.67, 0.75), vec3(1.0, 0.99, 0.97), lit);
+  // Fewer, flatter clouds low down (they sit in the haze), clear patches overhead.
+  float amount = dens * smoothstep(0.0, 0.1, d.y) * (1.0 - 0.35 * smoothstep(0.35, 0.8, h));
+  cloud = mix(cloud, uHorizon, 1.0 - smoothstep(0.0, 0.18, h));
+  col = mix(col, cloud, clamp(amount, 0.0, 1.0) * 0.95);
+  // Bright haze band hugging the horizon.
+  col = mix(col, uHorizon, (1.0 - smoothstep(0.0, 0.06, h)) * 0.7);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -165,17 +240,20 @@ export function OpeningSky() {
   const dome = useRef<THREE.Mesh>(null);
   const landDome = useRef<THREE.Mesh>(null);
   const land = useOpeningPanorama();
+  const [mountain] = useState(() => terrainVariant() === "raven" && mountainTerrainEnabled());
+  const stillSky = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [domeGeometry, domeMaterial, landMaterial] = useMemo(() => {
     const g = new THREE.SphereGeometry(DOME_RADIUS, 64, 32);
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uHorizon: { value: SKY_COLOR },
-        uZenith: { value: new THREE.Color("#6f9fdc") },
+        uMid: { value: new THREE.Color("#5f8fca") },
+        uZenith: { value: new THREE.Color(mountain ? "#2a5c9e" : "#6f9fdc") },
         uSun: { value: new THREE.Vector3() },
         uTime: { value: 0 },
       },
       vertexShader: domeVertex,
-      fragmentShader: domeFragment,
+      fragmentShader: mountain ? mountainSkyFragment : domeFragment,
       side: THREE.BackSide,
       depthWrite: false,
       depthTest: false,
@@ -192,7 +270,7 @@ export function OpeningSky() {
       depthTest: true,
     });
     return [g, m, l];
-  }, []);
+  }, [mountain]);
   landMaterial.uniforms.uPanorama.value = land;
   const ridges = useMemo(
     () =>
@@ -217,11 +295,12 @@ export function OpeningSky() {
   useFrame((state) => {
     const on = openingNow() < 1;
     if (group.current) group.current.visible = on;
-    if (!on || !dome.current || !landDome.current) return;
+    if (!on || !dome.current) return;
     dome.current.position.copy(state.camera.getWorldPosition(dome.current.position));
-    landDome.current.position.copy(dome.current.position);
+    landDome.current?.position.copy(dome.current.position);
     domeMaterial.uniforms.uSun.value.copy(sunlight.direction);
-    domeMaterial.uniforms.uTime.value = state.clock.getElapsedTime();
+    // Reduced motion: the clouds hold still.
+    if (!stillSky) domeMaterial.uniforms.uTime.value = state.clock.getElapsedTime();
     landMaterial.uniforms.uCloudTime.value = state.clock.getElapsedTime();
   });
 
@@ -229,10 +308,16 @@ export function OpeningSky() {
   return (
     <group ref={group}>
       <mesh ref={dome} geometry={domeGeometry} material={domeMaterial} renderOrder={-3} frustumCulled={false} />
-      {ridges.map((r, i) => (
-        <mesh key={i} geometry={r.geometry} material={r.material} renderOrder={-2 + i * 0.5} frustumCulled={false} />
-      ))}
-      <mesh ref={landDome} geometry={domeGeometry} material={landMaterial} renderOrder={-0.5} frustumCulled={false} />
+      {mountain ? (
+        <MountainRanges />
+      ) : (
+        <>
+          {ridges.map((r, i) => (
+            <mesh key={i} geometry={r.geometry} material={r.material} renderOrder={-2 + i * 0.5} frustumCulled={false} />
+          ))}
+          <mesh ref={landDome} geometry={domeGeometry} material={landMaterial} renderOrder={-0.5} frustumCulled={false} />
+        </>
+      )}
     </group>
   );
 }
