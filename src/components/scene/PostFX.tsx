@@ -12,6 +12,7 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { fisheyeAt } from "./opening";
 import { TerrainLensEffect } from "./TerrainLensEffect";
 import { DAYLIGHT, HERO_LIGHT, heroLight } from "./hero-light";
+import { cameraTilt } from "./camera-tilt";
 
 /** Flock scene radial-blur crossfade (shipped module 8743 + shader 79755). */
 class RenderTargetMixEffect extends Effect {
@@ -291,8 +292,21 @@ const SHUTTER_S = 1 / 30;
 const SPEED_GAIN = 1.5;
 /** Longest motion streak and largest defocus disc (px at 1080p). */
 const MAX_BLUR_PX = 9;
-const MAX_COC_PX = 16;
-const COC_INF_PX = 5;
+/**
+ * Thin-lens focus on the drone (user, 2026-11-02: blur the landscape like a film lens / the eye focusing on the
+ * product). CoC = COC_INF_PX * |1 - focus / dist|: from overhead the ground is only ~15% beyond the drone, so 5 gave
+ * < 1 px; 60 gives ~8 px there, and the far hero background reaches the 14 px cap. Drones are never blurred.
+ */
+const MAX_COC_PX = 14;
+const COC_INF_PX = 60;
+/**
+ * Only when the camera looks down on the drone (user: not in the hero or the chapters that follow it obliquely).
+ * Elsewhere the original light blur (5). Blend by view direction: -dir.y 0.75 -> 0.95 (hero/Route ~0.55, top views 1).
+ */
+const COC_INF_PX_BASE = 5;
+const _camDir = new THREE.Vector3();
+/** Smoothed top-view weight: follows the tilt, eased over ~0.4 s so snaps and camera-track switches never pop. */
+const topViewState = { value: 0 };
 /** Top of the terrain band in world Y (parent -2.5 + 0.04 x highest roof ~20 local = -1.7); drones fly above. */
 const TERRAIN_TOP = -1.55;
 const _vp = new THREE.Matrix4();
@@ -309,6 +323,7 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const lensState = useRef({ prevVP: new THREE.Matrix4(), prevOffset: 0, step: 0, first: true, frame: 0, drone: null as THREE.Object3D | null });
   const pre = useRef<Preroll>({ state: "idle", frame: 0, saved: [], warm: 0 });
   const lastSide = useRef(0);
+  const mixWarm = useRef(3);
   const [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, wipe, wipePass, finalPass] = useMemo(() => {
     const composer = new EffectComposer(gl, { multisampling: 0 });
     const final = new FinalEffect();
@@ -386,13 +401,16 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
       if (multi.hideRatio > 0.8) return;
       if (useStage.getState().cover === 0) return; // Raven: stage off screen after the story
     }
-    const mixFactor = remap(s[SCENE.FLOCK_SCENE].progress, 0.75, 1, 0, 1);
+    // Journey's network map is not shown (user, 2026-11-02: Journey removed); the pass stays for the load-time warm-up.
+    const mixFactor = 0;
     const nextProgress = s[SCENE.REAL_TIME_DETECTION].progress;
     mix.mixFactor = mixFactor;
     mix.nextSceneProgress = nextProgress;
     // Perf: the shader passes the input through unchanged when mixFactor <= 0 or its fadeOut (1 - smoothstep(.05, .15,
     // next)) is 0; skip the full-screen pass then.
-    mixPass.enabled = mixFactor > 0 && nextProgress < 0.15;
+    // Raven: also run it for the first frames (mixFactor 0 = input unchanged) so it compiles at load, not as a one-frame
+    // stall when the Journey map fades in.
+    mixPass.enabled = (mixFactor > 0 && nextProgress < 0.15) || mixWarm.current-- > 0;
     final.u("uVignetteAspect").value.copy(aspect.current);
     final.u("uTime").value = state.clock.getElapsedTime();
     // Hero preset (hero-light.ts): grain and sharpen from the user's panel in the hero, shipped values after.
@@ -459,7 +477,12 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     lens.u("uMotion").value = reducedMotion || !lensOn ? 0 : 1;
     lens.u("uSpeedGain").value = SPEED_GAIN;
     lens.u("uFocus").value = focus;
-    lens.u("uCocInf").value = lensOn ? COC_INF_PX : 0;
+    pc.getWorldDirection(_camDir);
+    // Top views, and the overhead chapters now shown obliquely (camera-tilt.ts).
+    const topTarget = Math.max(THREE.MathUtils.smoothstep(-_camDir.y, 0.75, 0.95), cameraTilt.weight);
+    topViewState.value += (topTarget - topViewState.value) * (1 - Math.exp(-dt / 0.4));
+    const topView = topViewState.value;
+    lens.u("uCocInf").value = lensOn ? COC_INF_PX_BASE + (COC_INF_PX - COC_INF_PX_BASE) * topView : 0;
     lens.u("uMaxBlurPx").value = MAX_BLUR_PX * ((size.height * ratio) / 1080);
     lens.u("uMaxCocPx").value = MAX_COC_PX * ((size.height * ratio) / 1080);
     lens.u("uTerrainTop").value = TERRAIN_TOP;

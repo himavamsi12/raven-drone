@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { SUN_POSITION } from "@/lib/constants";
 import { DRONE_SHADOW_LAYER, DRONE_SHADOW_SIZE, droneShadowUniforms } from "./drone-shadow";
 import { heroLight } from "./hero-light";
+import { cameraTilt } from "./camera-tilt";
 import { sunlight } from "./sunlight";
 
 const DRONES = ["Drone1Group", "Drone2Group", "Drone3Group"];
@@ -20,6 +21,16 @@ const DAY = { strength: 0.9, soft: 0.1 };
 const OVERCAST = { strength: 0.85, soft: 0.2 };
 /** How far the overcast shadow direction moves from the sun toward straight down. */
 const OVERCAST_DOWN = 0.6;
+/**
+ * Top views (camera looking down on the drone, e.g. Airframe; user 2026-11-02: "increase the shadow here"): full
+ * strength, crisp, along the sun so it lands beside the drone instead of under it. Same eased top-view blend as the
+ * background blur and the drone size (-dir.y 0.75 -> 0.95, ~0.4 s).
+ */
+const TOP = { strength: 1, soft: 0.07 };
+/** Top-view sun elevation for the shadow: the scene sun is ~63 deg up, which hides the shadow under the drone. */
+const TOP_SUN_ELEVATION = 40 * (Math.PI / 180);
+const _lowSun = new THREE.Vector3();
+const _camDir = new THREE.Vector3();
 
 const _box = new THREE.Box3();
 const _part = new THREE.Box3();
@@ -49,7 +60,9 @@ export function DroneShadow() {
     };
   }, [target]);
 
-  useFrame(({ gl, scene }) => {
+  const topView = useRef(0);
+
+  useFrame(({ gl, scene, camera: view }, dt) => {
     _box.makeEmpty();
     for (const name of DRONES) {
       const group = scene.getObjectByName(name);
@@ -75,8 +88,16 @@ export function DroneShadow() {
     }
     _box.getBoundingSphere(_sphere);
 
+    view.getWorldDirection(_camDir);
+    const topTarget = Math.max(THREE.MathUtils.smoothstep(-_camDir.y, 0.75, 0.95), cameraTilt.weight);
+    topView.current += (topTarget - topView.current) * (1 - Math.exp(-dt / 0.4));
+    const top = topView.current;
     const h = heroLight.weight;
-    _dir.copy(SUN_POSITION).applyAxisAngle(UP, sunlight.heading).normalize().lerp(UP, OVERCAST_DOWN * h).normalize();
+    _dir.copy(SUN_POSITION).applyAxisAngle(UP, sunlight.heading).normalize().lerp(UP, OVERCAST_DOWN * h * (1 - top)).normalize();
+    // Same sun heading, lower elevation: the shadow lands beside the drone instead of under it.
+    _lowSun.set(_dir.x, 0, _dir.z).normalize().multiplyScalar(Math.cos(TOP_SUN_ELEVATION));
+    _lowSun.y = Math.sin(TOP_SUN_ELEVATION);
+    _dir.lerp(_lowSun, top).normalize();
     const half = _sphere.radius * 1.3;
     camera.left = camera.bottom = -half;
     camera.right = camera.top = half;
@@ -85,8 +106,10 @@ export function DroneShadow() {
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     u.uDroneShadowMatrix.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    u.uDroneShadowStrength.value = DAY.strength * sunlight.shade * (1 - h) + OVERCAST.strength * h;
-    u.uDroneShadowSoft.value = (DAY.soft * (1 - h) + OVERCAST.soft * h) / (2 * half);
+    const strength = DAY.strength * sunlight.shade * (1 - h) + OVERCAST.strength * h;
+    const soft = DAY.soft * (1 - h) + OVERCAST.soft * h;
+    u.uDroneShadowStrength.value = strength + (TOP.strength - strength) * top;
+    u.uDroneShadowSoft.value = (soft + (TOP.soft - soft) * top) / (2 * half);
 
     const prevTarget = gl.getRenderTarget();
     const prevAlpha = gl.getClearAlpha();

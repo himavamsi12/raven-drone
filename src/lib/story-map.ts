@@ -14,14 +14,19 @@ import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange }
  * static in the shipped scene) over the swept side, `ratio = wipeRatio`. At X + W the story switches to that same map
  * frame. Scene ranges, progress and every component keep working in story coordinates; only the scroll ↔ story
  * conversion knows about the bands.
+ *
+ * Journey (flock-scene) removed (user, 2026-11-02): its network map is never shown and its story range plays on only
+ * JOURNEY_PAGE_SHARE of its page length, as part of the Route snap range, so one gesture flies Prepare -> Route in a
+ * single continuous camera move (no cut, no stop). Band 1 page length = story length - (1 - share) x Journey.
  */
+export const JOURNEY_PAGE_SHARE = 0.3;
 export const BAND_1_END: SceneId = SCENE.REAL_TIME_DETECTION;
 /** Band 2 starts at the END of this scene (ignition-verified ends where phalanx-ai, the diagonal wipe, begins). */
 export const BAND_2_OPEN: SceneId = SCENE.IGNITION_VERIFIED;
 export const BAND_1 = SCENE_ORDER.slice(0, SCENE_ORDER.indexOf(BAND_1_END) + 1);
 export const BAND_2 = SCENE_ORDER.slice(SCENE_ORDER.indexOf(BAND_2_OPEN) + 1);
 /** Spacer heights in vh (match page.tsx). Band 1 hands straight to band 2, so only band 2 adds a screen to scroll away. */
-export const BAND_1_VH = 2500; // 1px intro + 5 × 500
+export const BAND_1_VH = 2500 - (1 - JOURNEY_PAGE_SHARE) * 500; // 1px intro + 5 × 500, Journey at 30% (= 2150, page.tsx)
 export const BAND_2_VH = 3200; // phalanx 500 + 5 × 500 + 100 (zone) + 100
 /**
  * Raven opening (user, 2026-11-01): page [0, P] flies the live camera from a low wide-angle shot under the hovering
@@ -30,7 +35,25 @@ export const BAND_2_VH = 3200; // phalanx 500 + 5 × 500 + 100 (zone) + 100
  */
 export const OPENING_VH = 300;
 
-export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, preroll: false };
+export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F1: 0, preroll: false };
+
+/** Band 1 story offset -> page offset (Journey compressed to JOURNEY_PAGE_SHARE). */
+function band1Page(story: number) {
+  const { F0, F1 } = storyMap;
+  if (story <= F0) return story;
+  if (story <= F1) return F0 + (story - F0) * JOURNEY_PAGE_SHARE;
+  return story - (F1 - F0) * (1 - JOURNEY_PAGE_SHARE);
+}
+/** Band 1 page offset -> story offset (inverse of band1Page). */
+function band1Story(page: number) {
+  const { F0, F1 } = storyMap;
+  const f1Page = F0 + (F1 - F0) * JOURNEY_PAGE_SHARE;
+  if (page <= F0) return page;
+  if (page <= f1Page) return F0 + (page - F0) / JOURNEY_PAGE_SHARE;
+  return page + (F1 - F0) * (1 - JOURNEY_PAGE_SHARE);
+}
+/** Page length of band 1. */
+const band1Length = () => band1Page(storyMap.E1);
 
 /** Re-measure from the layout (band 2 spacer position depends on the sections above it). */
 export function measureStoryMap() {
@@ -41,11 +64,13 @@ export function measureStoryMap() {
   const band1 = document.getElementById("story-band-1");
   storyMap.P = band1 ? band1.getBoundingClientRect().top + window.scrollY : (OPENING_VH / 100) * vh;
   storyMap.E1 = end(BAND_1_END);
+  storyMap.F1 = end(SCENE.FLOCK_SCENE);
+  storyMap.F0 = ranges[SCENE_ORDER.indexOf(SCENE.FLOCK_SCENE)].start;
   storyMap.S2 = end(BAND_2_OPEN);
   storyMap.L2 = ranges[ranges.length - 1].end - storyMap.S2;
   storyMap.W = 0.5 * ranges[SCENE_ORDER.indexOf(SCENE.PHALANX_AI)].height; // shipped wipe = phalanx-ai 0 → .5
   const band2 = document.getElementById("story-band-2");
-  storyMap.X = band2 ? band2.getBoundingClientRect().top + window.scrollY : storyMap.P + storyMap.E1;
+  storyMap.X = band2 ? band2.getBoundingClientRect().top + window.scrollY : storyMap.P + band1Length();
   return ranges;
 }
 
@@ -53,7 +78,7 @@ export function measureStoryMap() {
 export function toStory(page: number) {
   const { P, E1, S2, X, W } = storyMap;
   if (page <= P) return 0;
-  if (page <= P + E1) return page - P;
+  if (page <= P + band1Length()) return band1Story(page - P);
   if (page < X + W) return E1;
   return S2 + (page - X);
 }
@@ -64,8 +89,8 @@ export const mapStory = () => storyMap.S2 + storyMap.W;
 /** Story scroll → page scroll (skipped scenes clamp to the nearest band edge). */
 export function toPage(story: number) {
   const { P, E1, S2, X } = storyMap;
-  if (story <= E1) return P + story;
-  if (story < S2) return story - E1 < S2 - story ? P + E1 : X;
+  if (story <= E1) return P + band1Page(story);
+  if (story < S2) return story - E1 < S2 - story ? P + band1Length() : X;
   return X + (story - S2);
 }
 
@@ -88,8 +113,16 @@ export function pageBands(ranges: SceneRange[]) {
   // Band 1 opens with the opening move (page 0 → end of the 1px intro), so one gesture plays the whole move.
   const intro = map(ranges[SCENE_ORDER.indexOf(SCENE.INTRO_SCENE)]);
   const opening: SceneRange = { ...intro, start: 0, height: intro.end, end: intro.end };
+  // Journey is not a stop: Route's range starts where Journey starts, so one gesture from Prepare plays both.
+  const band1 = pick(BAND_1).filter((r) => r.id !== SCENE.INTRO_SCENE && r.id !== SCENE.FLOCK_SCENE);
+  const route = band1.find((r) => r.id === SCENE.REAL_TIME_DETECTION);
+  const journey = ranges[SCENE_ORDER.indexOf(SCENE.FLOCK_SCENE)];
+  if (route) {
+    route.start = toPage(journey.start);
+    route.height = route.end - route.start;
+  }
   // The wipe (phalanx-ai) is band 2's first range, so one gesture from Route plays the whole transition.
-  return [[opening, ...pick(BAND_1).filter((r) => r.id !== SCENE.INTRO_SCENE), ...pick(BAND_2)]];
+  return [[opening, ...band1, ...pick(BAND_2)]];
 }
 
 /** Diagonal wipe progress for a page scroll (0 = Route, 1 = Care teams map fully swept). */

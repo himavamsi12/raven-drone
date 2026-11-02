@@ -2,10 +2,13 @@
 
 import clsx from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { SCENE, useScenes } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { GroundHtml } from "./GroundHtml";
+import { useFrame } from "@react-three/fiber";
+import type * as THREE from "three";
+import { cameraTilt, TILT_ELEVATION } from "../camera-tilt";
 
 const EASE_OUT_CUBIC = [0.33, 1, 0.68, 1] as const;
 
@@ -211,8 +214,16 @@ function Callout({
 export function SpecsCallouts() {
   const lg = useMediaQuery("(min-width: 1024px)");
   const md = useMediaQuery("(min-width: 768px)");
+  // The anchors lie along world z under the drone. Seen from the oblique Airframe camera (camera-tilt.ts) that
+  // spacing is foreshortened by sin(elevation): stretch it back so the four lines keep their top-view spacing.
+  const group = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!group.current) return;
+    const stretch = 1 / Math.sin(TILT_ELEVATION) - 1;
+    group.current.scale.z = 1 + stretch * cameraTilt.weight;
+  });
   return (
-    <>
+    <group ref={group}>
       <GroundHtml transform={false} position={[0, 0, (lg ? -0.55 : md ? -1 : -1.25) - 0.025]}>
         <Callout
           title="Medical cargo"
@@ -250,6 +261,6 @@ export function SpecsCallouts() {
           mobileSide="bottom-right"
         />
       </GroundHtml>
-    </>
+    </group>
   );
 }

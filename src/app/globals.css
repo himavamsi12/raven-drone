@@ -190,3 +190,44 @@ dialog::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Raven village scan frames (DetectionPoints `VillageScan`, user 2026-11-02). */
+.village-scan {
+  pointer-events: none;
+}
+.village-scan-corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--color-yellow);
+}
+.village-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-yellow), transparent);
+  box-shadow: 0 0 6px var(--color-yellow);
+  opacity: 0.85;
+  animation: village-scan-sweep 2.4s ease-in-out infinite alternate;
+  animation-delay: inherit;
+}
+.village-scan-status {
+  animation: village-scan-blink 1.2s steps(2, jump-none) infinite;
+}
+@keyframes village-scan-sweep {
+  from { top: 0; }
+  to { top: calc(100% - 1px); }
+}
+@keyframes village-scan-blink {
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .village-scan-line,
+  .village-scan-status {
+    animation: none;
+  }
+  .village-scan-line {
+    top: 50%;
+  }
+}

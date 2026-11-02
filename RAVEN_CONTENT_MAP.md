@@ -16,8 +16,8 @@ Claim status key:
 | `DELTA_DRONE` (specs gate) | Airframe | Four callouts (below) | — | Literal / Scenario | Callouts anchor to points around the airframe. The case is real geometry. "Remote clinics" and "Care teams" are explanatory labels with no object in the scene. |
 | `SWARM_SCENE` | Connection | From a health centre to a hill clinic. (Short variant: "Health centre to hill clinic.") | One supply request gives the journey a purpose. Raven's wider network begins with the connection between a care team and the village it serves. Rows: Sender / Cargo / Route / Receiver. | Scenario | Three aircraft fly in formation, tagged RAVEN-01/02/03. Neither the sender nor the receiver is visible. |
 | `MISSION_PRESET` | Prepare | Start with what the clinic needs. CTA: "Explore the route" (same target). | In this illustrative journey, a care team prepares the supplies and reviews the destination before dispatch. | Scenario | The aircraft is already airborne. No preparation or packing is shown (Phase 2, beat 2). |
-| `FLOCK_SCENE` | Journey | Keep the delivery in view. (Was untitled.) | The aircraft is one part of the journey. The sender, the receiving clinic and the route between them matter just as much. | Scenario | The flock/sync visual shows many low-poly drones linked by a graph. It reads as a fleet, not one delivery. |
-| `REAL_TIME_DETECTION` | Route | Read the route ahead. | The route view introduces the terrain, road access and obstacles between the health centre and the clinic. | Literal | Object boxes (car, road block, power line, person, antenna, motorcycle, campfire) remain. Their confidence percentages were removed. No route line, start or destination is drawn. |
+| `FLOCK_SCENE` | (removed 2026-11-02) | — | — | Removed | Chapter removed at the user's request: no copy, no nav tick, network map not shown; the scene plays compressed inside the Route scroll as a transition. |
+| `REAL_TIME_DETECTION` | Route | Read the route ahead. | The route view introduces the terrain, road access and the villages between the health centre and the clinic. | Literal | On the Raven terrain the object boxes were replaced (2026-11-02, user) by scan frames around the tile's real settlements: Hill / Ridge / Valley village and Farmstead, status "Scanning"; no counts, distances or confirmations. `?terrain=original` keeps the shipped object boxes (no percentages). No route line, start or destination is drawn. |
 | `THERMAL_IRREGULARITY` | (Route) | A hazard changes the plan. Pill: "Hazard noted". | This simulated heat alert interrupts the delivery scenario. The route needs review before the journey continues. | Literal (simulated) | Thermal search box and thermal palette. This is a legacy surveillance visual and the main replacement candidate. |
 | `IGNITION_VERIFIED` | (Route) | Review the affected area. | The scene confirms a fire along the illustrated route. It is a route-planning example, not a claim that Raven fights fires. | Literal + Notice | Fire over a village tile. Legacy visual. |
 | `PHALANX_AI` | Care teams | Keep the care team informed. | A useful delivery view brings the destination and route status together, so the people arranging supplies share the same picture. | Scenario | Grid "ops" view of the city tile with a perimeter and focus dots. |
@@ -56,7 +56,7 @@ The header lines appear, in order, through flock, detection, thermal and ignitio
 5. ROUTE VIEW
 6. TERRAIN AND RIDGES SHOWN
 7. ROAD ACCESS SHOWN
-8. ROAD OBJECTS LABELLED
+8. VILLAGES IN VIEW
 9. SIMULATED HEAT ALERT
 10. ALERT ON ILLUSTRATED ROUTE
 11. ROUTE REVIEW REQUIRED

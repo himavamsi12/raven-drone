@@ -53,9 +53,11 @@ export class ClipSeeker {
   private actions: (THREE.AnimationAction | null)[];
   private current: THREE.AnimationAction | null = null;
 
+  private samplers = new Map<string, { duration: number; pos: THREE.Interpolant; rot: THREE.Interpolant }>();
+
   constructor(
     private tracker: THREE.Object3D,
-    clips: THREE.AnimationClip[],
+    private clips: THREE.AnimationClip[],
     private bindings: ClipBinding[],
   ) {
     this.mixer = new THREE.AnimationMixer(tracker);
@@ -95,6 +97,33 @@ export class ClipSeeker {
     this.mixer.update(0);
     mover.position.copy(this.tracker.position);
     mover.rotation.copy(this.tracker.rotation);
+    return true;
+  }
+
+  /**
+   * Pose of the tracker in clip `name` at `progress` (0..1), sampled straight from its tracks: does not touch the mixer,
+   * the active action or the tracker. Raven: used to blend between two fixed camera poses (DroneRig Prepare -> Route).
+   */
+  sample(name: string, progress: number, outPos: THREE.Vector3, outQuat: THREE.Quaternion) {
+    let entry = this.samplers.get(name);
+    if (!entry) {
+      const clip = this.clips.find((c) => c.name === name);
+      if (!clip) return false;
+      const pos = clip.tracks.find((t) => t.name === `${this.tracker.name}.position`);
+      const rot = clip.tracks.find((t) => t.name === `${this.tracker.name}.quaternion`);
+      if (!pos || !rot) return false;
+      // createInterpolant is installed per track at runtime (it honours the track's own interpolation, e.g. glTF
+      // cubic spline); the three.js typings do not declare it.
+      type WithInterpolant = { createInterpolant(): THREE.Interpolant };
+      const interp = (t: THREE.KeyframeTrack) => (t as unknown as WithInterpolant).createInterpolant();
+      entry = { duration: clip.duration, pos: interp(pos), rot: interp(rot) };
+      this.samplers.set(name, entry);
+    }
+    const t = Math.min(Math.max(entry.duration * progress - 1e-6, 0), entry.duration);
+    const p = entry.pos.evaluate(t);
+    const q = entry.rot.evaluate(t);
+    outPos.set(p[0], p[1], p[2]);
+    outQuat.set(q[0], q[1], q[2], q[3]).normalize();
     return true;
   }
 

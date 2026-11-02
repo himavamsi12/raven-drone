@@ -42,6 +42,7 @@ const fragmentShader = /* glsl */ `
 uniform float uTime;
 uniform float uDirection; // +1 CCW / -1 CW about the shaft, viewed from above
 uniform float uPhase;
+uniform float uSpeed; // per-rotor multiplier on the sweep speed
 uniform vec3 uSun;        // towards the sun, world space
 uniform float uShade;     // 1 clear sun, ~0.7 under cloud
 varying vec2 vDisc;
@@ -60,7 +61,7 @@ void main() {
 
   // Two blade images. Angle measured along the direction of travel; lead = how far a point is behind a blade.
   float ang = atan(-vDisc.y, vDisc.x) * uDirection;
-  float sweep = uTime * ${IMAGE_SPEED.toFixed(1)} + uPhase;
+  float sweep = uTime * ${IMAGE_SPEED.toFixed(1)} * uSpeed + uPhase;
   float lead = mod(sweep - ang, PI); // 0 at a blade, grows behind it (two blades: period PI)
   float image = exp(-lead * 3.4) * band(0.0, 0.05, lead) + exp(-(PI - lead) * 16.0); // crisp front, long tail
   float presence = clamp(image, 0.0, 1.0);
@@ -129,7 +130,10 @@ export function attachRotorBlur(root: THREE.Object3D, rotors: RavenRotor[]): Rot
         uSun: { value: sunlight.direction },
         uShade: { value: 1 },
         uDirection: { value: direction },
-        uPhase: { value: i * 1.9 }, // neighbours never flash in step
+        // Random per rotor and per drone instance (user, 2026-11-02: the three drones flashed in step): own phase and
+        // a sweep speed within +-15%, so no two rotors or drones line up for long.
+        uPhase: { value: i * 1.9 + Math.random() * Math.PI * 2 },
+        uSpeed: { value: 0.85 + Math.random() * 0.3 },
       },
       transparent: true,
       depthWrite: false,

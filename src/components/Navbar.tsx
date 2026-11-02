@@ -19,7 +19,6 @@ const CHAPTERS: [SceneId, string][] = [
   [SCENE.DELTA_DRONE, "Airframe"],
   [SCENE.SWARM_SCENE, "Connection"],
   [SCENE.MISSION_PRESET, "Prepare"],
-  [SCENE.FLOCK_SCENE, "Journey"],
   [SCENE.REAL_TIME_DETECTION, "Route"],
   [SCENE.PHALANX_AI, "Care teams"],
   [SCENE.ANALYSIS_EVALUATION, "Review"],
@@ -102,6 +101,8 @@ function ChapterNav() {
     useShallow((s) => {
       let id: SceneId | null = null;
       for (const [scene] of CHAPTERS) if (s[scene]?.progress > 0) id = scene;
+      // Route starts with the village scan, inside the (removed) Journey range at .85 (ChapterCopy, DetectionPoints).
+      if (id === SCENE.MISSION_PRESET && s[SCENE.FLOCK_SCENE].progress > 0.85) id = SCENE.REAL_TIME_DETECTION;
       return id;
     }),
   );

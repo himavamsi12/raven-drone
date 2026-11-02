@@ -16,7 +16,7 @@ export default function Home() {
       {/* Opening (OPENING_VH): the live camera rises from the low wide shot into the hero frame before band 1. */}
       <div id="opening" className="pointer-events-none relative w-full" style={{ height: "300dvh" }} />
       {/* Band 1: intro (1px) + Airframe → Route (5 x 500dvh). It hands straight to band 2 (no scroll-away screen). */}
-      <div id="story-band-1" className="pointer-events-none relative w-full" style={{ height: "calc(2500dvh + 1px)" }} />
+      <div id="story-band-1" className="pointer-events-none relative w-full" style={{ height: "calc(2150dvh + 1px)" }} />
       {/* Band 2: the diagonal Phalanx wipe from Route into the Care teams map (500dvh), then Review → Network
           (5 x 500dvh + 100dvh zone) + one screen to scroll away. `#care-teams` marks the finished map frame. */}
       <div id="story-band-2" className="pointer-events-none relative w-full" style={{ height: "3200dvh" }}>

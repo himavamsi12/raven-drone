@@ -158,7 +158,7 @@ function Tile({
       {isCity && (
         <Buildings material={material} />
       )}
-      {withPoints && <DetectionPoints groundY={detectionY} />}
+      {withPoints && <DetectionPoints groundY={detectionY} villages={!!houses} />}
     </group>
   );
 }

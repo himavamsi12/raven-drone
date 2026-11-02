@@ -13,6 +13,13 @@ import * as THREE from "three";
 export const DRONE_SHADOW_LAYER = 5;
 export const DRONE_SHADOW_SIZE = 1024;
 
+/**
+ * Black overlay between the terrain and the cloud wisps (user, 2026-11-02: "add a black overlay below the clouds and
+ * above the terrain so it is a little less evident"). 0..1 opacity, multiplied onto the terrain's final colour (fog
+ * included), so it behaves like a black layer under the clouds. Written by CloudWisps with its own strength.
+ */
+export const groundDimUniforms = { uGroundDim: { value: 0 } };
+
 /** Shared uniform objects: every TerrainMaterial references these same instances. */
 export const droneShadowUniforms = {
   uDroneShadow: { value: null as THREE.Texture | null },

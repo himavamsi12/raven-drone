@@ -104,11 +104,52 @@ function HeroAudio() {
   return null;
 }
 
+/**
+ * Compile every material in `scene` now, hidden objects included, so nothing compiles mid-scroll. compileAsync
+ * collects the programs synchronously, so visibility only has to be forced for that traversal.
+ */
+function prewarm(gl: THREE.WebGLRenderer, scene: THREE.Object3D, cam: THREE.Camera) {
+  const hidden: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  gl.compileAsync(scene, cam).catch(() => {});
+  for (const o of hidden) o.visible = false;
+}
+
 /** Flock scene rendered into an FBO through a portal (shipped `tK.Y`). */
 function FlockPortal({ target, enabled }: { target: THREE.WebGLRenderTarget; enabled: boolean }) {
   const camera = useThree((s) => s.camera);
   const [portalScene] = useState(() => new THREE.Scene());
+  const warmed = useRef(false);
   useFrame(({ gl }) => {
+    // The Journey map renders its own scene. Render it once for real as soon as its instanced drones exist (compile
+    // alone does not upload geometry): its first render at the transition stalled one frame (user: jitter).
+    if (!warmed.current) {
+      let ready = false;
+      portalScene.traverse((o) => {
+        if ((o as THREE.InstancedMesh).isInstancedMesh) ready = true;
+      });
+      if (ready) {
+        warmed.current = true;
+        const hidden: THREE.Object3D[] = [];
+        portalScene.traverse((o) => {
+          if (!o.visible) {
+            hidden.push(o);
+            o.visible = true;
+          }
+        });
+        const prev = gl.getRenderTarget();
+        gl.setRenderTarget(target);
+        gl.clear();
+        gl.render(portalScene, camera);
+        gl.setRenderTarget(prev);
+        for (const o of hidden) o.visible = false;
+      }
+    }
     if (!enabled) return;
     const prev = gl.getRenderTarget();
     const prevAuto = gl.autoClear;
@@ -157,7 +198,7 @@ export function MainScene() {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const sunDistance = SUN_POSITION.length();
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock, gl, camera: cam }) => {
     // Raven daylight: travel-driven sun sway + passing cloud shade (see sunlight.ts).
     updateSunlight(terrainOffset.current ?? 0, clock.getElapsedTime(), reducedMotion);
     // Over the H00 plate the light is the plate's: fixed sun (no sway, no cloud dips), warm key.
@@ -175,8 +216,9 @@ export function MainScene() {
     sunlight.strength = 1 + (HERO_LIGHT.sun.intensity / DAYLIGHT.sunIntensity - 1) * h;
     const fill = skyFillRef.current;
     if (fill) {
+      // Intensity only, never `visible`: a change in the light count recompiles every lit material (7 programs, a
+      // ~67 ms stall mid-Connection the first time the hero preset finished fading out).
       fill.intensity = HERO_LIGHT.hemisphere.intensity * h;
-      fill.visible = h > 0;
     }
     const sun = sunRef.current;
     if (sun) {
@@ -209,8 +251,11 @@ export function MainScene() {
     if (!announced.current) {
       announced.current = true;
       setTimeout(() => useLoading.getState().setMainAppLoaded(true), 25);
+      // Compile every material up front, hidden objects included (flank drones, tags appear later): the first time
+      // they became visible in Connection the shader compile stalled one frame (user: "still a jitter").
+      prewarm(gl, scene, cam);
     }
-    const on = scenes()[SCENE.FLOCK_SCENE].progress > 0.75;
+    const on = false; // Journey's network map is not shown (user, 2026-11-02: Journey removed)
     if (on !== flockOn.current) {
       flockOn.current = on;
       setRenderFlock(on);

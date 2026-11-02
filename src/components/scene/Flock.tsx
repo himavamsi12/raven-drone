@@ -57,6 +57,9 @@ function useDevicePixelRatio() {
   return dpr;
 }
 
+/** Journey (the flock network map) is removed from the page (story-map.ts); kept in code, never shown. */
+const JOURNEY_SHOWN = false;
+
 /** Screen-space dashed Delaunay mesh between flock members (shipped `tk`). */
 function FlockLinks({ rects, lines, count, maxEdges }: { rects: RefObject<(SVGRectElement | null)[]>; lines: RefObject<(SVGLineElement | null)[]>; count: number; maxEdges: number }) {
   const size = useThree((s) => s.size);
@@ -69,7 +72,9 @@ function FlockLinks({ rects, lines, count, maxEdges }: { rects: RefObject<(SVGRe
     const fadeIn = remap(flock, 0.9, 1, 0, 1);
     const fadeOut = remap(det, 0, 0.1, 1, 0);
     if (!svg.current) return;
-    const v = det > 0.001 ? fadeOut : fadeIn;
+    // Journey removed (user, 2026-11-02): the dashed network overlay is DOM, not part of the flock render pass, so it
+    // has to be switched off here too or it still fades in during the Prepare -> Route move.
+    const v = JOURNEY_SHOWN ? (det > 0.001 ? fadeOut : fadeIn) : 0;
     if (v < 0.01) {
       svg.current.style.opacity = "0";
       svg.current.style.display = "none";
@@ -184,7 +189,7 @@ function FlockSwarm({ camera, isMobile, isTablet }: { camera: THREE.Camera; isMo
     const s = scenes();
     const flock = s[SCENE.FLOCK_SCENE];
     const det = s[SCENE.REAL_TIME_DETECTION];
-    const on = flock.isActive && flock.progress > 0.75 && det.progress < 0.25;
+    const on = JOURNEY_SHOWN && flock.isActive && flock.progress > 0.75 && det.progress < 0.25;
     if (group.current && group.current.visible !== on) group.current.visible = on;
     running.current = on;
     material.setTime(state.clock.getElapsedTime());

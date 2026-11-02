@@ -18,10 +18,11 @@ const HEADER: Line[] = [
   { label: "FROM: REGIONAL HEALTH CENTRE", scene: "flock-scene", progress: 0.15 },
   { label: "DESTINATION: HILL CLINIC", scene: "flock-scene", progress: 0.2 },
   { label: "REQUEST: MEDICAL SUPPLIES", scene: "flock-scene", progress: 0.25 },
-  { label: "ROUTE VIEW", scene: "real-time-detection", progress: 0.25 },
-  { label: "TERRAIN AND RIDGES SHOWN", scene: "real-time-detection", progress: 0.3 },
-  { label: "ROAD ACCESS SHOWN", scene: "real-time-detection", progress: 0.35 },
-  { label: "ROAD OBJECTS LABELLED", scene: "real-time-detection", progress: 0.4 },
+  // Route lines start with the scan, once the flank drones have left (user, 2026-11-02; were Route .25-.4).
+  { label: "ROUTE VIEW", scene: "flock-scene", progress: 0.86 },
+  { label: "TERRAIN AND RIDGES SHOWN", scene: "flock-scene", progress: 0.9 },
+  { label: "ROAD ACCESS SHOWN", scene: "flock-scene", progress: 0.94 },
+  { label: "VILLAGES IN VIEW", scene: "flock-scene", progress: 0.98 },
 ];
 
 const BODY: Line[] = [

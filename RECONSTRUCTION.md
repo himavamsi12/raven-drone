@@ -287,6 +287,130 @@ Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, 
   2701 with headline; one wheel gesture 0 → 2701 in ~5 s and back to 0; 60 fps at 0 and 2701; `npm run typecheck`,
   `npm run build` pass. Not checked: Safari/iOS, low-end GPUs (wide fov draws ~15 extra tiles during the opening).
 
+## Seamless camera Prepare -> Route (user, 2026-11-02: screen recording, "awkward motion")
+
+- Measured (1440×900): through the Journey range the camera pitched 40 -> 50.9 -> 31.2 deg (the shipped Camera04-02
+  steepens while the tilt cap faded out over flock .4-.75) and the drone drifted past centre and back (screen y
+  -0.37 -> +0.05 -> -0.03 -> 0). Now DroneRig replaces the clip there with one move between two fixed poses sampled
+  from the tracks (`ClipSeeker.sample`, no mixer side effects): A = tilted Camera03 end (Prepare), B = Camera04-02 end
+  (Route holds it). Distance lerps, direction about the drone and orientation slerp, smootherstep ease; the drone-size
+  hold and the focus-effects weight use the same curve. The drive value is Journey progress eased over ~0.1 s so the
+  shipped wheel burst (246/94/37 px in the first frames) does not jerk the camera; jumps > .5 snap.
+- After: pitch 40 -> 31.2, screen y -0.41 -> 0, distance 17.1 -> 14.7, each monotonic; four real wheel gestures (two
+  each way) with no rotation/position/screen spikes; rest poses unchanged; build passes. GSAP is not a dependency
+  (AGENTS: per-frame maths in the R3F loops), so the easing is three.js MathUtils.
+
+## No zoom in / out between Prepare and Route (user, 2026-11-02)
+
+- Measured hero-drone apparent size (bounding sphere px at 1440×900): 606 Prepare -> 708 (clip camera moving in while
+  the top-view x1.35 was still on) -> 576 (enlargement fading) -> 582 -> 793 (shipped dolly push -5 over flock .85-1,
+  formerly hidden by the Journey map) -> 524 (pull-back over Route 0-.45). Now: DroneRig sets the camera dolly to 0
+  and, on desktop tracks through the Journey range, holds the drone's scale / camera distance on a smootherstep path
+  from the Prepare frame (0.0075 x 1.2 x 1.35 / 17.24) to the Route frame (0.0075 x 1.2 / 14.7). Result: 604 -> 525
+  monotonic, then 524-525 through Route; one gesture Prepare -> Route without stalls. Mobile tracks unchanged.
+
+## Scanner starts when the flank drones have left (user, 2026-11-02)
+
+- Measured: the two flank drones leave the screen at Journey ~.45 -> .7 (page 16800 -> 17100 at vh 900); the scan
+  used to start at Route .5 (~20000). Village scans, the Route copy, the Route HUD lines (Journey .86-.98) and the nav
+  Route tick now start at Journey .85 (~17350): three drones -> drones leave -> scan. Checked 16201, 16800, 17100,
+  17400, 17700, 22051 and Care teams 26551 (no scans there).
+
+## Journey chapter removed (user, 2026-11-02: "remove this whole part of the scroll")
+
+- The Journey network map is never shown (PostFX flock mix factor 0, FlockPortal never enabled; the load-time warm-up
+  remains; `Flock.tsx` `JOURNEY_SHOWN = false` also keeps its dashed DOM/SVG network overlay and the flock simulation
+  off: the overlay is not part of the render pass and still faded in mid Prepare -> Route until fixed), its copy ("Keep the delivery in view.") and its nav tick are removed, and Prepare's "Explore the route"
+  now scrolls to Route. FLOCK_SCENE still exists in story coordinates (camera/drone clips, fog, flank-drone exit,
+  dolly read its progress) but plays on 30% of its page length (`JOURNEY_PAGE_SHARE`) inside the Route snap range:
+  one gesture from Prepare is a single continuous move into Route. Band 1 spacer 2500 -> 2150dvh; every later page
+  position moves up 3150 px at vh 900 (AGENTS.md verification tips updated).
+- Checked (1440×900, wheel): stops 2701, 7201, 11701, 16201, 22051 (Route), 26551 (Care teams), 31051; back from
+  Care teams 22051, 16201, 11701; Prepare -> Route frames continuous, no map; no frame over 25 ms; build passes.
+
+## Route: village scans instead of road-object boxes (user, 2026-11-02)
+
+- `DetectionPoints.tsx` `VillageScan` (Raven tile only; `?terrain=original` keeps the shipped boxes): yellow corner
+  frames sized every frame to the projected footprint (+6 units margin, ground to roof) of the tile's real
+  settlements, measured from the v09 `Houses` mesh (23 houses: Hill / Ridge / Valley village, three Farmsteads), a
+  sweeping scan line and a blinking "Scanning" tag (CSS in globals.css; static under reduced motion). Same show gate,
+  centre exclusion zone and wipe clipping as the boxes; frames whose top is under the nav (< 110 px) hide.
+- Copy: Route body "... road access and the villages between ..."; HUD line 8 "VILLAGES IN VIEW" (was ROAD OBJECTS
+  LABELLED). RAVEN_CONTENT_MAP.md updated. `RAVEN_DETECTION_Y` is no longer used on the Raven tile (village y comes
+  from the house data); if the houses move, re-measure SETTLEMENTS.
+- Checked Route 24000/25201 at 1440×900 over time; build passes. Not checked: mobile/tablet (limit filters by x).
+
+## Jitter fixes in the hero -> Airframe -> Connection scroll (user, 2026-11-02: "there is still a jitter")
+
+- Measured per-frame camera steps during real wheel scrolls. (1) camera-tilt: the orbit heading mixed the clip's
+  screen-up into the view heading; the clip has slight roll, so the camera jumped sideways (181 vs ~30) the frame the
+  tilt engaged. Heading is now the view heading, with screen-up weighted sin(el)^12 (only near straight down).
+  (2) A 50-67 ms stall on the first pass at Connection ~60%: the hero sky-fill hemisphere light was hidden when its
+  weight reached 0, changing the light count and recompiling 7 programs. It now only goes to intensity 0. MainScene
+  also compiles every material (hidden objects included) once after load (`compileAsync`).
+- After: no frame over 25 ms on first passes hero -> Prepare (two fresh loads); speed profile into Connection matches
+  the shipped clip. Remaining: a gentle slow-down mid hero -> Airframe where the elevation cap absorbs the clip's
+  pitch (smooth, no jumps).
+- Second pass (user: "the jitter is still there, make no mistakes"), measured with a per-frame probe (drone screen
+  position, camera pose) over real wheel sweeps hero -> Route and back, spike = step > 2.5x its 6 neighbours:
+  (3) camera-tilt rebuilt the pose with a level look-at, dropping Camera01's ~2 deg roll in one frame (2.24 deg
+  rotation step where the cap engages): the clip's roll is now measured and re-applied about the new view axis
+  (fading with the near-vertical heading weight). (4) Gesture start: Lenis scrolls the wheel delta itself (246, 94,
+  37 px) before the snap's 2 px/ms takes over. Swallowing the wheel inside the bands removed that burst but capped all
+  scrolling at the snap speed; the user found the page too slow, so it was reverted (shipped wheel handling). (5) Journey map transition: its portal scene is rendered once for
+  real at load (geometry upload + programs) and the flock mix pass runs for the first 3 frames at factor 0 (identity)
+  to compile; it had stalled 33-66 ms the first time.
+- After: forward and back sweeps have no rotation or position spikes (largest screen step outlier 0.56 px); seven
+  wheel gestures from the top land on 2701 ... 29701; free scroll past the story end and back works; no stalls on the
+  Journey transition on two fresh loads. Not fixed (not camera related): a single 33 ms frame at ~27513 (end of the
+  band 2 wipe, story switching to the live map).
+
+## Oblique camera in Airframe and Connection (user, 2026-11-02: "make them like the Route camera angle")
+
+- `camera-tilt.ts` `applyCameraTilt` (DroneRig, after the clip and opening): the shipped clip poses are kept and the
+  camera's elevation above the hero drone is capped smoothly: the clip's own below 35 deg (`TILT_START`; the hero is
+  ~33 deg, untouched), then an exponential ease toward 40 deg (`TILT_ELEVATION`), C1 continuous; distance and orbit
+  heading stay the clip's and the pose is rebuilt on that orbit. Prepare keeps it too (user: remove the top-down angle
+  entirely); the cap hands off to the Journey network map over FLOCK_SCENE 0.4 -> 0.75. Deviation from the shipped camera tracks (user decision).
+- Seamless hero -> Airframe (user): the first version blended clip and tilted poses by weight (straight line); mid-way
+  the pitch bumped to ~43 deg and the camera cut inside the orbit (drone swelled, then shrank). Measured clip data
+  2701 -> 7201: elevation 33 -> 90 deg, radius 7.0 -> 8.9. Effects weight = smoothstep(clip elevation, 35, 75 deg).
+- `cameraTilt.weight` keeps the drone-focus effects on at the oblique angle (larger drone, background blur,
+  sun-angled shadow). SpecsCallouts stretch their z anchors by 1/sin(40 deg) with the weight so the four lines keep
+  their spacing. Checked 1440×900: 12 frames 2701 -> 7201 move continuously (steady turn from 3/4 to front view, size
+  and blur ramp together), Airframe callouts clear, Connection 9500/11701 tags and links follow, Prepare back to top
+  view; build passes. Not checked: mobile tracks, narrow desktop.
+
+## Black overlay between terrain and clouds (user, 2026-11-02: "so the ground is a little less evident")
+
+- `groundDimUniforms.uGroundDim` (drone-shadow.ts), multiplied onto every TerrainMaterial's final colour (fog
+  included), equivalent to a black layer under the cloud wisps. CloudWisps writes `GROUND_DIM` 0.5 (was 0.35) x its strength,
+  so it follows the wisps: off in the opening/hero, on from Airframe whenever the camera looks down, off from the
+  Care teams map. Checked hero 2701 (unchanged), Airframe 7201, Connection 9500, Route 25201 (1440×900); build passes.
+
+## Larger drone in top views (user, 2026-11-02)
+
+- `DroneRig.tsx` `TOP_VIEW_SCALE` 1.35 on mover1 (hero drone), blended by the camera's view direction (-dir.y
+  0.75 -> 0.95) and eased over ~0.4 s, the same top-view weight as the background blur. Spec callouts are fixed world
+  points near the drone centre and still land on the airframe. Checked 1440×900: hero 2701 unchanged, tilt 4600/5400
+  grows smoothly, Airframe 7201 and Connection 9500 larger (Connection side drones unchanged). Not checked: narrow
+  desktop widths for callout/motor overlap, mobile (scale applies there too).
+
+## Drone-focused depth of field (user, 2026-11-02: blur the landscape like a film lens focusing on the product)
+
+- `PostFX.tsx`: `COC_INF_PX` 5 -> 60, `MAX_COC_PX` 16 -> 14 (thin-lens CoC = COC_INF_PX x |1 - focus/dist|, focus on
+  `Drone1Group`, terrain band only, drones never blurred). Only in top views (user: not in the hero or the oblique
+  chapters): strength blends 5 -> 60 with the camera's view direction (-dir.y 0.75 -> 0.95), eased over ~0.4 s so
+  snaps and track switches never pop. Overhead ground ~8 px.
+  Checked hero 2701 and Route 25201 sharp, Airframe 7201 and Connection 9500 blurred, and the tilt 2701 -> 7201
+  (six frames) blurs in gradually (1440×900); build passes. AGENTS.md lens note updated.
+
+## Drone product lighting: tried and removed (user, 2026-11-02)
+
+- A key + rim light rig and a fresnel edge glow on the drone materials (drone-light.ts, DroneLightRig.tsx) were added
+  and then removed at the user's request: with more cloud the background is whiter, so the plain dark airframe gives
+  more contrast. The rig was never committed, so it is not in git history.
+
 ## Drone shadow on the terrain + overhead cloud wisps (user, 2026-11-02: drone must stand out, no extra lights)
 
 - `DroneShadow.tsx` + `drone-shadow.ts`: each frame the drones' opaque meshes (layer 5, override black) are rendered
@@ -295,9 +419,19 @@ Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, 
   world units). Daylight: real sun direction, strength 0.9. Hero overcast preset: softer (0.85; darkened from 0.75/0.65 at the user's request), direction 60% from
   the sun toward straight down (straight down hid it exactly behind the drone). The shadow camera's up is -Z
   (lookAt is degenerate straight down). `?shadow=off` disables it.
+- Top views (user: stronger shadow in Airframe): with the camera looking down (same eased -dir.y 0.75 -> 0.95 blend
+  as blur and drone size) the shadow goes to full strength, a crisper 0.07 penumbra and a 40 deg sun on the scene
+  sun's heading (the ~63 deg scene sun and the overcast hero preset hid it under the drone). Visible beside the
+  drones in Connection; in Airframe the large drone still covers part of it.
+- The drones' shadow also falls on the cloud wisps (same light-space map, `droneShadowAt` in the wisp shader, x0.85).
+  Verified with a temporarily opaque cloud layer at Connection and Route: clean soft hexacopter shadows offset with
+  the sun.
 - `CloudWisps.tsx`: streaky broken stratus plane at world y -1.25 between drones and ground, scrolling with the
-  terrain travel plus a slow wind, faded within 8-18 units of the camera; only when the camera looks down
-  (view y < -0.6 -> -0.85: Airframe, Connection, Swarm), off in hero/opening, from the Care teams map and after ignition.
+  terrain travel plus a slow wind, faded around where the camera's view ray meets the layer (0.7-1.4 x that distance;
+  the camera sits in a moving rig, so its world position is used). On whenever the camera looks down (view y
+  < -0.3 -> -0.55) once DELTA_DRONE is past 0.3-0.6 (Airframe, Connection, Prepare, Route), off in hero/opening, from
+  the Care teams map and after ignition. Coverage ~40%, opacity 0.68 (raised from ~25% / 0.6, user). (First version faded 8-18 units from the camera and only overhead: invisible
+  in Connection, where the camera is ~15-28 units up, and in Route.)
 - Checked (agent-browser 1440×900): white-ground isolation at Airframe shows the sun shadow offset lower right;
   hero 2701, Airframe 7201, Connection 9500, Swarm 16201 render; build passes. The shadow is subtle on the busy
   forest texture; terrain travel makes on/off frame differencing unusable (frames differ everywhere).

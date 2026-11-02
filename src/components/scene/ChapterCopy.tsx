@@ -178,7 +178,7 @@ function Swarm() {
 }
 
 function Mission() {
-  const start = useScrollToScene(SCENE.FLOCK_SCENE);
+  const start = useScrollToScene(SCENE.REAL_TIME_DETECTION); // Journey removed: straight to Route
   return (
     <Frame innerClassName="md:!block">
       <div className="contents w-full flex-wrap justify-between gap-4 md:flex">
@@ -220,15 +220,9 @@ const CHAPTERS: { component: ComponentType; timeWindow: Window }[] = [
   { component: Swarm, timeWindow: { startScene: SCENE.SWARM_SCENE, startSceneProgress: 0.75, endScene: SCENE.MISSION_PRESET, endSceneProgress: 0.075 } },
   { component: Mission, timeWindow: { startScene: SCENE.MISSION_PRESET, startSceneProgress: 0.75, endScene: SCENE.FLOCK_SCENE, endSceneProgress: 0.01 } },
   {
-    component: simple(
-      "Keep the delivery in view.",
-      "The aircraft is one part of the journey. The sender, the receiving clinic and the route between them matter just as much.",
-    ),
-    timeWindow: { startScene: SCENE.FLOCK_SCENE, startSceneProgress: 0.75, endScene: SCENE.REAL_TIME_DETECTION, endSceneProgress: 0.01 },
-  },
-  {
-    component: simple("Read the route ahead.", "The route view introduces the terrain, road access and obstacles between the health centre and the clinic."),
-    timeWindow: { startScene: SCENE.REAL_TIME_DETECTION, startSceneProgress: 0.5, endScene: SCENE.THERMAL_IRREGULARITY, endSceneProgress: 0.075 },
+    component: simple("Read the route ahead.", "The route view introduces the terrain, road access and the villages between the health centre and the clinic."),
+    // Starts as the flank drones clear the screen (Journey .85), with the village scan (user, 2026-11-02).
+    timeWindow: { startScene: SCENE.FLOCK_SCENE, startSceneProgress: 0.85, endScene: SCENE.THERMAL_IRREGULARITY, endSceneProgress: 0.075 },
   },
   {
     component: simple(

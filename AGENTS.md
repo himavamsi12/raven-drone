@@ -107,6 +107,9 @@ scripts/asset-manifest.mjs  manifest generator
   tiles + fog in Terrain), story held at 0. At P everything opening-only is off and the hero frame is unchanged. The hero
   copy shows from the first opening frame and leaves at delta .075, as before (user). Band 1 opens with an opening range (page 0 → P+1): one
   gesture plays it over `OPENING_MS` (5 s), reverse returns to the low shot; no auto-advance on reveal.
+- Journey (FLOCK_SCENE) removed (user, 2026-11-02): no network map (flock mix and portal render off), no copy or nav
+  tick; its story range plays on 30% of its page length (`JOURNEY_PAGE_SHARE`, `band1Page`/`band1Story` in
+  story-map.ts) inside the Route snap range, so one gesture flies Prepare -> Route. Band 1 spacer `calc(2150dvh + 1px)`.
 - Homepage layout (user decisions 2026-10-30/11-01): the shipped story runs in two contiguous page bands
   (`lib/story-map.ts`). Band 1 = intro → real-time-detection (Route). Band 2 starts right after it, at the START of
   phalanx-ai, and runs phalanx → multi-threat. The `#parts` section was removed (2026-11-01). Thermal and ignition are
@@ -122,15 +125,17 @@ scripts/asset-manifest.mjs  manifest generator
   the fixed stage covering through both bands and scrolls it away after band 2, `useStage.cover` gates PostFX and the
   bar background. Snapping is one band from the opening to the end of the story; after it the page is free.
 - Scene spans unchanged (intro 1px, 12 × 500vh, zone 100vh, multi 500vh, in story px). Spacers: band 1
-  `calc(2500dvh + 1px)` (story to Route), band 2 `3200dvh` (phalanx → multi + one screen, `#care-teams` anchor at
+  `calc(2150dvh + 1px)` (story to Route, Journey compressed to 150vh of page), band 2 `3200dvh` (phalanx → multi + one screen, `#care-teams` anchor at
   500dvh = finished map frame, target of the Network links).
 - Per scene: `progress=(scroll-start)/height`, `showRatio`, `hideRatio`, `isActive`, clamped 0–1, written on every
   Lenis scroll event. Everything reads `useScenes.getState()` in frame loops (no React state per frame).
 - One progress source, one Lenis. Do not add GSAP ScrollTrigger scrub or a second smoothing layer.
 - Snapping: wheel/arrow/touch picks next/prev scene end; RAF steps 2px/ms while Lenis velocity is low.
+- Airframe/Connection are capped to a ~40 deg oblique view (smooth elevation ceiling from 35 deg) on top of the shipped clips (`scene/camera-tilt.ts`, user 2026-11-02), Prepare included; hands off to the Journey map over FLOCK_SCENE 0.4-0.75.
 - Camera mapping: delta→Camera01 (always), swarm→Camera02, mission→03, flock→04-02, thermal→05, ignition→06,
   analysis→07, interdrone→08, multi-threat→09. Drones: 01-01 (last frame), 02-01/02-02/02-03, 03-01/03-02.
   Mobile tracks (`*-mobile.glb`) below 768px. GLTFLoader renames `Drone.001` → `Drone001`.
+- Hero drone grows to 1.35x in top views (`TOP_VIEW_SCALE` in DroneRig, eased top-view blend, user 2026-11-02).
 - Overlay gates from the bundle, e.g. specs callouts: delta > .9 && swarm < .01; hero copy exits at delta .075.
 
 ### Rendering notes
@@ -169,9 +174,9 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 ## Verification tips
 
 - Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
-  delta end 7201, swarm 11701, mission 16201, flock 20701, Route 25201 (= band 2 start, wipe 25201 → 27451),
-  Care teams frame 29701, analysis end 34201, notifications 38701, interdrone 43201, extra 47701, zone 48601, multi end
-  53101, page height ~55447. Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
+  delta end 7201, swarm 11701, mission 16201, (Journey, compressed: 16201 → 17551), Route 22051 (= band 2 start, wipe
+  22051 → 24301), Care teams frame 26551, analysis end 31051, notifications 35551, interdrone 40051, extra 44551, zone
+  45451, multi end 49951, page height ~52297. Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
 - Up to the story end, same vh on reference and local gives identical scrollY ↔ scene mapping (verified before the
   homepage change; the later shipped chapters are no longer on the page).
 - Built-in preview pane throttles RAF between tool calls: wait a few seconds before screenshots; FPS dips there are
@@ -182,7 +187,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - `RavenModel` loads `raven_hexa.glb` (1.99 MB, 86k tris): the source's 11 JPEG maps kept byte-identical (lossless WebP of them was 6.6 MB, so they are not re-encoded) + Draco geometry; `KHR_texture_transform` is required. User rule: never resize or lossy-recompress Raven textures; keep source bytes or lossless WebP, whichever is smaller, and Draco. Draco quantization 16/12/16 (position/normal/texcoord). Sun-glint materials are matched by name in `Drone.tsx` (`GLINT_MATERIALS`).
 - Hero lighting preset (`scene/hero-light.ts`, user's panel values, 2026-11-02): sun off, hemisphere sky fill 1.65, HDRI x0.65 rotated, grain 0.06, sharpen 0 in the opening, hero and Airframe; blends back to daylight over SWARM_SCENE 0-0.6.
 - Live daylight (`scene/sunlight.ts`, written by `MainScene`, read by `RavenModel`): travel-driven sun/env heading sway, cloud shade on the directional light, facet sun glints. Reduced motion disables it. While the environment plate shows, `scene/plate-light.ts` takes over (see Open work). Rebuild the hexa from `glb/new-drone/README.md` (`prepare_hexa.mjs`, textures unchanged, Draco last, once); never edit the GLB by hand.
-- Rotor selection lives in `scene/raven-rotors.ts`: the exact six names in `RAVEN_ROTOR_NAMES` (`Rotor_<Front|Mid|Rear>_<Left|Right>`), never a `Rotor_` prefix match. Pivots sit on the prop hubs (spin about local +Y) with `spin_direction` extras read from the source's own prop clips: FL/MR/RL CW, FR/ML/RR CCW (alternating round the ring). The nav point lights in the source are stripped. Spin rate 150 rad/s (`ROTOR_SPEED`); while spinning, `scene/rotor-blur.ts` hides the `PROP_*` blade/tip meshes and shows one blur-disc shader per pivot (sized to the measured tips; hub stays visible), because faster mesh rotation only aliases at 60 Hz. The disc draws two swept blade images (13 rad/s visible sweep, per-rotor phase, real spin direction) and a sun flash computed from the live `sunlight.direction` against twisted/cambered blade normals (0.15-0.75 rad), so flashes ride on individual blades: streaks in the oblique hero, narrow sectors from above. Reduced motion: still rotors, real blades, no discs.
+- Rotor selection lives in `scene/raven-rotors.ts`: the exact six names in `RAVEN_ROTOR_NAMES` (`Rotor_<Front|Mid|Rear>_<Left|Right>`), never a `Rotor_` prefix match. Pivots sit on the prop hubs (spin about local +Y) with `spin_direction` extras read from the source's own prop clips: FL/MR/RL CW, FR/ML/RR CCW (alternating round the ring). The nav point lights in the source are stripped. Spin rate 150 rad/s (`ROTOR_SPEED`); while spinning, `scene/rotor-blur.ts` hides the `PROP_*` blade/tip meshes and shows one blur-disc shader per pivot (sized to the measured tips; hub stays visible), because faster mesh rotation only aliases at 60 Hz. The disc draws two swept blade images (13 rad/s visible sweep, random phase and ±15% sweep speed per rotor and per drone instance so the three drones never flash in step, real spin direction) and a sun flash computed from the live `sunlight.direction` against twisted/cambered blade normals (0.15-0.75 rad), so flashes ride on individual blades: streaks in the oblique hero, narrow sectors from above. Reduced motion: still rotors, real blades, no discs.
 - `node scripts/check-raven-rotors.mjs` verifies pivots, positions, directions, child transforms, clone independence and web-asset parity.
 - Hexa build commands: `glb/new-drone/README.md`. The quad's Blender build/QA/export commands (silhouette source): `glb/raven-quad/README.md`.
 
@@ -201,7 +206,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   repeat): `raven-natural-b/c.webp` from `glb/raven-terrain/13_tree_variants.py` (look-dev `raven-terrain-v11-treevariants.blend`),
   picked per tile by `ravenTileVariant` in `scene/raven-terrain.ts`; same hills/roads/houses, so those still repeat.
 - Environment plate prototype (opt-in `?plate=h00`, `scene/HeroPlate.tsx`): three Seedance clips of one flight behind the drones. Hero loop `raven-h00-loop.mp4` (time-driven); Airframe tilt `raven-s01-airframe.mp4` (all-intra, scrubbed: DELTA_DRONE progress -> measured camera pitch -> clip time, flow-map drift when idle); Connection `raven-s02-connection.mp4` (straight down past the health centre, plays from frame 0 when the tilt ends, then loops 5.5-12.04 s so the building never repeats). Fades to live terrain at the end of SWARM_SCENE; shader adds parallax, motion blur and haze on oblique views. The live terrain moves away from the camera (it retreats ahead of the drone): prompts must say the ground recedes toward the top of the frame. While it shows, `scene/plate-light.ts` swaps the drone to plate-matched light (high late-morning sun beyond the frame, hazy sky, the plate's own terrain as reflected ground) instead of the sunset `env.exr`. The sun casts soft shadows (2048 PCF) on the drones only: its shadow camera is refitted around `Drone1Group` in `MainScene`; terrain is unlit and never receives. Brief: `RAVEN_ENVIRONMENT_FILM_SEEDANCE_PROMPT.md`; sources in `research/raven-film/h00/` (local only).
-- Terrain lens (`scene/TerrainLensEffect.ts`, first EffectPass after the RenderPass in `PostFX.tsx`): depth-reconstructed motion blur (terrain travel + camera reprojection, 1/30 s shutter) and thin-lens DoF focused on `Drone1Group`, applied only below world y -1.55 so drones stay sharp. Exaggerated for a high-speed look (travel streak x`SPEED_GAIN` 1.5, cap 9 px since 2026-11-02, user: was too strong at 3 / 16; `COC_INF_PX` 5, disc cap 16 px): tune those constants in `PostFX.tsx`. Anything drawn after the terrain must not write depth (the clouds did, which hid the ground from the lens). `?lens=off` disables it. If drones ever fly lower or the terrain parent moves, re-check `TERRAIN_TOP`.
+- Terrain lens (`scene/TerrainLensEffect.ts`, first EffectPass after the RenderPass in `PostFX.tsx`): depth-reconstructed motion blur (terrain travel + camera reprojection, 1/30 s shutter) and thin-lens DoF focused on `Drone1Group`, applied only below world y -1.55 so drones stay sharp. Exaggerated for a high-speed look (travel streak x`SPEED_GAIN` 1.5, cap 9 px since 2026-11-02, user: was too strong at 3 / 16; `COC_INF_PX` 5, rising to 60 in top views only with an eased blend, disc cap 14 px since 2026-11-02: drone-focused depth of field, user): tune those constants in `PostFX.tsx`. Anything drawn after the terrain must not write depth (the clouds did, which hid the ground from the lens). `?lens=off` disables it. If drones ever fly lower or the terrain parent moves, re-check `TERRAIN_TOP`.
 - Silhouette assets: `drone-lowpoly.glb` (nodes `mainBody` + `outlineHull`, jet axis contract) and `loading-drone.glb`; the boot SVG is traced to sit over the 3D loader. Rebuild with `glb/raven-quad/build_silhouettes.py` (see its README section).
 
 1. Footer heat-distortion / jet-beam (module 85508) not ported.

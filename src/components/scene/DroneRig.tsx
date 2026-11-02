@@ -18,6 +18,7 @@ import { CAMERA_BINDINGS, ClipSeeker, DRONE1_BINDINGS, DRONE2_BINDINGS, DRONE3_B
 import { Drone } from "./Drone";
 import { applyOpening } from "./opening";
 import { SpecsCallouts } from "./overlays/SpecsCallouts";
+import { applyCameraTilt, cameraTilt } from "./camera-tilt";
 import { SwarmTags } from "./overlays/SwarmTags";
 import { useGLB } from "./types";
 
@@ -66,6 +67,29 @@ type Pose = { position: THREE.Vector3; rotation: THREE.Vector3 };
 const HERO_FOV = 20;
 /** Raven (user, 2026-10-31): all three drones 1.2x the shipped scale in every scene. */
 const DRONE_SCALE = 1.2;
+/**
+ * Extra size for the hero drone when the camera looks straight down on it (Airframe top view, Connection ...; user,
+ * 2026-11-02: the product reads too small there). Same top-view blend as the background blur (PostFX): camera
+ * -dir.y 0.75 -> 0.95, eased over ~0.4 s, so it grows smoothly through the tilt. The spec callouts are fixed world
+ * points near the drone centre, so they still point into the larger airframe.
+ */
+const TOP_VIEW_SCALE = 1.35;
+const _topDir = new THREE.Vector3();
+const _zoomCam = new THREE.Vector3();
+const _zoomDrone = new THREE.Vector3();
+/**
+ * Hero drone scale / camera distance at the Prepare frame (scale 0.0075 x 1.2 x 1.35 at 17.24) and the Route frame
+ * (0.0075 x 1.2 at 14.7), desktop tracks (measured 1440×900, fov 20; the ratio does not depend on the viewport).
+ */
+const APPARENT_PREPARE = (0.0075 * 1.2 * 1.35) / 17.24;
+const APPARENT_ROUTE = (0.0075 * 1.2) / 14.7;
+const _tiltDrone = new THREE.Vector3();
+const _poseA = new THREE.Object3D();
+const _poseB = new THREE.Object3D();
+const _offA = new THREE.Vector3();
+const _offB = new THREE.Vector3();
+const _swing = new THREE.Quaternion();
+const _partial = new THREE.Quaternion();
 
 const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Vector3() });
 
@@ -133,6 +157,9 @@ export function DroneRig() {
   const camera = useRef<THREE.PerspectiveCamera>(null);
   const droneRoot = useRef<THREE.Group>(null);
   const mover1 = useRef<THREE.Group>(null);
+  const topView = useRef(0);
+  /** Journey progress eased in time, drives the Prepare -> Route camera move and drone size (see the clip frame). */
+  const transitionF = useRef(0);
   const mover2 = useRef<THREE.Group>(null);
   const mover3 = useRef<THREE.Group>(null);
   const drone1 = useRef<THREE.Group>(null);
@@ -157,7 +184,7 @@ export function DroneRig() {
   const poses = useRef([pose(), pose(), pose()]);
 
   // Clip seeking runs before the procedural pass, mirroring the shipped order 1..15.
-  useFrame(() => {
+  useFrame((_, dt) => {
     const set = isMd ? seekers.desktop : seekers.mobile;
     if (mover1.current) set.d1?.apply(mover1.current);
     if (cameraMover.current) set.camera?.apply(cameraMover.current);
@@ -165,6 +192,40 @@ export function DroneRig() {
     // the flank drones (off frame from the hero shot on), so they stay hidden until it lands (user, 2026-11-01).
     const opening = openingNow();
     if (cameraMover.current && camera.current) applyOpening(cameraMover.current, camera.current, opening, HERO_FOV);
+    // Oblique view instead of straight down in Airframe and Connection (camera-tilt.ts).
+    if (cameraMover.current && drone1.current) {
+      const sc = scenes();
+      // Oblique through Airframe, Connection and Prepare (user: no top-down angle at all); hands off to the Journey
+      // network map during its transition (FLOCK_SCENE 0.4 -> 0.75, before the flock pass mixes in).
+      const f = sc[SCENE.FLOCK_SCENE].progress;
+      const gate = opening >= 1 ? 1 - THREE.MathUtils.smoothstep(f, 0.4, 0.75) : 0;
+      drone1.current.updateWorldMatrix(true, false);
+      applyCameraTilt(cameraMover.current, drone1.current.getWorldPosition(_tiltDrone), gate);
+      // Prepare -> Route (Journey range, now a transition): one eased camera move between the two fixed end poses
+      // instead of the clip in between. The clip pitched 40 -> 51 -> 31 deg and the drone drifted past centre and
+      // back while the tilt handed off ("awkward motion", user 2026-11-02). A = tilted Camera03 end (Prepare frame),
+      // B = Camera04-02 end (Route holds it). Distance lerps, the direction about the drone and the orientation slerp,
+      // eased with smootherstep (C2: starts and lands at rest), so pitch, distance and framing each move one way.
+      // The wheel's first frames move the page in a burst (246, 94, 37 px, shipped Lenis lerp .95), so the move is
+      // driven by Journey progress eased over ~0.1 s: the camera absorbs the burst, scroll speed is unchanged.
+      // Large jumps (nav ticks, scrollTo) snap.
+      const tf = transitionF.current;
+      transitionF.current = Math.abs(f - tf) > 0.5 ? f : tf + (f - tf) * (1 - Math.exp(-dt / 0.1));
+      const fs = transitionF.current;
+      if (opening >= 1 && fs > 0.0001 && fs < 0.9999 && set.camera?.sample("Camera03", 1, _poseA.position, _poseA.quaternion)
+        && set.camera.sample("Camera04-02", 1, _poseB.position, _poseB.quaternion)) {
+        applyCameraTilt(_poseA, _tiltDrone, 1);
+        const e = THREE.MathUtils.smootherstep(fs, 0, 1);
+        _offA.copy(_poseA.position).sub(_tiltDrone);
+        _offB.copy(_poseB.position).sub(_tiltDrone);
+        const r = THREE.MathUtils.lerp(_offA.length(), _offB.length(), e);
+        _swing.setFromUnitVectors(_offA.normalize(), _offB.normalize());
+        _partial.identity().slerp(_swing, e);
+        cameraMover.current.position.copy(_offA.applyQuaternion(_partial).multiplyScalar(r)).add(_tiltDrone);
+        cameraMover.current.quaternion.copy(_poseA.quaternion).slerp(_poseB.quaternion, e);
+        cameraTilt.weight = 1 - e; // drone-focus effects (blur, size, shadow) follow the same curve
+      }
+    }
     if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = opening >= 1;
     if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = opening >= 1;
   }, 1);
@@ -255,13 +316,30 @@ export function DroneRig() {
     drone3.current.rotation.set(p3.rotation.x, p3.rotation.y, p3.rotation.z);
 
     if (cameraDolly.current) {
-      const out = remap(flock, 0.85, 1, 0, -5);
-      const back = remap(detection, 0, 0.45, -5, 0);
-      cameraDolly.current.position.z = detection > 0.001 ? back : out;
+      // Shipped push-in (flock .85 -> 1) and pull-back (Route 0 -> .45) were hidden by the Journey map transition.
+      // Journey is removed, so they read as a zoom in then out (user, 2026-11-02): no dolly.
+      cameraDolly.current.position.z = 0;
+    }
+    if (camera.current) {
+      camera.current.getWorldDirection(_topDir);
+      const target = Math.max(THREE.MathUtils.smoothstep(-_topDir.y, 0.75, 0.95), cameraTilt.weight);
+      topView.current += (target - topView.current) * (1 - Math.exp(-dt / 0.4));
     }
     if (mover1.current) {
       const sc = remap(swarm, 0, 0.5, 0.0075, 0.0085) - 0.001 * mission;
-      mover1.current.scale.setScalar((isMd ? sc : 0.0075) * DRONE_SCALE);
+      const top = 1 + (TOP_VIEW_SCALE - 1) * topView.current;
+      let scale = (isMd ? sc : 0.0075) * DRONE_SCALE * top;
+      // Prepare -> Route (Journey range, desktop track): hold the drone's apparent size (scale / camera distance) on
+      // an even path from the Prepare frame to the Route frame. Measured at 1440×900: the clip camera moves in
+      // (17.2 -> 13.7) while the top-view enlargement fades out, which read as a zoom in, then out (user, 2026-11-02).
+      const fs = transitionF.current; // same eased progress as the camera move
+      if (isMd && camera.current && fs > 0) {
+        const dist = camera.current.getWorldPosition(_zoomCam).distanceTo(drone1.current.getWorldPosition(_zoomDrone));
+        const a = THREE.MathUtils.lerp(APPARENT_PREPARE, APPARENT_ROUTE, THREE.MathUtils.smootherstep(fs, 0, 1));
+        const held = a * dist;
+        scale += (held - scale) * THREE.MathUtils.smoothstep(fs, 0, 0.08);
+      }
+      mover1.current.scale.setScalar(scale);
     }
   });
 
