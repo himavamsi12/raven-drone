@@ -198,6 +198,11 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   were not carried over. The `#parts` live close-up track was removed on 2026-11-01 (user); the diagonal wipe now
   joins the bands. The fire sprites, thermal HUD/palette box and the thermal/fire copy and HUD lines were deleted (2026-10-31); the thermal and ignition scenes still exist in story coordinates because later scenes read their progress.
 
+- Clay map (user, 2026-11-02, after the `net` section of `asset/html/raven_homepage.html`): band 2's map is a clay
+  landscape (`scene/ClayTerrain.tsx`, `scene/clay-map.ts`; the terrain tiles hide while it shows). Care teams opens on
+  a low camera on one mountain raised out of our real Raven relief (its ridges are the tile's own, no noise or
+  texture); over early Review the camera hands back to the shipped track and the relief settles to real heights. Still open with the user: pins/routes like
+  the reference, the flat overlays in the landscape view.
 - Raven follow-up: all jet imagery is replaced (silhouettes, mission cards, demo, footer sequence). The footer wordmark is "RAVEN" (Geist text: SVG on mobile/tablet, canvas texture for the desktop WebGL outline). The third-party team-logos texture, the USAvionix legal copy and the Notes link were removed. Preserve current camera/scroll choreography.
 - Story/content Phase 1 is done (copy only, 2026-10-30): one illustrative health-centre → hill-clinic delivery across chapters, HUD, scene labels, nav, menu and sections. Inventory and claim status: `RAVEN_CONTENT_MAP.md`. Chapter/HUD text lives beside its timing (`ChapterCopy.tsx`, `HudLog.tsx`); repeated notice/CTA copy lives in `src/lib/copy.ts`. Keep labels display-only: no fake confirmations ("delivered", "clinic notified", "cold chain maintained"), no numbers (temperature, confidence, speed).
 - Story Phase 2 (visual, plan only): `RAVEN_VISUAL_STORY_PLAN.md`. The fire/thermal detour is the main replacement candidate; preparation, launch, handoff and return are not animated yet. Product decisions D1–D5 in that file are open.

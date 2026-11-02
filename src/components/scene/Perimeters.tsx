@@ -10,6 +10,7 @@ import { SCENE, useScenes } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { Badge } from "@/components/ui/Badge";
 import { CheckIcon, InfoIcon, NavigationArrowIcon, WarningIcon } from "@/components/ui/icons";
+import { clayState, landscapeWeight } from "./clay-map";
 import { GroundHtml } from "./overlays/GroundHtml";
 
 /** Hand-drawn zone outlines (shipped `eM`). */
@@ -257,13 +258,17 @@ export function Perimeters() {
   const coordZone = useScenes((s) => s[SCENE.INTERDRONE_COORDINATION].progress > 0.25);
   const supportOn = useScenes((s) => s[SCENE.EXTRA_SUPPORT].progress > 0.75);
   const stabilized = useScenes((s) => s[SCENE.ZONE_STABILIZED].progress > 0.99);
+  // Raven clay landscape (clay-map.ts): these flat ground overlays sit at the real ground height, so they wait until
+  // the lifted relief has settled in Review.
+  const landscape = useScenes((s) => clayState.enabled && landscapeWeight(s) > 0.05);
   const centerVariant: DotVariant = notified ? "green" : analysed ? "red" : "yellow";
+  const survey = SURVEY[notified ? 3 : analysed ? 2 : surveyOn ? 1 : 0];
   return (
     <>
-      <Perimeter name="center" className="w-[581px]" {...SURVEY[notified ? 3 : analysed ? 2 : surveyOn ? 1 : 0]} position={[-0.0475, 0, 0.56]} />
-      <FocusDot variant={centerVariant} position={[1.6, 0.01, -0.35]} hidden={!dotsOn} />
-      <FocusDot variant={centerVariant} position={[-1.15, 0.01, 0.2]} hidden={!dotsOn} />
-      <FocusDot variant={centerVariant} position={[1.1, 0.01, 1.7]} hidden={!dotsOn} />
+      <Perimeter name="center" className="w-[581px]" {...survey} hidden={survey.hidden || landscape} position={[-0.0475, 0, 0.56]} />
+      <FocusDot variant={centerVariant} position={[1.6, 0.01, -0.35]} hidden={!dotsOn || landscape} />
+      <FocusDot variant={centerVariant} position={[-1.15, 0.01, 0.2]} hidden={!dotsOn || landscape} />
+      <FocusDot variant={centerVariant} position={[1.1, 0.01, 1.7]} hidden={!dotsOn || landscape} />
       <Perimeter name="top-right" className="w-[245px]" {...SENSITIVE[stabilized ? 3 : supportOn ? 2 : coordZone ? 1 : 0]} position={[5.28, 0, -0.53]} />
       <FocusDot variant={stabilized ? "green" : supportOn ? "red" : "yellow"} position={[5.4, 0.01, -0.72]} hidden={!coordDots} />
       <Responders />

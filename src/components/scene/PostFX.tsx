@@ -9,6 +9,7 @@ import { damp, remap } from "@/lib/math";
 import { computeSceneRanges, SCENE, sceneDataAt, scenes, useScenes, type SceneData, type SceneId } from "@/lib/scenes";
 import { mapStory, openingNow, storyMap, useStage, wipeProgress, wipeRatioAt } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { clayState } from "./clay-map";
 import { fisheyeAt } from "./opening";
 import { TerrainLensEffect } from "./TerrainLensEffect";
 import { DAYLIGHT, HERO_LIGHT, heroLight } from "./hero-light";
@@ -482,7 +483,9 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     const topTarget = Math.max(THREE.MathUtils.smoothstep(-_camDir.y, 0.75, 0.95), cameraTilt.weight);
     topViewState.value += (topTarget - topViewState.value) * (1 - Math.exp(-dt / 0.4));
     const topView = topViewState.value;
-    lens.u("uCocInf").value = lensOn ? COC_INF_PX_BASE + (COC_INF_PX - COC_INF_PX_BASE) * topView : 0;
+    // Raven clay map (clay-map.ts): a sharp model, no depth of field (its contours and dots are the content).
+    const dof = lensOn && !clayState.on;
+    lens.u("uCocInf").value = dof ? COC_INF_PX_BASE + (COC_INF_PX - COC_INF_PX_BASE) * topView : 0;
     lens.u("uMaxBlurPx").value = MAX_BLUR_PX * ((size.height * ratio) / 1080);
     lens.u("uMaxCocPx").value = MAX_COC_PX * ((size.height * ratio) / 1080);
     lens.u("uTerrainTop").value = TERRAIN_TOP;

@@ -26,6 +26,7 @@ import { useOpeningPanorama } from "./OpeningSky";
 import { DetectionPoints } from "./DetectionPoints";
 import { RAVEN_DETECTION_Y, RAVEN_TILE_MAPS, ravenTileVariant, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
+import { clayOn, clayState } from "./clay-map";
 
 /** Distance between tile origins (shipped `X`). */
 export const TILE_STEP = 2 * TERRAIN_SCALE * 200 - 0.01;
@@ -261,6 +262,7 @@ export function Terrain() {
   const groupWide = useRef<THREE.Group>(null);
   const groupAfter = useRef<THREE.Group>(null);
   const groupOpening = useRef<THREE.Group>(null);
+  const tiles = useRef<THREE.Group>(null);
   const steps = useMemo(() => fogSteps(isMd), [isMd]);
 
   useFrame(({ clock }, dt) => {
@@ -302,6 +304,8 @@ export function Terrain() {
     }
     const scan = remapEased(phalanx.progress, 0, 0.5, 0, 1, easeInOutCubic);
     for (const m of materials) m.uniforms.uHideRatio.value = scan;
+    // Raven clay map (clay-map.ts): ClayTerrain draws the swept ground, the tiles step aside.
+    if (tiles.current) tiles.current.visible = !(clayState.enabled && clayOn(state));
     urban.uniforms.uisCity.value = nearCity;
 
     const tp = thermal.progress;
@@ -342,7 +346,7 @@ export function Terrain() {
   );
 
   return (
-    <>
+    <group ref={tiles}>
       <group ref={groupA}>
         {tile([-1, 0], { desktopOnly: true })}
         {tile([0, 0], { withPoints: true })}
@@ -379,7 +383,7 @@ export function Terrain() {
         {tile([0, 5], { desktopOnly: true })}
         {tile([-1, 5], { desktopOnly: true })}
       </group>
-    </>
+    </group>
   );
 }
 

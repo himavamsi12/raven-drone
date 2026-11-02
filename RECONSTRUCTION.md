@@ -388,6 +388,42 @@ Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, 
   so it follows the wisps: off in the opening/hero, on from Airframe whenever the camera looks down, off from the
   Care teams map. Checked hero 2701 (unchanged), Airframe 7201, Connection 9500, Route 25201 (1440×900); build passes.
 
+## Care teams map becomes a clay landscape (user, 2026-11-02: "instead of the 2D map ... a landscape like the HTML",
+then "not this top-down view only ... directly show this view")
+
+- Source studied: the `net` section of `asset/html/raven_homepage.html` (inline script 0, read directly; REA CLI
+  `analyze-javascript-application` on the extracted scripts, evidence `ev_69f04045…`, static only). Procedural three
+  r128 terrain: grey clay by height and slope (`uLow #262626` → `uHigh #8e8e8e`), contour lines (index every 5th,
+  `fwidth` AA), a draped dot grid, a cursor glow (raycast hit, eased) brightening lines and dots, a low camera
+  (~17°) on a ridged massif, dashed routes and HTML pins.
+- Band 2's map is now `scene/ClayTerrain.tsx` + `scene/clay-map.ts`: while the map is on (`clayOn`, same test as the
+  tiles' scan ratio > .5) the terrain tiles hide and one dense mesh (361², grid warped: ~0.05 map units at the centre,
+  ~0.35 at the rim) draws our Raven tiles from a height field rasterised from `raven-terrain.glb` `Land-A`. The
+  reference's colours and contour/dot/glow terms are reused; the old tile shader is unchanged.
+- Landscape view: Care teams opens on a low camera (12° elevation, 28 units, heading drift over phalanx .5 → 1,
+  `applyLandscapeCamera` in DroneRig after the shipped clip) on one mountain made from our own relief
+  (`liftedHeight`): inside a Gaussian footprint (5.5 x 3.8 map units, around the village hill) the real Raven
+  heights are raised 2.4 units and their hills/valleys stretched x5.5 about the tile rim, eased off on two village
+  shelves. Only a smoothed copy of the height field is stretched (periodic box blur, radius 3 cells x 2 passes, ~5.6
+  local units; user: "the tip of the hills looks very sharp"), so the tops stay rounded like our hills and the fine
+  detail stays at 1x; outside it the ground keeps its real low relief. No invented noise and no texture (user iterations:
+  ridged-noise massif → whole tile landscape stretched with land-cover tone → "just the landscape structure of the
+  hill/mountain, not the whole"). Over Review progress .04 → .5 the camera blends back to the shipped track and the
+  lift goes to 0 (per-vertex `aLift` + `aLiftNormal`), so from mid-Review on the map has the real tile heights and
+  the shipped overlays, drones and responders fit. The pair drones fly 5 units higher while the lift is on; the
+  centre outline, its three points and badge are hidden until it is below .05.
+- Village: clay houses on the Raven cottage centres of the nearby tiles plus 17 on the Care teams tile (one larger
+  clinic) around the two analysis drone targets; they ride between real and lifted heights.
+- Contour lines removed (user, 2026-11-02: "this flows are not required"): the clay shows shading and the dot grid
+  only; the cursor glow lifts the clay and the dots.
+- Cursor glow: window `pointermove` (mouse/pen), ray marched against `clayHeight` (CPU mirror of the mesh). The
+  terrain lens depth of field is off while the clay map shows; the flat `GridRow` is not rendered in raven mode.
+  `?terrain=original` keeps the shipped dark map.
+- Checked (agent-browser 1440×900): Care teams 26551 with cursor, mid-wipe 23176 (capture shows the landscape),
+  hand-back 27600, Review 31051 (drones over the village), Updates 35551, hero 2701 unchanged; 60 fps on the
+  landscape. Typecheck and build pass. Not checked: mobile widths, Support/multi-threat chapters, scrolling back up
+  through the hand-back with wheel snapping. Not ported: the reference's pins, dashed routes and drag-to-turn.
+
 ## Larger drone in top views (user, 2026-11-02)
 
 - `DroneRig.tsx` `TOP_VIEW_SCALE` 1.35 on mover1 (hero drone), blended by the camera's view direction (-dir.y

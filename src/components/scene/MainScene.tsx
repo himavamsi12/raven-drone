@@ -26,6 +26,8 @@ import { DAYLIGHT, HERO_LIGHT, heroLight, updateHeroLight } from "./hero-light";
 import { plateLight } from "./plate-light";
 import { sunlight, updateSunlight } from "./sunlight";
 import { Terrain } from "./Terrain";
+import { ClayTerrain } from "./ClayTerrain";
+import { terrainVariant } from "./raven-terrain";
 
 const TILE = 2 * TERRAIN_SCALE * 200;
 /** Sun shadow camera hugs the hero drone (refit every few frames: swarm/mission rescale it). */
@@ -172,6 +174,8 @@ export function MainScene() {
   const [renderFlock, setRenderFlock] = useState(false);
   const [plate, setPlate] = useState(false);
   useEffect(() => setPlate(heroPlateEnabled()), []);
+  // Canvas children render on the client only, so the query string is readable on first render (as in Terrain).
+  const [clayMap] = useState(() => terrainVariant() === "raven");
 
   useTexture(ASSETS.blueNoise, (t) => {
     const tex = Array.isArray(t) ? t[0] : t;
@@ -270,7 +274,9 @@ export function MainScene() {
       <OpeningSky />
       <group position={[0, -2.5, -8.6]}>
         <Terrain />
-        <GridRow offset={2 * TILE} isCity />
+        {clayMap && <ClayTerrain />}
+        {/* Raven: the clay map drapes its own dot grid over the relief (clay-map.ts); the flat grid would cut it. */}
+        {!clayMap && <GridRow offset={2 * TILE} isCity />}
         <group position={[0, 0, 2 * TILE + 0.15]} rotation={[0, Math.PI, 0]}>
           <Perimeters />
           <CoordinationDrones />

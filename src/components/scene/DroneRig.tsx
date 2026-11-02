@@ -19,6 +19,7 @@ import { Drone } from "./Drone";
 import { applyOpening } from "./opening";
 import { SpecsCallouts } from "./overlays/SpecsCallouts";
 import { applyCameraTilt, cameraTilt } from "./camera-tilt";
+import { applyLandscapeCamera } from "./clay-map";
 import { SwarmTags } from "./overlays/SwarmTags";
 import { useGLB } from "./types";
 
@@ -225,6 +226,11 @@ export function DroneRig() {
         cameraMover.current.quaternion.copy(_poseA.quaternion).slerp(_poseB.quaternion, e);
         cameraTilt.weight = 1 - e; // drone-focus effects (blur, size, shadow) follow the same curve
       }
+    }
+    // Raven clay landscape: Care teams opens on a low view across the lifted relief, handing back to the shipped
+    // track over early Review (clay-map.ts LANDSCAPE).
+    if (cameraMover.current && camera.current) {
+      applyLandscapeCamera(cameraMover.current, scenes()[SCENE.PHALANX_AI].progress, camera.current.aspect);
     }
     if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = opening >= 1;
     if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = opening >= 1;
