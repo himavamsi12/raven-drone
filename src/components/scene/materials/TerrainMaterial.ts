@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { droneShadowTerrain, droneShadowUniforms } from "../drone-shadow";
 import { panoramaLookup } from "../shaders/panorama";
 import { computeScreenUv } from "../shaders/screen-uv";
 
@@ -53,6 +54,7 @@ uniform float uFogBlendFactor;
 // Raven opening: fog fades into the panorama in the view direction instead of a flat colour (0 = shipped fog).
 uniform float uPanoMix;
 ${panoramaLookup}
+${droneShadowTerrain}
 
 vec3 inverseTransformDirection(in vec3 dir, in mat4 matrix) {
     return normalize((vec4(dir, 0.0) * matrix).xyz);
@@ -86,6 +88,8 @@ vec3 sampleMaterials() {
         baseColor = mix(baseColor, cityColor.rgb, cityColor.a);
     }
     float distance = length(vViewPosition);
+    // Raven: the drones' shadow on the ground (drone-shadow.ts), before the fog like real light.
+    baseColor *= 1.0 - droneShadowAt(vWorldPosition);
     return applyFog(baseColor, distance);
 }
 
@@ -175,6 +179,7 @@ void main() {
         uPanoMix: { value: 0 },
         uPanorama: { value: null },
         uCloudTime: { value: 0 },
+        ...droneShadowUniforms, // shared instances: one update reaches every terrain material
       },
     });
   }

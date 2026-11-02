@@ -287,6 +287,21 @@ Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, 
   2701 with headline; one wheel gesture 0 → 2701 in ~5 s and back to 0; 60 fps at 0 and 2701; `npm run typecheck`,
   `npm run build` pass. Not checked: Safari/iOS, low-end GPUs (wide fov draws ~15 extra tiles during the opening).
 
+## Drone shadow on the terrain + overhead cloud wisps (user, 2026-11-02: drone must stand out, no extra lights)
+
+- `DroneShadow.tsx` + `drone-shadow.ts`: each frame the drones' opaque meshes (layer 5, override black) are rendered
+  from the light into a 1024 half-float map framing all visible drones; every TerrainMaterial (shared uniform
+  objects) projects its world position into it and darkens the ground before the fog (13-tap soft penumbra, set in
+  world units). Daylight: real sun direction, strength 0.9. Hero overcast preset: softer (0.85; darkened from 0.75/0.65 at the user's request), direction 60% from
+  the sun toward straight down (straight down hid it exactly behind the drone). The shadow camera's up is -Z
+  (lookAt is degenerate straight down). `?shadow=off` disables it.
+- `CloudWisps.tsx`: streaky broken stratus plane at world y -1.25 between drones and ground, scrolling with the
+  terrain travel plus a slow wind, faded within 8-18 units of the camera; only when the camera looks down
+  (view y < -0.6 -> -0.85: Airframe, Connection, Swarm), off in hero/opening, from the Care teams map and after ignition.
+- Checked (agent-browser 1440×900): white-ground isolation at Airframe shows the sun shadow offset lower right;
+  hero 2701, Airframe 7201, Connection 9500, Swarm 16201 render; build passes. The shadow is subtle on the busy
+  forest texture; terrain travel makes on/off frame differencing unusable (frames differ everywhere).
+
 ## Opening horizon artefacts fixed (user, 2026-11-02: "glitched?")
 
 - Ridge rings: the high-frequency gully term (sin 420 x sin 173 of the angle) aliased into vertical comb stripes once

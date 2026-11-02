@@ -11,8 +11,10 @@ import { SCENE, scenes } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { Clouds } from "./Clouds";
+import { CloudWisps } from "./CloudWisps";
 import { CoordinationDrones } from "./CoordinationDrones";
 import { DroneRig } from "./DroneRig";
+import { DroneShadow } from "./DroneShadow";
 import { Flock } from "./Flock";
 import { GridRow } from "./Grid";
 import { HeroPlate, heroPlateEnabled } from "./HeroPlate";
@@ -231,6 +233,9 @@ export function MainScene() {
         </group>
       </group>
       <Clouds />
+      {/* Raven: overhead low-cloud wisps and the drones' shadow on the terrain (contrast without extra lights). */}
+      <CloudWisps />
+      <DroneShadow />
       <directionalLight
         ref={sunRef}
         args={[0xffffff, 4]}
