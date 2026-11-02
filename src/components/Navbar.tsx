@@ -21,10 +21,7 @@ const CHAPTERS: [SceneId, string][] = [
   [SCENE.MISSION_PRESET, "Prepare"],
   [SCENE.REAL_TIME_DETECTION, "Route"],
   [SCENE.PHALANX_AI, "Care teams"],
-  [SCENE.ANALYSIS_EVALUATION, "Review"],
-  [SCENE.INTEGRATED_NOTIFICATIONS, "Updates"],
-  [SCENE.INTERDRONE_COORDINATION, "Support"],
-  [SCENE.MULTI_THREAT_RESPONSE, "Network"],
+  // Review, Updates, Support and Network removed (user, 2026-11-03): the story ends on the Care teams landscape.
 ];
 
 /** In-page destinations (the shipped menu linked to other products). `null` = top of the story. */

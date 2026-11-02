@@ -443,6 +443,21 @@ then "not this top-down view only ... directly show this view")
   landscape. Typecheck and build pass. Not checked: mobile widths, Support/multi-threat chapters, scrolling back up
   through the hand-back with wheel snapping. Not ported: the reference's pins, dashed routes and drag-to-turn.
 
+## Story ends at the Care teams landscape (user, 2026-11-03: Review, Support, Network "remove this sections completely")
+
+- Band 2 ends at the ridge village stop (Review .5): `storyMap.L2` = that point, `toStory` clamps there while the
+  stage scrolls away, spacer 3200dvh → 850dvh, `pageBands` keeps phalanx + the two village stops. Removed: the
+  Review → Network chapter copy, nav ticks and HUD lines; `Perimeters`, `CoordinationDrones`, `PowerStation` (and the
+  power-station GLB, `Badge`, `Pill`, four icons) since nothing else used them. At vh 900: Care teams 26551 → Hill
+  clinic 27676 → Ridge village 28801 → free scroll into About/footer (page ~31147).
+- `findBand` now counts the band's own end as inside, so a reverse gesture on the last stop snaps back (the old last
+  stop was never a resting frame).
+- The canvas wrapper forced `visibility: visible`, overriding the hidden stage; it only went unnoticed because the
+  shipped story ended on a black frame. Raven's ends on the landscape, which stayed behind the footer; the wrapper
+  now inherits the stage's visibility.
+- Checked (agent-browser 1440×900, real wheel events): stops both ways, Route → Care teams in one gesture, scroll-away
+  29300, footer 29900 clean, hero 2701 unchanged. Not checked: mobile/tablet widths.
+
 ## Connection shows one drone (user, 2026-11-02: "remove three drone and keep the center one only")
 
 - `DroneRig`: the flank drones (Drone2/3, shipped tracks 02-02/02-03, 03-02) are never shown; their clips still

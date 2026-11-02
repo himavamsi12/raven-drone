@@ -8,7 +8,6 @@ export const ASSETS = {
   building: "/assets/models/building.glb",
   grid: "/assets/models/grid.glb",
   gridCity: "/assets/models/grid-city.glb",
-  powerStation: "/assets/models/power-station.glb",
   raven: "/assets/models/raven_hexa.glb", // hexacopter medical drone (6 props); source glb/new-drone/
   droneLowpoly: "/assets/models/drone-lowpoly.glb", // Raven silhouette, same node/axis convention as delta-lowpoly
   cameraAnimations: "/assets/models/camera-animations.glb",

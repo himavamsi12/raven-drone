@@ -7,7 +7,7 @@ import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange }
  *   opening: live 3D camera move (scene/opening.ts)    page [0, P]            story held at 0
  *   band 1: intro → real-time-detection (Route)       page [P, P + E1]       story [0, E1]
  *   wipe:   first half of phalanx-ai's page range      page [X, X + W]        story held at E1 (Route stays live)
- *   band 2: phalanx-ai .5 → multi-threat               page [X + W, X + L2]   story S2 + (page - X), X = P + E1
+ *   band 2: phalanx-ai .5 → ridge village (Review .5)  page [X + W, X + L2]   story S2 + (page - X), X = P + E1
  * Skipped: thermal and ignition (fire). User, 2026-11-01: the #parts section between the bands was removed and the
  * shipped diagonal transition joins Route to the Care teams map, with the terrain and drone still moving under it.
  * Through the wipe the story holds on Route; PostFX lays the Care teams map (phalanx .5, rendered once off screen: it is
@@ -18,6 +18,10 @@ import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange }
  * Journey (flock-scene) removed (user, 2026-11-02): its network map is never shown and its story range plays on only
  * JOURNEY_PAGE_SHARE of its page length, as part of the Route snap range, so one gesture flies Prepare -> Route in a
  * single continuous camera move (no cut, no stop). Band 1 page length = story length - (1 - share) x Journey.
+ *
+ * Story ends at the clay landscape (user, 2026-11-03: Review, Updates, Support and Network "removed completely"): band 2
+ * stops at the ridge village stop (analysis-evaluation CLIMB_SHARE); the later scenes are never reached, and the stage
+ * scrolls away from that frame.
  */
 export const JOURNEY_PAGE_SHARE = 0.3;
 export const BAND_1_END: SceneId = SCENE.REAL_TIME_DETECTION;
@@ -27,7 +31,7 @@ export const BAND_1 = SCENE_ORDER.slice(0, SCENE_ORDER.indexOf(BAND_1_END) + 1);
 export const BAND_2 = SCENE_ORDER.slice(SCENE_ORDER.indexOf(BAND_2_OPEN) + 1);
 /** Spacer heights in vh (match page.tsx). Band 1 hands straight to band 2, so only band 2 adds a screen to scroll away. */
 export const BAND_1_VH = 2500 - (1 - JOURNEY_PAGE_SHARE) * 500; // 1px intro + 5 × 500, Journey at 30% (= 2150, page.tsx)
-export const BAND_2_VH = 3200; // phalanx 500 + 5 × 500 + 100 (zone) + 100
+export const BAND_2_VH = 850; // phalanx 500 + Review 500 × CLIMB_SHARE + 100 to scroll away (page.tsx)
 /**
  * Raven opening (user, 2026-11-01): page [0, P] flies the live camera from a low wide-angle shot under the hovering
  * drone up into the hero frame (story 0, scene/opening.ts), then band 1 starts at P. Matches the `#opening` spacer in
@@ -77,7 +81,8 @@ export function measureStoryMap() {
   storyMap.F1 = end(SCENE.FLOCK_SCENE);
   storyMap.F0 = ranges[SCENE_ORDER.indexOf(SCENE.FLOCK_SCENE)].start;
   storyMap.S2 = end(BAND_2_OPEN);
-  storyMap.L2 = ranges[ranges.length - 1].end - storyMap.S2;
+  const review = ranges[SCENE_ORDER.indexOf(SCENE.ANALYSIS_EVALUATION)];
+  storyMap.L2 = review.start + review.height * CLIMB_SHARE - storyMap.S2; // story ends at the ridge village
   storyMap.W = 0.5 * ranges[SCENE_ORDER.indexOf(SCENE.PHALANX_AI)].height; // shipped wipe = phalanx-ai 0 → .5
   const band2 = document.getElementById("story-band-2");
   storyMap.X = band2 ? band2.getBoundingClientRect().top + window.scrollY : storyMap.P + band1Length();
@@ -90,7 +95,7 @@ export function toStory(page: number) {
   if (page <= P) return 0;
   if (page <= P + band1Length()) return band1Story(page - P);
   if (page < X + W) return E1;
-  return S2 + (page - X);
+  return S2 + Math.min(page - X, storyMap.L2); // held on the last frame while the stage scrolls away
 }
 
 /** Story position the wipe lands on (phalanx-ai .5: map fully swept, outline not drawn yet). */
@@ -132,14 +137,13 @@ export function pageBands(ranges: SceneRange[]) {
     route.height = route.end - route.start;
   }
   // The wipe (phalanx-ai) is band 2's first range, so one gesture from Route plays the whole transition.
-  // Review is split at each clay landscape village (CLIMB_STOPS): Care teams → village → village → Review.
-  const band2 = pick(BAND_2).flatMap((r) => {
-    if (r.id !== SCENE.ANALYSIS_EVALUATION) return [r];
-    const cuts = [r.start, ...CLIMB_STOPS.map((p) => r.start + r.height * p), r.end];
-    storyMap.C0 = r.start;
-    storyMap.C1 = cuts[cuts.length - 2];
-    return cuts.slice(1).map((end, i) => ({ ...r, start: cuts[i], height: end - cuts[i], end }));
-  });
+  // Then one stop per clay landscape village (CLIMB_STOPS of Review's range); the story ends at the last one.
+  const phalanx = pick([SCENE.PHALANX_AI]);
+  const [review] = pick([SCENE.ANALYSIS_EVALUATION]);
+  const cuts = [review.start, ...CLIMB_STOPS.map((p) => review.start + review.height * p)];
+  storyMap.C0 = review.start;
+  storyMap.C1 = cuts[cuts.length - 1];
+  const band2 = [...phalanx, ...cuts.slice(1).map((end, i) => ({ ...review, start: cuts[i], height: end - cuts[i], end }))];
   return [[opening, ...band1, ...band2]];
 }
 

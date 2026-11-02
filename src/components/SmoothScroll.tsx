@@ -86,11 +86,14 @@ function useSceneProgressDriver() {
   }, [lenis]);
 }
 
-/** The page-space band holding `scroll`, and the scene index inside it (null outside the story). */
+/**
+ * The page-space band holding `scroll`, and the scene index inside it (null outside the story). The band's own end
+ * counts as inside: the story ends on a resting frame (the ridge village), and a reverse gesture there must snap back.
+ */
 const findBand = (scroll: number, bands: SceneRange[][]) => {
   for (let b = 0; b < bands.length; b++) {
     const list = bands[b];
-    if (list.length && scroll >= list[0].start && scroll < list[list.length - 1].end) return { b, list, i: findRangeIndex(scroll, list) };
+    if (list.length && scroll >= list[0].start && scroll <= list[list.length - 1].end + 0.5) return { b, list, i: findRangeIndex(scroll, list) };
   }
   return null;
 };

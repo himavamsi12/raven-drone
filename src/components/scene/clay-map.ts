@@ -97,7 +97,7 @@ export function landscapeWeight(s: Record<SceneId, SceneData>) {
   return 1 - THREE.MathUtils.smootherstep(s[SCENE.ANALYSIS_EVALUATION].progress, LANDSCAPE.handFrom, LANDSCAPE.handTo);
 }
 
-/** Frame state shared with DroneRig / CoordinationDrones / PostFX / Terrain (written by ClayTerrain). */
+/** Frame state shared with DroneRig / ClayFlight / PostFX / Terrain (written by ClayTerrain). */
 export const clayState = { enabled: false, on: false, weight: 0, centreWorld: new THREE.Vector3() };
 
 // ---------- heights ----------
@@ -394,7 +394,7 @@ export const RAVEN_COTTAGES: readonly (readonly [number, number])[] = [
 
 /**
  * Village of the Care teams tile (tile-local x/z, yaw, scale). The two analysis drones circle overlay points
- * (0, 0.25) and (0, 2.25) (CoordinationDrones PAIR) = tile (0, -1.75) and (0, -51.75): cluster A rings the first
+ * (0, 0.25) and (0, 2.25) (the removed analysis pair) = tile (0, -1.75) and (0, -51.75): cluster A rings the first
  * (centre left open), cluster B runs from the second to the tile's own cottages. The clinic is the larger building.
  */
 // prettier-ignore

@@ -30,58 +30,7 @@ const BODY: Line[] = [
   { label: "DESTINATION: HILL CLINIC", scene: "phalanx-ai", progress: 0.8 },
   { label: "SHARED VIEW: CARE TEAMS", scene: "phalanx-ai", progress: 0.85 },
   { label: "HAZARD NOTED ON ROUTE", scene: "phalanx-ai", progress: 0.9 },
-  { label: "REVIEWING THE APPROACH", scene: "analysis-evaluation", progress: 0.1 },
-  {
-    label: (
-      <>
-        <span className="text-red">2 FIRES</span> + <span className="text-red">1 ROADBLOCK</span> SHOWN{" "}
-      </>
-    ),
-    scene: "analysis-evaluation",
-    progress: 0.95,
-  },
-  { label: "CARE-TEAM UPDATE", scene: "integrated-notifications", progress: 0.1 },
-  {
-    label: (
-      <>
-        SCENARIO: <span className="text-yellow">DELIVERY DELAYED</span>
-      </>
-    ),
-    scene: "integrated-notifications",
-    progress: 0.95,
-  },
-  { label: "SUPPORT VIEW", scene: "extra-support", progress: 0.05 },
-  { label: "DESTINATION: HILL CLINIC", scene: "extra-support", progress: 0.1 },
-  { label: "SECOND RAVEN SHOWN", scene: "extra-support", progress: 0.3 },
-  { label: "ON THE ILLUSTRATED ROUTE", scene: "extra-support", progress: 0.75 },
-  {
-    label: (
-      <>
-        <span className="text-red">FIRE</span> NEAR POWER STATION
-      </>
-    ),
-    scene: "extra-support",
-    progress: 0.85,
-  },
-  { label: "ROUTE REVIEW CONTINUES", scene: "zone-stabilized", progress: 0.99 },
-  {
-    label: (
-      <>
-        HAZARD: <span className="text-green">SETTLING</span>
-      </>
-    ),
-    scene: "zone-stabilized",
-    progress: 0.994,
-  },
-  {
-    label: (
-      <>
-        STATUS: <span className="text-green">SCENARIO COMPLETE</span>
-      </>
-    ),
-    scene: "zone-stabilized",
-    progress: 0.998,
-  },
+  // Review → Network lines removed with those chapters (user, 2026-11-03).
 ];
 
 const ALL = [...HEADER.map((l) => ({ ...l, section: "header" as const })), ...BODY.map((l) => ({ ...l, section: "body" as const }))];

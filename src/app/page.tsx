@@ -17,9 +17,10 @@ export default function Home() {
       <div id="opening" className="pointer-events-none relative w-full" style={{ height: "300dvh" }} />
       {/* Band 1: intro (1px) + Airframe → Route (5 x 500dvh). It hands straight to band 2 (no scroll-away screen). */}
       <div id="story-band-1" className="pointer-events-none relative w-full" style={{ height: "calc(2150dvh + 1px)" }} />
-      {/* Band 2: the diagonal Phalanx wipe from Route into the Care teams map (500dvh), then Review → Network
-          (5 x 500dvh + 100dvh zone) + one screen to scroll away. `#care-teams` marks the finished map frame. */}
-      <div id="story-band-2" className="pointer-events-none relative w-full" style={{ height: "3200dvh" }}>
+      {/* Band 2: the diagonal Phalanx wipe from Route into the Care teams landscape (500dvh), the drone's flight to
+          both villages (250dvh, story-map CLIMB_STOPS) + one screen to scroll away. `#care-teams` marks the finished
+          landscape frame. */}
+      <div id="story-band-2" className="pointer-events-none relative w-full" style={{ height: "850dvh" }}>
         <div id="care-teams" className="absolute top-[500dvh] left-0 h-px w-full" />
       </div>
       <div className="flex w-full flex-col items-center gap-30 pt-30 md:gap-40 md:pt-40 lg:gap-55 lg:pt-55">

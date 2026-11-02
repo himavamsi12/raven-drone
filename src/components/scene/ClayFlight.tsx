@@ -14,8 +14,7 @@ import { LowPolyDrone } from "./LowPolyDrone";
 /**
  * One Raven over the clay landscape (user, 2026-11-02): it enters at the bottom left of the Care teams frame, climbs
  * to the terrace village, then flies on to the ridge village ("continue the path of the drone to the next village"),
- * with an altitude indicator beside it. The two analysis drones stay hidden while the landscape view is up
- * (CoordinationDrones).
+ * with an altitude indicator beside it.
  *
  * Scroll-driven (user: "the motion of the drone going up the altitude should be interactive with the scroll"): each
  * leg is a slice of Review's range ending at a snap stop (story-map `CLIMB_STOPS`); scrolling back reverses it, and
@@ -191,7 +190,7 @@ export function ClayFlight({ field }: { field: HeightField }) {
     if (atVillage && !reducedMotion) tmp.p.y += 0.04 * Math.sin(c.elapsedTime * 1.6); // hover
     b.position.copy(tmp.p);
 
-    // face along the leg (model forward is local -z, as in CoordinationDrones); at a stop, toward the next leg
+    // face along the leg (model forward is local -z); at a stop, toward the next leg
     const headLeg = t >= 1 && leg < WAYPOINTS.length - 2 ? leg + 1 : leg;
     const from = WAYPOINTS[headLeg].at;
     const to = WAYPOINTS[headLeg + 1].at;

@@ -112,7 +112,9 @@ scripts/asset-manifest.mjs  manifest generator
   story-map.ts) inside the Route snap range, so one gesture flies Prepare -> Route. Band 1 spacer `calc(2150dvh + 1px)`.
 - Homepage layout (user decisions 2026-10-30/11-01): the shipped story runs in two contiguous page bands
   (`lib/story-map.ts`). Band 1 = intro → real-time-detection (Route). Band 2 starts right after it, at the START of
-  phalanx-ai, and runs phalanx → multi-threat. The `#parts` section was removed (2026-11-01). Thermal and ignition are
+  phalanx-ai, and ends at the clay landscape's ridge village (analysis-evaluation .5, `CLIMB_SHARE`): Review, Updates,
+  Support and Network were removed (user, 2026-11-03); later scenes exist in story coordinates but are never reached
+  (`toStory` clamps at the end). The `#parts` section was removed (2026-11-01). Thermal and ignition are
   skipped. The bands are joined by the shipped diagonal Phalanx wipe with the Route still live: over the first half of
   phalanx's page range (`storyMap.W`) the story holds on Route (terrain travel and drone hover keep running) and PostFX
   `DiagonalWipeEffect` lays the Care teams map (phalanx .5) over the swept side (`wipeRatioAt` = shipped
@@ -125,8 +127,8 @@ scripts/asset-manifest.mjs  manifest generator
   the fixed stage covering through both bands and scrolls it away after band 2, `useStage.cover` gates PostFX and the
   bar background. Snapping is one band from the opening to the end of the story; after it the page is free.
 - Scene spans unchanged (intro 1px, 12 × 500vh, zone 100vh, multi 500vh, in story px). Spacers: band 1
-  `calc(2150dvh + 1px)` (story to Route, Journey compressed to 150vh of page), band 2 `3200dvh` (phalanx → multi + one screen, `#care-teams` anchor at
-  500dvh = finished map frame, target of the Network links).
+  `calc(2150dvh + 1px)` (story to Route, Journey compressed to 150vh of page), band 2 `850dvh` (phalanx 500 + flight to both villages 250 + one screen, `#care-teams` anchor at
+  500dvh = finished landscape frame, target of the Network links).
 - Per scene: `progress=(scroll-start)/height`, `showRatio`, `hideRatio`, `isActive`, clamped 0–1, written on every
   Lenis scroll event. Everything reads `useScenes.getState()` in frame loops (no React state per frame).
 - One progress source, one Lenis. Do not add GSAP ScrollTrigger scrub or a second smoothing layer.
@@ -175,8 +177,8 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 - Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
   delta end 7201, swarm 11701, mission 16201, (Journey, compressed: 16201 → 17551), Route 22051 (= band 2 start, wipe
-  22051 → 24301), Care teams frame 26551, analysis end 31051, notifications 35551, interdrone 40051, extra 44551, zone
-  45451, multi end 49951, page height ~52297. Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
+  22051 → 24301), Care teams frame 26551, Hill clinic stop 27676, Ridge village stop (story end) 28801, stage gone
+  29701, page height ~31147. Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
 - Up to the story end, same vh on reference and local gives identical scrollY ↔ scene mapping (verified before the
   homepage change; the later shipped chapters are no longer on the page).
 - Built-in preview pane throttles RAF between tool calls: wait a few seconds before screenshots; FPS dips there are

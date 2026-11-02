@@ -7,7 +7,6 @@ import { useShallow } from "zustand/react/shallow";
 import { useScrollToScene } from "@/components/SmoothScroll";
 import { Button } from "@/components/ui/Button";
 import { useLoading } from "@/lib/loading";
-import { CLIMB_SHARE } from "@/lib/story-map";
 import { SCENE, useScenes, type SceneId } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -78,19 +77,6 @@ function Frame({ children, className, innerClassName }: { children: ReactNode; c
     <div className={clsx("absolute inset-0 flex flex-col pt-[calc(var(--nav-height)+1rem)] pr-4 pb-4 pl-4 md:pt-[calc(var(--nav-height)+1.5rem)] md:pr-8 md:pb-10 md:pl-8", className)}>
       <div className={clsx("relative flex size-full flex-col justify-end gap-4 lg:block", innerClassName)}>{children}</div>
     </div>
-  );
-}
-
-function Pill({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span
-      className={clsx(
-        "bg-green/20 text-green text-m-body-l w-fit rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-[0px_1px_32px_rgba(0,0,0,0.25)] md:rounded-xl md:px-5 md:py-4 md:text-[1.375rem]/[1.5rem] md:tracking-normal",
-        className,
-      )}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -230,55 +216,8 @@ const CHAPTERS: { component: ComponentType; timeWindow: Window }[] = [
       "Keep the care team informed.",
       "A useful delivery view brings the destination and route status together, so the people arranging supplies share the same picture.",
     ),
-    // Raven: stays through the clay landscape climb (CLIMB_SHARE of Review), was 0.075.
-    timeWindow: { startScene: SCENE.PHALANX_AI, startSceneProgress: 0.8, endScene: SCENE.ANALYSIS_EVALUATION, endSceneProgress: CLIMB_SHARE + 0.04 },
-  },
-  {
-    component: simple(
-      "Reconsider the approach.",
-      "When access changes, the delivery plan must change with it. The next step in this scenario is a review of the route.",
-    ),
-    timeWindow: { startScene: SCENE.ANALYSIS_EVALUATION, startSceneProgress: 0.75, endScene: SCENE.INTEGRATED_NOTIFICATIONS, endSceneProgress: 0.075 },
-  },
-  {
-    component: simple(
-      "The clinic needs an update.",
-      "If a delivery is delayed, the people waiting for it need to know. Clear updates belong to the journey, not just to the aircraft.",
-    ),
-    timeWindow: { startScene: SCENE.INTEGRATED_NOTIFICATIONS, startSceneProgress: 0.9, endScene: SCENE.INTERDRONE_COORDINATION, endSceneProgress: 0.075 },
-  },
-  {
-    component: simple(
-      "Coordinate the next supply run.",
-      "The wider concept connects several requests with the care teams arranging them. Extra aircraft are support, not the story's main event.",
-    ),
-    timeWindow: { startScene: SCENE.INTERDRONE_COORDINATION, startSceneProgress: 0.75, endScene: SCENE.EXTRA_SUPPORT, endSceneProgress: 0.075 },
-  },
-  {
-    component: simple(
-      "Support the places still waiting.",
-      "A second Raven enters the illustration as access is reviewed. The goal remains the same: getting supplies to the intended clinic.",
-    ),
-    timeWindow: { startScene: SCENE.EXTRA_SUPPORT, startSceneProgress: 0.75, endScene: SCENE.ZONE_STABILIZED, endSceneProgress: 0.075 },
-  },
-  {
-    component: simple(
-      <>
-        Prepare for the next step.
-        <br />
-        <Pill className="mt-2 inline-block md:mt-4">Scenario update</Pill>
-      </>,
-      "The illustrated response settles. The delivery outcome still depends on a suitable approach and a confirmed handoff.",
-    ),
-    timeWindow: { startScene: SCENE.ZONE_STABILIZED, startSceneProgress: 0.9, endScene: SCENE.MULTI_THREAT_RESPONSE, endSceneProgress: 0.075 },
-  },
-  {
-    component: simple(
-      "One journey. A wider connection.",
-      "Start with one clinic and one supply request. Then consider how a regional health centre could support more remote communities.",
-      "bottom-0 left-0 lg:absolute lg:mr-70 lg:max-w-204",
-    ),
-    timeWindow: { startScene: SCENE.MULTI_THREAT_RESPONSE, startSceneProgress: 0.9 },
+    // Raven: stays through the clay landscape flight to the end of the story (user, 2026-11-03), was Review .075.
+    timeWindow: { startScene: SCENE.PHALANX_AI, startSceneProgress: 0.8 },
   },
 ];
 

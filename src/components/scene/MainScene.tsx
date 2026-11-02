@@ -12,15 +12,12 @@ import { isScrollLocked } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { Clouds } from "./Clouds";
 import { CloudWisps } from "./CloudWisps";
-import { CoordinationDrones } from "./CoordinationDrones";
 import { DroneRig } from "./DroneRig";
 import { DroneShadow } from "./DroneShadow";
 import { Flock } from "./Flock";
 import { GridRow } from "./Grid";
 import { HeroPlate, heroPlateEnabled } from "./HeroPlate";
 import { OpeningSky } from "./OpeningSky";
-import { Perimeters } from "./Perimeters";
-import { PowerStation } from "./PowerStation";
 import { usePostFX } from "./PostFX";
 import { DAYLIGHT, HERO_LIGHT, heroLight, updateHeroLight } from "./hero-light";
 import { plateLight } from "./plate-light";
@@ -277,11 +274,6 @@ export function MainScene() {
         {clayMap && <ClayTerrain />}
         {/* Raven: the clay map drapes its own dot grid over the relief (clay-map.ts); the flat grid would cut it. */}
         {!clayMap && <GridRow offset={2 * TILE} isCity />}
-        <group position={[0, 0, 2 * TILE + 0.15]} rotation={[0, Math.PI, 0]}>
-          <Perimeters />
-          <CoordinationDrones />
-          <PowerStation />
-        </group>
       </group>
       <Clouds />
       {/* Raven: overhead low-cloud wisps and the drones' shadow on the terrain (contrast without extra lights). */}

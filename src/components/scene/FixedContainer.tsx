@@ -25,7 +25,9 @@ function SceneCanvas() {
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   if (!loaded) return null;
   return (
-    <div className={hiding ? "visible absolute inset-0 touch-auto!" : "invisible absolute inset-0 touch-auto!"}>
+    // Shown: inherit the stage's visibility (not `visible`, which overrode the hidden stage after the story, so the
+    // canvas kept showing its last frame behind the sections; the shipped story ended on black, Raven's on the landscape).
+    <div className={hiding ? "absolute inset-0 touch-auto!" : "invisible absolute inset-0 touch-auto!"}>
       <Canvas
         camera={{ position: [0, 5, 0], fov: 60 }}
         dpr={[1, 1.5]}
