@@ -1,26 +1,42 @@
 "use client";
 
+import { useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { SKY_COLOR } from "@/lib/constants";
+import { ASSETS } from "@/lib/assets";
+import { resolution, SKY_COLOR } from "@/lib/constants";
 import { openingNow } from "@/lib/story-map";
+import { panoramaLookup } from "./shaders/panorama";
 import { sunlight } from "./sunlight";
 
 /**
  * Raven opening sky (not in the shipped bundle). The shipped story never looks at the horizon, so the page only
- * clears to SKY_COLOR. The low opening shot does: a sky dome (SKY_COLOR at and below the horizon, deeper blue
- * overhead, sun glow, drifting high cloud) and two rings of far ridges fading into the same haze as the terrain fog.
- * Neither writes depth (the terrain lens treats them as sky). Both hide once the camera reaches the hero frame,
- * where they are out of frame anyway (the hero view tops out 23 deg below the horizon).
+ * clears to SKY_COLOR. The low opening shot does: a dome centred on the camera with the procedural sky (SKY_COLOR at
+ * the horizon, deeper blue overhead, sun glow, drifting high cloud) and, over it, the Blender land layer
+ * (glb/raven-sky/01_opening_panorama.py, land mode: layered blue ranges, snow massifs, valley fog; transparent sky).
+ * The terrain fog fades into the same land layer during the opening (TerrainMaterial `uPanoMix`), so the last tiles
+ * dissolve into the hills instead of a flat haze band. User, 2026-11-02: land from Blender, sky and clouds kept
+ * procedural (the Blender sky was tried and rejected), Blender far ranges removed, and the two procedural ridge rings
+ * (the far mountains of the first opening) kept behind the land layer.
+ * Order: sky dome -> ridge rings (far first) -> land dome (alpha) -> terrain.
+ * Does not write depth (the terrain lens treats it as sky). Hidden once the camera reaches the hero frame, where it
+ * is out of frame (the hero view tops out 23 deg below the horizon).
  */
 const DOME_RADIUS = 300;
-/** Ridge rings around the world origin: [radius, base Y, peak height, haze 0..1, seed]. */
-const RIDGES: [number, number, number, number, number][] = [
-  [130, -6, 15, 0.72, 1.7],
-  [78, -4.5, 9, 0.52, 4.1],
+/** Ridge rings around the world origin: [radius, base Y, peak height, haze 0..1, seed, lift deg (see below)]. */
+const RIDGES: [number, number, number, number, number, number][] = [
+  [130, -6, 15, 0.72, 1.7, 5.2], // far ring sits higher than the near one: layered depth (user, 2026-11-02)
+  [78, -4.5, 9, 0.52, 4.1, 3.2],
 ];
+/**
+ * The land layer's hills are opaque up to ~3 deg above the horizon (partly to ~5), which hid most of the rings'
+ * silhouettes (2-5 deg). Each ring is raised by its lift elevation (radius * tan) so its old silhouette shows above
+ * the hills and its hazy foot sits behind them.
+ */
 const SEGMENTS = 384;
+/** Hazed band below each ring's foot (world units), so lifting the rings leaves no visible bottom edge. */
+const RIDGE_SKIRT = 30;
 
 const domeVertex = /* glsl */ `
 varying vec3 vDir;
@@ -61,6 +77,16 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+/** Blender land layer, blended (straight alpha) over the sky and the ridge rings. */
+const landFragment = /* glsl */ `
+${panoramaLookup}
+uniform vec2 uResolution;
+varying vec3 vDir;
+void main() {
+  float edge = abs(gl_FragCoord.x / uResolution.x * 2.0 - 1.0);
+  gl_FragColor = panoramaColor(vDir, edge);
+}`;
+
 const ridgeVertex = /* glsl */ `
 attribute float aT;
 varying float vT;
@@ -80,7 +106,9 @@ varying float vT;
 varying float vA;
 void main() {
   // Vertical streaks (gullies) and a lit upper band; aerial perspective thickens toward the base.
-  float gully = 0.5 + 0.5 * sin(vA * 420.0 + 3.0 * sin(vA * 37.0)) * sin(vA * 173.0);
+  // Soft, low-frequency light/shade along the ridge. The shipped-look gullies (sin(vA * 420) * sin(vA * 173)) aliased
+  // into fine vertical comb stripes once the rings were lifted into clear view (user, 2026-11-02: "glitched?").
+  float gully = 0.5 + 0.5 * sin(vA * 47.0 + 2.0 * sin(vA * 11.0)) * sin(vA * 19.0 + 1.3);
   vec3 col = mix(uRock, uLit, smoothstep(0.35, 1.0, vT) * (0.55 + 0.45 * gully));
   float haze = mix(1.0, uHazeAmount, smoothstep(0.0, 0.75, vT));
   gl_FragColor = vec4(mix(col, uHaze, haze), 1.0);
@@ -105,11 +133,13 @@ function ridgeGeometry(radius: number, baseY: number, peak: number, seed: number
     const a = (i / SEGMENTS) * Math.PI * 2;
     const x = Math.sin(a) * radius;
     const z = Math.cos(a) * radius;
-    pos.push(x, baseY, z, x, baseY + 1.5 + peak * ridge(a, seed), z);
-    t.push(0, 1);
+    // skirt (fully hazed, well below the horizon) -> foot -> crest: the lifted foot never shows a bottom edge
+    pos.push(x, baseY - RIDGE_SKIRT, z, x, baseY, z, x, baseY + 1.5 + peak * ridge(a, seed), z);
+    t.push(0, 0, 1);
     if (i < SEGMENTS) {
-      const j = 2 * i;
-      index.push(j, j + 2, j + 1, j + 1, j + 2, j + 3);
+      const j = 3 * i;
+      index.push(j, j + 3, j + 1, j + 1, j + 3, j + 4); // skirt band
+      index.push(j + 1, j + 4, j + 2, j + 2, j + 4, j + 5); // ridge band
     }
   }
   const g = new THREE.BufferGeometry();
@@ -119,11 +149,24 @@ function ridgeGeometry(radius: number, baseY: number, peak: number, seed: number
   return g;
 }
 
+
+/** The land layer texture (suspends: part of the first frame). Shared with Terrain for the opening fog. */
+export function useOpeningPanorama() {
+  return useTexture(ASSETS.openingLand, (t) => {
+    const tex = Array.isArray(t) ? t[0] : t;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.anisotropy = 4;
+  }) as THREE.Texture;
+}
+
 export function OpeningSky() {
   const group = useRef<THREE.Group>(null);
   const dome = useRef<THREE.Mesh>(null);
-  const [domeGeometry, domeMaterial] = useMemo(() => {
-    const g = new THREE.SphereGeometry(DOME_RADIUS, 48, 24);
+  const landDome = useRef<THREE.Mesh>(null);
+  const land = useOpeningPanorama();
+  const [domeGeometry, domeMaterial, landMaterial] = useMemo(() => {
+    const g = new THREE.SphereGeometry(DOME_RADIUS, 64, 32);
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uHorizon: { value: SKY_COLOR },
@@ -137,12 +180,24 @@ export function OpeningSky() {
       depthWrite: false,
       depthTest: false,
     });
-    return [g, m];
+    const l = new THREE.ShaderMaterial({
+      uniforms: { uPanorama: { value: null }, uResolution: { value: resolution }, uCloudTime: { value: 0 } },
+      vertexShader: domeVertex,
+      fragmentShader: landFragment,
+      side: THREE.BackSide,
+      // Transparent draws after all opaque objects, so it must depth-test: the terrain and drones (which write depth)
+      // stay in front, the sky dome and ridge rings (no depth) stay behind.
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+    });
+    return [g, m, l];
   }, []);
+  landMaterial.uniforms.uPanorama.value = land;
   const ridges = useMemo(
     () =>
-      RIDGES.map(([radius, baseY, peak, haze, seed]) => ({
-        geometry: ridgeGeometry(radius, baseY, peak, seed),
+      RIDGES.map(([radius, baseY, peak, haze, seed, lift]) => ({
+        geometry: ridgeGeometry(radius, baseY + radius * Math.tan((lift * Math.PI) / 180), peak, seed),
         material: new THREE.ShaderMaterial({
           uniforms: {
             uHaze: { value: SKY_COLOR },
@@ -162,19 +217,24 @@ export function OpeningSky() {
   useFrame((state) => {
     const on = openingNow() < 1;
     if (group.current) group.current.visible = on;
-    if (!on || !dome.current) return;
+    if (!on || !dome.current || !landDome.current) return;
     dome.current.position.copy(state.camera.getWorldPosition(dome.current.position));
+    landDome.current.position.copy(dome.current.position);
     domeMaterial.uniforms.uSun.value.copy(sunlight.direction);
     domeMaterial.uniforms.uTime.value = state.clock.getElapsedTime();
+    landMaterial.uniforms.uCloudTime.value = state.clock.getElapsedTime();
   });
 
-  // Far ring first (painter's order), all before the terrain (render order 0 draws over them).
+  // Sky, far ring, near ring, land layer; all before the terrain (render order 0 draws over them).
   return (
     <group ref={group}>
       <mesh ref={dome} geometry={domeGeometry} material={domeMaterial} renderOrder={-3} frustumCulled={false} />
       {ridges.map((r, i) => (
         <mesh key={i} geometry={r.geometry} material={r.material} renderOrder={-2 + i * 0.5} frustumCulled={false} />
       ))}
+      <mesh ref={landDome} geometry={domeGeometry} material={landMaterial} renderOrder={-0.5} frustumCulled={false} />
     </group>
   );
 }
+
+useTexture.preload(ASSETS.openingLand);

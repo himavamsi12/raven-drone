@@ -3,6 +3,20 @@
 Brief: `RAVEN_REALTIME_TERRAIN_CLAUDE_PROMPT.md`. Status: **v09 (Windows look-dev v08 baked as-is) live in the site** (default terrain;
 `?terrain=original` shows the shipped tile). Settlement/clinic tile not built yet.
 
+### v11 (2026-11-02): tree-layout tile variants
+
+The site repeats one tile 15-30 times, so every grove repeated (user). `13_tree_variants.py` (docstring has the steps)
+adds variants `b` and `c` to the look-dev file (`raven-terrain-v11-treevariants.blend` on the Windows workstation;
+v10 = v09 without the unused `15_TAKEOFF` pad): forest/bush/dry masks rebuilt from other seeds with the noise boosted
+4x and the terrain pull halved (re-seeding alone kept 75% overlap; now IoU ~0.42 vs the original), forest cover matched
+to the original, re-scattered trees/bushes; rocks, hills, roads, houses unchanged. The rim band (edge distance < 22,
+fade to 36) keeps the original mask and points, so any variant joins any other (WebP seams across variants 0.018 vs
+0.014-0.016 within one, interior neighbour columns 0.021). Rendered headless with the v09 appearance setup (OptiX,
+483 s / 472 s), PNGs pulled to the Mac and encoded with sharp WebP q80 effort 6 (not packed in the GLB):
+`public/assets/textures/terrain/raven-natural-b.webp` 2,704,890 bytes (sha256 `caef4819b862d488…`),
+`raven-natural-c.webp` 2,673,602 bytes (`7145fe03b5300ac8…`). Variant `a` stays the map inside `raven-terrain.glb`.
+Runtime layout: `ravenTileVariant` in `src/components/scene/raven-terrain.ts`.
+
 ### v09 (2026-11-01): Windows look-dev v08 baked as-is
 
 Ground look authored live in team-blender on the Windows workstation, not in these scripts: v05 `M_RT_GrassCliff`

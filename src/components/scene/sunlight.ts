@@ -17,6 +17,8 @@ export const sunlight = {
   shade: 1,
   /** Normalised direction towards the (swayed) sun. */
   direction: SUN_POSITION.clone().normalize(),
+  /** Direct-sun strength relative to the regular daylight (hero preset: 0 = sun off; glints, rotor flashes follow). */
+  strength: 1,
 };
 
 const UP = new THREE.Vector3(0, 1, 0);

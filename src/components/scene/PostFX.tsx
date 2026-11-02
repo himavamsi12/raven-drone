@@ -11,6 +11,7 @@ import { mapStory, openingNow, storyMap, useStage, wipeProgress, wipeRatioAt } f
 import { useMediaQuery } from "@/lib/use-media-query";
 import { fisheyeAt } from "./opening";
 import { TerrainLensEffect } from "./TerrainLensEffect";
+import { DAYLIGHT, HERO_LIGHT, heroLight } from "./hero-light";
 
 /** Flock scene radial-blur crossfade (shipped module 8743 + shader 79755). */
 class RenderTargetMixEffect extends Effect {
@@ -285,10 +286,11 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 
 /** Lens (Raven): exposure for the terrain motion blur and the thin-lens blur at infinity (px at 1080p). */
 const SHUTTER_S = 1 / 30;
-/** Perceived flight speed: terrain-travel streak exposed as if the ground passed this many times faster. */
-const SPEED_GAIN = 3;
+/** Perceived flight speed: terrain-travel streak exposed as if the ground passed this many times faster.
+ * 3 -> 1.5 and the streak cap 16 -> 9 px (user, 2026-11-02: terrain motion blur was too strong). */
+const SPEED_GAIN = 1.5;
 /** Longest motion streak and largest defocus disc (px at 1080p). */
-const MAX_BLUR_PX = 16;
+const MAX_BLUR_PX = 9;
 const MAX_COC_PX = 16;
 const COC_INF_PX = 5;
 /** Top of the terrain band in world Y (parent -2.5 + 0.04 x highest roof ~20 local = -1.7); drones fly above. */
@@ -393,6 +395,10 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     mixPass.enabled = mixFactor > 0 && nextProgress < 0.15;
     final.u("uVignetteAspect").value.copy(aspect.current);
     final.u("uTime").value = state.clock.getElapsedTime();
+    // Hero preset (hero-light.ts): grain and sharpen from the user's panel in the hero, shipped values after.
+    const h = heroLight.weight;
+    final.u("uGrainAmount").value = DAYLIGHT.grain + (HERO_LIGHT.post.grain - DAYLIGHT.grain) * h;
+    final.u("uSharpenOpacity").value = DAYLIGHT.sharpen + (HERO_LIGHT.post.sharpen - DAYLIGHT.sharpen) * h;
     final.u("uOpacity").value = remap(multi.hideRatio, 0, 0.25, 1, 0);
     updateLens(state.camera, dt);
     const barrel = fisheyeAt(openingNow());

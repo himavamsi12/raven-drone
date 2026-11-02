@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { panoramaLookup } from "../shaders/panorama";
 import { computeScreenUv } from "../shaders/screen-uv";
 
 /** Terrain shader (shipped class `y`). Fog + diagonal "scan" reveal of a lit grayscale relief. */
@@ -49,6 +50,9 @@ uniform float uFogDensity;
 uniform float uFogExponent;
 uniform vec3 uFogSkyColor;
 uniform float uFogBlendFactor;
+// Raven opening: fog fades into the panorama in the view direction instead of a flat colour (0 = shipped fog).
+uniform float uPanoMix;
+${panoramaLookup}
 
 vec3 inverseTransformDirection(in vec3 dir, in mat4 matrix) {
     return normalize((vec4(dir, 0.0) * matrix).xyz);
@@ -65,7 +69,13 @@ vec3 applyFog(vec3 color, float distance) {
     float fogAmount = pow(fogDistance, uFogExponent);
     fogAmount *= uFogDensity;
     fogAmount = mix(fogAmount, fogAmount * uFogBlendFactor, uFogBlendFactor);
-    return mix(color, uFogSkyColor, fogAmount);
+    vec3 fogColor = uFogSkyColor;
+    if (uPanoMix > 0.0) {
+        float edge = abs(gl_FragCoord.x / uResolution.x * 2.0 - 1.0);
+        vec4 land = panoramaColor(vWorldPosition - cameraPosition, edge);
+        fogColor = mix(fogColor, land.rgb, land.a * uPanoMix);
+    }
+    return mix(color, fogColor, fogAmount);
 }
 
 vec3 sampleMaterials() {
@@ -162,6 +172,9 @@ void main() {
         uFogExponent: { value: 1 },
         uFogSkyColor: { value: new THREE.Color("#c9e0f7") },
         uFogBlendFactor: { value: 0.5 },
+        uPanoMix: { value: 0 },
+        uPanorama: { value: null },
+        uCloudTime: { value: 0 },
       },
     });
   }

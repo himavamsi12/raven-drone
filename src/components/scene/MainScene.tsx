@@ -20,6 +20,7 @@ import { OpeningSky } from "./OpeningSky";
 import { Perimeters } from "./Perimeters";
 import { PowerStation } from "./PowerStation";
 import { usePostFX } from "./PostFX";
+import { DAYLIGHT, HERO_LIGHT, heroLight, updateHeroLight } from "./hero-light";
 import { plateLight } from "./plate-light";
 import { sunlight, updateSunlight } from "./sunlight";
 import { Terrain } from "./Terrain";
@@ -147,6 +148,7 @@ export function MainScene() {
   usePostFX(flockTarget);
 
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  const skyFillRef = useRef<THREE.HemisphereLight>(null);
   const scene = useThree((s) => s.scene);
   const heroDrone = useRef<THREE.Object3D | null>(null);
   const shadowFit = useRef({ frame: 0, centre: new THREE.Vector3(), radius: 1 });
@@ -164,10 +166,20 @@ export function MainScene() {
       sunlight.pitch *= 1 - w;
       sunlight.shade += (1 - sunlight.shade) * w;
     }
+    // Hero preset (hero-light.ts, user's panel values): sun to its colour/direction/intensity, sky fill on.
+    updateHeroLight();
+    const h = heroLight.weight;
+    sunlight.direction.lerp(heroLight.sunDirection, h).normalize();
+    sunlight.strength = 1 + (HERO_LIGHT.sun.intensity / DAYLIGHT.sunIntensity - 1) * h;
+    const fill = skyFillRef.current;
+    if (fill) {
+      fill.intensity = HERO_LIGHT.hemisphere.intensity * h;
+      fill.visible = h > 0;
+    }
     const sun = sunRef.current;
     if (sun) {
-      sun.intensity = 4 * sunlight.shade;
-      sun.color.setRGB(1, 1, 1).lerp(plateLight.sunColor, w);
+      sun.intensity = DAYLIGHT.sunIntensity * sunlight.shade * sunlight.strength;
+      sun.color.setRGB(1, 1, 1).lerp(plateLight.sunColor, w).lerp(heroLight.sunColor, h);
       // Same parallel sun, but placed just above the hero drone so a tight shadow frustum gives crisp
       // self-shadowing (arms and deck onto the medical box and gear).
       heroDrone.current ??= scene.getObjectByName("Drone1Group") ?? null;
@@ -225,7 +237,12 @@ export function MainScene() {
         position={SUN_POSITION}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0004}
+        shadow-bias={HERO_LIGHT.sun.bias}
+      />
+      {/* Hero sky fill (hero-light.ts); intensity follows the hero weight. */}
+      <hemisphereLight
+        ref={skyFillRef}
+        args={[HERO_LIGHT.hemisphere.sky, HERO_LIGHT.hemisphere.ground, HERO_LIGHT.hemisphere.intensity]}
       />
       <FlockPortal target={flockTarget} enabled={renderFlock} />
     </>

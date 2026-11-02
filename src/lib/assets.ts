@@ -17,6 +17,7 @@ export const ASSETS = {
   droneAnimationsMobile: "/assets/models/drone-animations-mobile.glb",
   loadingDrone: "/assets/models/loading-drone.glb", // Raven silhouette, replaces loading-delta
   noise: "/assets/textures/fx/noise.webp",
+  openingLand: "/assets/textures/environment/raven-opening-land.webp", // glb/raven-sky/01_opening_panorama.py (land)
   env: "/assets/textures/environment/env.exr",
   geistSemiBold: "/assets/3d-fonts/Geist-SemiBold.woff",
 } as const;

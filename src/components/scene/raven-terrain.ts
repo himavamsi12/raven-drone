@@ -16,6 +16,31 @@ export function terrainVariant(): TerrainVariant {
 }
 
 /**
+ * Tree-layout variants of the Raven natural tile (glb/raven-terrain/13_tree_variants.py): same hills, roads, rocks and
+ * houses, other groves and bushes; the rim band (22-36 local units) is the original, so any variant joins any other.
+ * Index 0 is the map inside `raven-terrain.glb`, 1.. are standalone base maps (same UVs, sRGB, flipY false).
+ */
+export const RAVEN_TILE_MAPS = ["/assets/textures/terrain/raven-natural-b.webp", "/assets/textures/terrain/raven-natural-c.webp"];
+
+/**
+ * Variant per tile column (-1..2) and ground strip (row + wraps travelled), period 6 along the travel. No two
+ * side-by-side or consecutive tiles share a variant, rows and columns are not period-2 stripes, use is balanced.
+ */
+const VARIANT_LAYOUT = [
+  [0, 1, 0, 2],
+  [1, 0, 2, 1],
+  [0, 2, 1, 0],
+  [2, 1, 0, 2],
+  [1, 2, 1, 0],
+  [2, 0, 2, 1],
+] as const;
+
+export function ravenTileVariant(col: number, strip: number): number {
+  const row = VARIANT_LAYOUT[((strip % 6) + 6) % 6];
+  return row[Math.min(Math.max(col + 1, 0), 3)];
+}
+
+/**
  * Ground height (tile-local glTF y) under each DetectionPoints anchor on the Raven tile, in POINTS order. Sampled
  * from the decoded asset by glb/raven-terrain/check_terrain.py; the shipped anchors sit on their own ground the same
  * way (within ~0.3 local units).

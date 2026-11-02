@@ -287,6 +287,72 @@ Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, 
   2701 with headline; one wheel gesture 0 → 2701 in ~5 s and back to 0; 60 fps at 0 and 2701; `npm run typecheck`,
   `npm run build` pass. Not checked: Safari/iOS, low-end GPUs (wide fov draws ~15 extra tiles during the opening).
 
+## Opening horizon artefacts fixed (user, 2026-11-02: "glitched?")
+
+- Ridge rings: the high-frequency gully term (sin 420 x sin 173 of the angle) aliased into vertical comb stripes once
+  the rings were lifted; replaced by a soft low-frequency one. Each ring now has a 30-unit fully hazed skirt below its
+  foot, so the lift leaves no bottom edge. The cloud-sea bank top is 1.4-2.0 deg (was 1.1-1.7) so no Blender hill
+  slivers show above it. Checked at scroll 0 and 900 (1440×900, zoomed); build passes.
+
+## Terrain motion blur reduced (user, 2026-11-02)
+
+- `PostFX.tsx` lens: `SPEED_GAIN` 3 -> 1.5, `MAX_BLUR_PX` 16 -> 9 (terrain-travel streak only; DoF unchanged).
+  Checked at hero 2701 (1440×900): houses, trees and paths read crisper; build passes.
+
+## Opening cloud sea (user, 2026-11-02)
+
+- While the opening camera climbs it looked down past the last tiles onto the flat Blender plain (a green band, a hard
+  line at the horizon). `shaders/panorama.ts` `cloudSea` adds a procedural sea of cloud on a plane below the camera,
+  composited over the land layer inside `panoramaColor`, so the land dome and the terrain fog (`uPanoMix`) both show
+  it and the tiles dissolve into it. Coverage is full toward the back, rises toward the left/right screen edges and
+  thins toward the near ground; the bank top sits 1.1-1.7 deg above the horizon (varies with heading, soft edge) so it
+  also hides the hills there; the far part takes SKY_COLOR. Slow drift (`uCloudTime`, ~1 noise cell per minute, same
+  clock in the land dome and the terrain fog so the tiles keep dissolving into the same clouds).
+- Checked (agent-browser 1440×900): scroll 0, 600, 900, 1200; typecheck and build pass.
+
+## Hero lighting preset from the user's panel (user, 2026-11-02)
+
+- `scene/hero-light.ts` holds the panel values: sun intensity 0 (colour #fffaf2, azimuth -51, elevation -8, shadows
+  on, bias -0.0004 = the panel's "-0.0"), hemisphere sky fill 1.65 (#cfe3ff / #8a7f70, new `hemisphereLight` in
+  MainScene), HDRI x0.65 with envMapRotation yaw -27 / pitch 35 / roll 91, grain 0.06, sharpen 0. Weight 1 in the
+  opening, hero frame and the whole Airframe chapter, smoothstep to the regular daylight over SWARM_SCENE 0 -> 0.6
+  (first version blended over DELTA_DRONE 0.05 -> 0.3; one snapped gesture crossed it and the drone visibly jumped). `sunlight.strength` carries
+  the sun-off state to the drone glints and rotor-disc sun flashes.
+- Assumed conventions (panel source not available): azimuth = atan2(x, -z) (scene sun -53 there), elevation above the
+  horizon, env Euler (x = pitch, y = yaw, z = roll), "intensity x" multiplies the existing drone env intensity.
+- Checked (agent-browser 1440×900): opening 0, hero 2701, Airframe 5000/7201 on the preset, Swarm 9000/11701 blending
+  back to daylight; typecheck and build pass.
+
+## Opening panorama: no haze gap behind the terrain (user, 2026-11-02)
+
+- The opening low shot showed an empty haze band between the last tile (~45 units, fogged to SKY_COLOR by 40) and two
+  flat procedural ridge rings. `OpeningSky` keeps its procedural sky and drifting cloud and draws a Blender land layer
+  over it (`glb/raven-sky/`, land mode: 8192x785 RGBA WebP, 365 KB, latitude -22.5..12: low rolling plain (three near
+  ridgelines, flattened to 0.45, `LAND_FLATTEN`) settling into a low hazy horizon hazed to SKY_COLOR (no white band), soft separate cloud banks at the ridge-ring
+  feet, transparent sky; far ranges and snow massifs removed by the
+  user, `FAR_RANGES = False`); during the opening `TerrainMaterial` fades its fog into that layer in
+  the same view direction (`uPanoMix` = 1 - openingEase), so tiles dissolve into the distant ranges. The two
+  procedural ridge rings (the far mountains) were restored at the user's request, drawn before the land layer and
+  raised so their silhouettes clear the Blender hills (near ring 3.2 deg, far ring 5.2 deg for layered depth; lift is
+  the last `RIDGES` field); the land layer is a separate
+  transparent, depth-tested dome (transparent objects draw after opaque ones, so without the depth test it covered
+  the terrain and drones). A full Blender sky + cloud panorama was tried first and rejected by the user (the procedural sky and
+  clouds looked better). Off from the hero frame on (uPanoMix 0, dome hidden).
+- Checked (agent-browser 1440×900): scroll 0, 900 (no band, ranges continue the tiles), hero 2701 unchanged;
+  typecheck, build pass. Not checked: mobile aspect, Safari, fps; the 8192-wide texture needs MAX_TEXTURE_SIZE >= 8192.
+
+## Terrain tile variants: no repeated tree groups (user, 2026-11-02)
+
+- The natural tile was one baked map repeated 15-30 times, so groves repeated every tile. Two extra tree-layout maps
+  (`raven-natural-b/c.webp`, 2.7 MB each; build in `glb/raven-terrain/README.md` v11) share the tile's hills, roads,
+  rocks, houses and rim band. `Terrain.tsx` gives each natural tile one of three `TerrainMaterial`s by
+  `ravenTileVariant(col, row + wraps travelled)` (6-row layout, no equal side-by-side or consecutive tiles), so a ground
+  strip keeps its variant when the tiles jump back a row. The two maps load after the scene (not behind the loader);
+  until then those tiles show the GLB map. Not under `?terrain=original` / `?plate=h00`.
+- Checked (agent-browser 1440×900): opening 0 and hero 2701 render the variant maps, no new console errors;
+  `npm run typecheck`, `npm run build` pass. Not checked: a wrap moment frame by frame, mobile, fps.
+- Gap: hills, roads and villages still repeat every tile (only the trees vary); +5.4 MB download.
+
 ## Terrain v09: Windows look-dev v08 on the site (user, 2026-11-01)
 
 - `raven-terrain.glb` v09: grass/cliff, Poly Haven lawns, BlenderKit moss forest floor, 24 web cottages (16-tri

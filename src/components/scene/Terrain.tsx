@@ -22,8 +22,9 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { TerrainMaterial } from "./materials/TerrainMaterial";
 import { getNoiseTexture } from "./textures";
 import { openingEase } from "./opening";
+import { useOpeningPanorama } from "./OpeningSky";
 import { DetectionPoints } from "./DetectionPoints";
-import { RAVEN_DETECTION_Y, terrainVariant } from "./raven-terrain";
+import { RAVEN_DETECTION_Y, RAVEN_TILE_MAPS, ravenTileVariant, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
 
 /** Distance between tile origins (shipped `X`). */
@@ -104,12 +105,30 @@ type TileProps = {
   /** Raven natural tile: its village rides the same moving tile group (not drawn on the city tile). */
   houses?: { geometry: THREE.BufferGeometry; material: THREE.Material };
   detectionY?: readonly number[];
+  /** Raven tree-layout variants: the tile picks one by column and ground strip (see `ravenTileVariant`). */
+  variants?: readonly THREE.Material[];
 };
 
+/** Tile rows the wrapped travel has advanced: a ground strip keeps its variant when the tiles jump back a row. */
+function wrapsTravelled() {
+  return Math.round(((terrainOffset.current || 0) - (terrainWrapped.current || 0)) / TILE_STEP);
+}
+
 /** One terrain tile (shipped `K`); slides in -z by the wrapped travel offset. */
-function Tile({ position: [col, row], geometries, material, isCity, withPoints, desktopOnly, houses, detectionY }: TileProps) {
+function Tile({
+  position: [col, row],
+  geometries,
+  material,
+  isCity,
+  withPoints,
+  desktopOnly,
+  houses,
+  detectionY,
+  variants,
+}: TileProps) {
   const is2xl = useMediaQuery("(min-width: 1536px)");
   const ref = useRef<THREE.Group>(null);
+  const land = useRef<THREE.Mesh>(null);
   const z = TILE_STEP * row;
   const x = TILE_STEP * col;
   useEffect(() => {
@@ -122,10 +141,17 @@ function Tile({ position: [col, row], geometries, material, isCity, withPoints, 
     if (!ref.current) return;
     ref.current.position.z = z - (terrainWrapped.current || 0);
     if (desktopOnly) ref.current.visible = is2xl;
+    if (variants && land.current) land.current.material = variants[ravenTileVariant(col, row + wrapsTravelled())];
   });
   return (
     <group ref={ref}>
-      <mesh frustumCulled={false} renderOrder={RENDER_ORDER.TERRAIN} geometry={geometries[isCity ? 1 : 0]} material={material} />
+      <mesh
+        ref={land}
+        frustumCulled={false}
+        renderOrder={RENDER_ORDER.TERRAIN}
+        geometry={geometries[isCity ? 1 : 0]}
+        material={material}
+      />
       {houses && !isCity && (
         <mesh frustumCulled={false} renderOrder={RENDER_ORDER.TERRAIN} geometry={houses.geometry} material={houses.material} />
       )}
@@ -173,11 +199,15 @@ export function Terrain() {
     tex.anisotropy = 4;
   });
 
+  const panorama = useOpeningPanorama();
   const [natural] = useState(() => new TerrainMaterial(getNoiseTexture()));
   const [urban] = useState(() => new TerrainMaterial(getNoiseTexture()));
   // Same fog/scan treatment as the ground so houses never sit crisp over hazy terrain.
   const [village] = useState(() => new TerrainMaterial(getNoiseTexture()));
-  const materials = useMemo(() => [natural, urban, village], [natural, urban, village]);
+  // Raven tree-layout variants of the natural tile: one material per base map, same fog/scan as `natural`.
+  const [naturalVariants] = useState(() => [natural, ...RAVEN_TILE_MAPS.map(() => new TerrainMaterial(getNoiseTexture()))]);
+  const materials = useMemo(() => [urban, village, ...naturalVariants], [urban, village, naturalVariants]);
+  const variants = isRaven ? naturalVariants : undefined;
   const houses = useMemo(
     () => (isRaven ? { geometry: ravenHouses.geometry, material: village } : undefined),
     [isRaven, ravenHouses, village],
@@ -189,11 +219,37 @@ export function Terrain() {
       m.uniforms.uResolution.value = resolution;
       m.uniforms.uCityTexture.value = cityTex;
       m.uniforms.uBgColor.value.set(0x000000);
+      m.uniforms.uPanorama.value = panorama;
     }
-    natural.uniforms.uBaseTexture.value = naturalMap;
+    for (const m of naturalVariants) m.uniforms.uBaseTexture.value = naturalMap;
     urban.uniforms.uBaseTexture.value = baseMap;
     village.uniforms.uBaseTexture.value = housesMap;
-  }, [baseMap, naturalMap, housesMap, cityTex, materials, natural, urban, village]);
+  }, [baseMap, naturalMap, housesMap, cityTex, materials, naturalVariants, urban, village, panorama]);
+
+  // Variant maps load after the scene is up (not behind the loader); until then those tiles show the GLB map.
+  useEffect(() => {
+    if (!isRaven || !naturalMap) return;
+    const loader = new THREE.TextureLoader();
+    const loaded: THREE.Texture[] = [];
+    let alive = true;
+    RAVEN_TILE_MAPS.forEach((url, i) => {
+      loader.load(url, (tex) => {
+        if (!alive) return tex.dispose();
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.flipY = false; // glTF UV convention, like the GLB map
+        tex.wrapS = naturalMap.wrapS;
+        tex.wrapT = naturalMap.wrapT;
+        tex.anisotropy = 4;
+        loaded.push(tex);
+        naturalVariants[i + 1].uniforms.uBaseTexture.value = tex;
+      });
+    });
+    return () => {
+      alive = false;
+      for (const tex of loaded) tex.dispose();
+      for (const m of naturalVariants.slice(1)) m.uniforms.uBaseTexture.value = naturalMap;
+    };
+  }, [isRaven, naturalMap, naturalVariants]);
 
   useEffect(() => {
     for (const m of materials) m.uniforms.uDpr.value = dpr;
@@ -207,7 +263,7 @@ export function Terrain() {
   const groupOpening = useRef<THREE.Group>(null);
   const steps = useMemo(() => fogSteps(isMd), [isMd]);
 
-  useFrame((_, dt) => {
+  useFrame(({ clock }, dt) => {
     const state = scenes();
     const delta = state[SCENE.DELTA_DRONE];
     const detection = state[SCENE.REAL_TIME_DETECTION];
@@ -245,9 +301,7 @@ export function Terrain() {
       nearCity = terrainRamp.current - travelled <= 200 * TERRAIN_SCALE;
     }
     const scan = remapEased(phalanx.progress, 0, 0.5, 0, 1, easeInOutCubic);
-    natural.uniforms.uHideRatio.value = scan;
-    urban.uniforms.uHideRatio.value = scan;
-    village.uniforms.uHideRatio.value = scan;
+    for (const m of materials) m.uniforms.uHideRatio.value = scan;
     urban.uniforms.uisCity.value = nearCity;
 
     const tp = thermal.progress;
@@ -260,17 +314,16 @@ export function Terrain() {
     if (groupAfter.current) groupAfter.current.visible = approachingCity && !ignitionDone;
     if (groupWide.current) groupWide.current.visible = (approachingCity && !ignitionDone) || multi > 0.75;
 
-    applyFog(natural, steps);
-    applyFog(urban, steps);
-    applyFog(village, steps);
+    for (const m of materials) applyFog(m, steps);
 
     const opening = openingNow();
     if (groupOpening.current) groupOpening.current.visible = opening < 1;
     const w = 1 - openingEase(opening);
-    if (w > 0) {
-      for (const m of materials) {
-        for (const k of FOG_KEYS) m.uniforms[k].value += (FOG_OPENING[k] - m.uniforms[k].value) * w;
-      }
+    for (const m of materials) {
+      // Opening: far tiles dissolve into the panorama behind them (OpeningSky), not into a flat haze colour.
+      m.uniforms.uPanoMix.value = w;
+      m.uniforms.uCloudTime.value = clock.elapsedTime; // cloud sea drift, same clock as OpeningSky
+      if (w > 0) for (const k of FOG_KEYS) m.uniforms[k].value += (FOG_OPENING[k] - m.uniforms[k].value) * w;
     }
   });
 
@@ -283,6 +336,7 @@ export function Terrain() {
       material={natural}
       houses={houses}
       detectionY={detectionY}
+      variants={variants}
       {...extra}
     />
   );
@@ -304,7 +358,7 @@ export function Terrain() {
       </group>
       <group ref={groupCity}>
         {tile([-1, 3])}
-        {tile([0, 3], { material: urban, isCity: true })}
+        {tile([0, 3], { material: urban, isCity: true, variants: undefined })}
         {tile([1, 3])}
       </group>
       <group ref={groupWide}>

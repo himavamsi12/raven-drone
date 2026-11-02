@@ -162,5 +162,5 @@ export function setRotorBlur({ blades, discs }: RotorBlur, spinning: boolean) {
 /** Per frame: shared sweep clock (idempotent across instances) and the passing-cloud shade. */
 export function updateRotorBlur({ materials }: RotorBlur, elapsed: number) {
   time.value = elapsed;
-  for (const m of materials) m.uniforms.uShade.value = sunlight.shade;
+  for (const m of materials) m.uniforms.uShade.value = sunlight.shade * sunlight.strength;
 }

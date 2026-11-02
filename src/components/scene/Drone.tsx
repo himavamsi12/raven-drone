@@ -11,6 +11,7 @@ import { useGLB } from "./types";
 import { collectRavenRotors, advanceRavenRotors } from "./raven-rotors";
 import { attachRotorBlur, setRotorBlur, updateRotorBlur } from "./rotor-blur";
 import { plateLight } from "./plate-light";
+import { HERO_LIGHT, heroLight } from "./hero-light";
 import { sunlight } from "./sunlight";
 
 const ENV_INTENSITY = 0.85;
@@ -104,6 +105,13 @@ export function RavenModel({
     if (live[0].material.envMap !== wantEnv) for (const { material } of live) material.envMap = wantEnv;
     // Sky/sun reflections follow the travel-driven heading (sunlight.ts) so highlights slide while flying.
     envRotation.set(sunlight.pitch, sunlight.heading, 0);
+    // Hero preset (hero-light.ts): HDRI turned to the panel's yaw/tilt/roll.
+    const h = heroLight.weight;
+    if (h > 0) {
+      envRotation.x += (heroLight.envRotation.x - envRotation.x) * h;
+      envRotation.y += (heroLight.envRotation.y - envRotation.y) * h;
+      envRotation.z += (heroLight.envRotation.z - envRotation.z) * h;
+    }
     // Sun glint: brief flare when a shell facet's half-vector (sun, camera) lines up as the aircraft banks.
     let target = 0;
     if (!reducedMotion) {
@@ -114,11 +122,16 @@ export function RavenModel({
       for (const facet of FACETS) align = Math.max(align, _n.copy(facet).applyQuaternion(_q).dot(_h));
       target = smoothstep(Math.cos(0.3), Math.cos(0.1), align); // ramps in from 17° to 6° off-mirror
       target *= sunlight.shade > 0.85 ? 1 : 0.3; // no strong glints under cloud
+      target *= sunlight.strength; // no sun, no glint (hero preset)
     }
     glint.current = damp(glint.current, target, target > glint.current ? 14 : 4, dt);
     // Under cloud the sky still reflects, so environment dims less than direct sun.
     // The plate sky is a softer, broader source than the HDRI's clipped sun: lift its fill a little.
-    const env = ENV_INTENSITY * (0.8 + 0.2 * sunlight.shade) * (1 + 0.3 * plateLight.weight);
+    const env =
+      ENV_INTENSITY *
+      (0.8 + 0.2 * sunlight.shade) *
+      (1 + 0.3 * plateLight.weight) *
+      (1 + (HERO_LIGHT.environment.intensity - 1) * h);
     for (const { material, coat, glints } of live) {
       material.envMapIntensity = env + (glints ? 0.45 * glint.current : 0);
       if (glints && material instanceof THREE.MeshPhysicalMaterial) material.clearcoat = coat + 0.35 * glint.current;
