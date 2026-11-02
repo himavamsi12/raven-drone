@@ -7,6 +7,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useScrollToScene } from "@/components/SmoothScroll";
 import { Button } from "@/components/ui/Button";
 import { useLoading } from "@/lib/loading";
+import { CLIMB_SHARE } from "@/lib/story-map";
 import { SCENE, useScenes, type SceneId } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -229,7 +230,8 @@ const CHAPTERS: { component: ComponentType; timeWindow: Window }[] = [
       "Keep the care team informed.",
       "A useful delivery view brings the destination and route status together, so the people arranging supplies share the same picture.",
     ),
-    timeWindow: { startScene: SCENE.PHALANX_AI, startSceneProgress: 0.8, endScene: SCENE.ANALYSIS_EVALUATION, endSceneProgress: 0.075 },
+    // Raven: stays through the clay landscape climb (CLIMB_SHARE of Review), was 0.075.
+    timeWindow: { startScene: SCENE.PHALANX_AI, startSceneProgress: 0.8, endScene: SCENE.ANALYSIS_EVALUATION, endSceneProgress: CLIMB_SHARE + 0.04 },
   },
   {
     component: simple(

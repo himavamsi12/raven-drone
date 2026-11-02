@@ -406,16 +406,35 @@ then "not this top-down view only ... directly show this view")
   heights are raised 2.4 units and their hills/valleys stretched x5.5 about the tile rim, eased off on two village
   shelves. Only a smoothed copy of the height field is stretched (periodic box blur, radius 3 cells x 2 passes, ~5.6
   local units; user: "the tip of the hills looks very sharp"), so the tops stay rounded like our hills and the fine
-  detail stays at 1x; outside it the ground keeps its real low relief. No invented noise and no texture (user iterations:
+  detail stays at 1x; the lower village (tile cottages + cluster B) stands on a flat-topped terrace raised 1.1 units
+  (`LANDSCAPE.terrace`, exp(-r^4) profile; user: "put this village house a bit more higher altitude"); outside it the ground keeps its real low relief. No invented noise and no texture (user iterations:
   ridged-noise massif → whole tile landscape stretched with land-cover tone → "just the landscape structure of the
   hill/mountain, not the whole"). Over Review progress .04 → .5 the camera blends back to the shipped track and the
-  lift goes to 0 (per-vertex `aLift` + `aLiftNormal`), so from mid-Review on the map has the real tile heights and
+  lift goes to 0 (per-vertex `aLift` + `aLiftNormal`; Review .32 → .75 since the climb was added), so from late Review on the map has the real tile heights and
   the shipped overlays, drones and responders fit. The pair drones fly 5 units higher while the lift is on; the
   centre outline, its three points and badge are hidden until it is below .05.
 - Village: clay houses on the Raven cottage centres of the nearby tiles plus 17 on the Care teams tile (one larger
   clinic) around the two analysis drone targets; they ride between real and lifted heights.
 - Contour lines removed (user, 2026-11-02: "this flows are not required"): the clay shows shading and the dot grid
   only; the cursor glow lifts the clay and the dots.
+- Care teams climb (user, 2026-11-02): the two analysis drones stay hidden while the landscape is up; instead one
+  Raven (`scene/ClayFlight.tsx`, LowPolyDrone) climbs from the bottom left of the frame to the terrace village along a
+  dashed route (ref `routeMat`: drifting dashes, 55% duty, our own path), with a relative climb gauge and
+  "Ready / Climbing / Holding above village" (no metres: performance unspecified). Scroll-driven: the first
+  part of Review's range is the flight (`pageBands` splits Review at each village stop), snapping at 1 px/ms inside
+  it. The camera hand-back moved to
+  Review .52 → .75 and the Care teams copy now leaves at Review .54 (was .075). Checked wheel forward/back through
+  all stops.
+- Second leg (user: "continue the path of the drone to the next village"): `WAYPOINTS` valley → Hill clinic
+  (terrace village) → Ridge village (the tile's 7-cottage cluster on the right ridge), one snap stop per village
+  (`CLIMB_STOPS` [.25, .5] of Review; at vh 900: 26551 → 27676 → 28801 → 31051). The indicator shows ▲ climbing /
+  ▼ descending / holding, the gauge spans the start height to the highest waypoint. Checkpoint pins after the
+  reference (dark "+" disc on a stem standing on the site, mono label; display-only, no card): Health centre, Hill
+  clinic, Ridge village. The nav tick already reads "Review" during the climb (scene-based).
+- Wipe fix (user: "extra frame when the diagonal cut transition is coming"): the wipe shows the map captured at
+  phalanx .5, but the landscape camera drifted its heading over phalanx .5 → 1, so a second framing appeared after
+  the cut. Heading is now fixed (`LANDSCAPE.yaw` 0.04) and the drone + route render in the capture (only the DOM
+  label and pins fade in after the switch). Checked 23800 (mid-wipe) vs 26551: same framing.
 - Cursor glow: window `pointermove` (mouse/pen), ray marched against `clayHeight` (CPU mirror of the mesh). The
   terrain lens depth of field is off while the clay map shows; the flat `GridRow` is not rendered in raven mode.
   `?terrain=original` keeps the shipped dark map.
@@ -423,6 +442,12 @@ then "not this top-down view only ... directly show this view")
   hand-back 27600, Review 31051 (drones over the village), Updates 35551, hero 2701 unchanged; 60 fps on the
   landscape. Typecheck and build pass. Not checked: mobile widths, Support/multi-threat chapters, scrolling back up
   through the hand-back with wheel snapping. Not ported: the reference's pins, dashed routes and drag-to-turn.
+
+## Connection shows one drone (user, 2026-11-02: "remove three drone and keep the center one only")
+
+- `DroneRig`: the flank drones (Drone2/3, shipped tracks 02-02/02-03, 03-02) are never shown; their clips still
+  run so nothing else moves. `SwarmTags` is now the RAVEN-01 tag only (RAVEN-02/03 tags and dashed links removed).
+  The drone shadow already frames only visible drones. Checked Connection 11701 (1440×900); build passes.
 
 ## Larger drone in top views (user, 2026-11-02)
 

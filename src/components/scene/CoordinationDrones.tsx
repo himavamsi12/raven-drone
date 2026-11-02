@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { RENDER_ORDER } from "@/lib/constants";
 import { SCENE, scenes, useScenes, type SceneId } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { clayState } from "./clay-map";
+import { clayState, landscapeWeight } from "./clay-map";
 import { LowPolyDrone, Trail } from "./LowPolyDrone";
 
 const TRAIL = { LENGTH: 40, COLOR: 0xf2f2f2, WIDTH: 2 };
@@ -196,9 +196,6 @@ const PAIR = [
 ];
 const SUPPORT = { initial: onCircle([1, 0, 0], 85, 8.75), target: new THREE.Vector3(1, 0, 0), offset: -0.25 };
 
-/** Extra flight height over the landscape mountain (map units; its summit reaches ~4.6). */
-const PAIR_LIFT = 5;
-
 const nextMode = (mode: Mode, p: number): Mode => (mode === "orbit" && p < 0.75 ? "seek" : mode === "seek" && p === 1 ? "orbit" : mode);
 
 /** Three response drones orbiting the multi-threat sites (shipped `eg`). */
@@ -238,7 +235,10 @@ export const CoordinationDrones = memo(function CoordinationDrones() {
   const coordOn = useScenes((s) => s[SCENE.INTERDRONE_COORDINATION].progress > 0);
   const pairGroup = useRef<THREE.Group>(null);
   const supportGroup = useRef<THREE.Group>(null);
-  useFadeGroup(pairGroup, phalanxOn);
+  // Raven clay landscape: the pair stays out of the mountain view (one Raven climbs there instead, ClayFlight) and
+  // fades in once the relief has settled in Review.
+  const landscape = useScenes((s) => clayState.enabled && landscapeWeight(s) > 0.05);
+  useFadeGroup(pairGroup, phalanxOn && !landscape);
   useFadeGroup(supportGroup, coordOn);
   const pairTargets = useMemo(() => PAIR.map((p) => p.initial.clone()), []);
   const supportTarget = useMemo(() => SUPPORT.initial.clone(), []);
@@ -250,8 +250,6 @@ export const CoordinationDrones = memo(function CoordinationDrones() {
     const analysis = s[SCENE.ANALYSIS_EVALUATION].progress;
     const support = s[SCENE.EXTRA_SUPPORT].progress;
     PAIR.forEach((p, i) => pairTargets[i].copy(p.initial).lerp(p.target, analysis));
-    // Raven clay landscape: the pair flies over the mountain, settling to its shipped height with the relief.
-    if (pairGroup.current) pairGroup.current.position.y = 0.8 + PAIR_LIFT * clayState.weight;
     supportTarget.copy(SUPPORT.initial).lerp(SUPPORT.target, support);
     pairMode.current = nextMode(pairMode.current, analysis);
     supportMode.current = nextMode(supportMode.current, support);

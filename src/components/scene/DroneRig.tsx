@@ -230,10 +230,12 @@ export function DroneRig() {
     // Raven clay landscape: Care teams opens on a low view across the lifted relief, handing back to the shipped
     // track over early Review (clay-map.ts LANDSCAPE).
     if (cameraMover.current && camera.current) {
-      applyLandscapeCamera(cameraMover.current, scenes()[SCENE.PHALANX_AI].progress, camera.current.aspect);
+      applyLandscapeCamera(cameraMover.current, camera.current.aspect);
     }
-    if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = opening >= 1;
-    if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = opening >= 1;
+    // Raven: only the hero drone flies (user, 2026-11-02: "remove three drone and keep the center one only"). The
+    // flank drones' clips still run (nothing else moves), but they are never shown.
+    if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = false;
+    if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = false;
   }, 1);
 
   useFrame((state, dt) => {
@@ -392,7 +394,7 @@ export function DroneRig() {
           </group>
         </group>
       </group>
-      <SwarmTags mainRef={drone1} drone2Ref={drone2} drone3Ref={drone3} />
+      <SwarmTags mainRef={drone1} />
       <SpecsCallouts />
     </>
   );

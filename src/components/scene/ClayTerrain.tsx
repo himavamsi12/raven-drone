@@ -26,6 +26,7 @@ import {
   VILLAGE,
   type HeightField,
 } from "./clay-map";
+import { ClayFlight } from "./ClayFlight";
 import { useGLB } from "./types";
 
 /** Mesh half-size around the mountain (map units) and grid segments; spacing ~0.05 at the centre, ~0.35 at the rim. */
@@ -259,6 +260,7 @@ export function ClayTerrain() {
         frustumCulled={false}
         renderOrder={RENDER_ORDER.TERRAIN}
       />
+      <ClayFlight field={field} />
     </group>
   );
 }

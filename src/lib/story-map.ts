@@ -35,7 +35,17 @@ export const BAND_2_VH = 3200; // phalanx 500 + 5 × 500 + 100 (zone) + 100
  */
 export const OPENING_VH = 300;
 
-export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F1: 0, preroll: false };
+export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F1: 0, C0: 0, C1: 0, preroll: false };
+
+/**
+ * Raven clay landscape (scene/ClayFlight.tsx, user 2026-11-02: the climb "should be interactive with the scroll",
+ * then "continue the path of the drone to the next village"): the first part of Review's range flies the drone
+ * valley → terrace village → ridge village, one snap stop per village (`CLIMB_STOPS`, Review progress), so the page
+ * rests over each village before the camera hands back. `C0`/`C1` hold the flight's page range.
+ */
+export const CLIMB_STOPS = [0.25, 0.5] as const;
+/** Review progress at the end of the flight (last village). */
+export const CLIMB_SHARE = CLIMB_STOPS[CLIMB_STOPS.length - 1];
 
 /** Band 1 story offset -> page offset (Journey compressed to JOURNEY_PAGE_SHARE). */
 function band1Page(story: number) {
@@ -122,7 +132,15 @@ export function pageBands(ranges: SceneRange[]) {
     route.height = route.end - route.start;
   }
   // The wipe (phalanx-ai) is band 2's first range, so one gesture from Route plays the whole transition.
-  return [[opening, ...band1, ...pick(BAND_2)]];
+  // Review is split at each clay landscape village (CLIMB_STOPS): Care teams → village → village → Review.
+  const band2 = pick(BAND_2).flatMap((r) => {
+    if (r.id !== SCENE.ANALYSIS_EVALUATION) return [r];
+    const cuts = [r.start, ...CLIMB_STOPS.map((p) => r.start + r.height * p), r.end];
+    storyMap.C0 = r.start;
+    storyMap.C1 = cuts[cuts.length - 2];
+    return cuts.slice(1).map((end, i) => ({ ...r, start: cuts[i], height: end - cuts[i], end }));
+  });
+  return [[opening, ...band1, ...band2]];
 }
 
 /** Diagonal wipe progress for a page scroll (0 = Route, 1 = Care teams map fully swept). */

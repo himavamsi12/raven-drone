@@ -3,6 +3,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { TERRAIN_SCALE } from "@/lib/constants";
 import { easeInOutCubic, remapEased } from "@/lib/math";
 import { SCENE, type SceneData, type SceneId } from "@/lib/scenes";
+import { CLIMB_SHARE } from "@/lib/story-map";
 
 /**
  * Raven clay landscape (user, 2026-11-02), after the "net" section of `asset/html/raven_homepage.html` (inline
@@ -62,18 +63,27 @@ export const LANDSCAPE = {
   /** Village shelves: the stretch eases off around these map offsets (Care teams tile (0, -2) and (10, -60)). */
   shelves: [new THREE.Vector2(0, -0.08), new THREE.Vector2(0.4, -2.4)],
   shelfRadius: 1.3,
+  /**
+   * Lower village terrace (user, 2026-11-02: "put this village house a bit more higher altitude"): the foothill
+   * village (Care teams tile cottages + cluster B) stands on a flat-topped rise partway up the mountain. Map offset,
+   * radius and height (map units); profile exp(-r^4) keeps the top flat and the edges soft.
+   */
+  terrace: { centre: new THREE.Vector2(0.45, -2.45), radius: 1.9, height: 1.1 },
   /** Camera: elevation above the horizon, distance, aim height above the tile base (map units). */
   elevation: THREE.MathUtils.degToRad(12),
   distance: 28,
   aimHeight: 1.9,
-  /** Slow heading drift across the Care teams frame (phalanx .5 -> 1), radians. */
-  yawFrom: -0.16,
-  yawTo: 0.04,
+  /**
+   * Camera heading (radians). Fixed: the diagonal wipe reveals a capture taken at phalanx .5, so any drift after it
+   * showed a second framing once the page settled (user, 2026-11-02: "extra frame when the diagonal cut transition is
+   * coming"; was a -0.16 -> 0.04 drift over phalanx .5 -> 1).
+   */
+  yaw: 0.04,
   /** Light from the camera side and screen left (ref light (-0.55, .7, .35) for a camera looking -z). */
   light: new THREE.Vector3(0.55, 0.7, -0.4).normalize(),
-  /** Hand-back to the shipped Review track: analysis progress range. */
-  handFrom: 0.04,
-  handTo: 0.5,
+  /** Hand-back to the shipped Review track: analysis progress range, after the climb (story-map CLIMB_SHARE). */
+  handFrom: CLIMB_SHARE + 0.02,
+  handTo: 0.75,
 } as const;
 
 /** Clay map shown: where the Phalanx scan has swept (same expression as the tiles' `uHideRatio` > .5). */
@@ -181,13 +191,18 @@ export function baseHeight(field: HeightField, x: number, z: number) {
 
 /**
  * Landscape-view height at map (x, z), given the real ground `base` there (map units): base + rise + the smoothed
- * relief stretched (fine detail stays at 1x).
+ * relief stretched (fine detail stays at 1x) + the lower village terrace.
  */
 export function liftedHeight(field: HeightField, base: number, x: number, z: number) {
   const dx = (x - CLAY_CENTRE.x - LANDSCAPE.offset.x) / LANDSCAPE.radius.x;
   const dz = (z - CLAY_CENTRE.y - LANDSCAPE.offset.y) / LANDSCAPE.radius.y;
   const f = Math.exp(-(dx * dx + dz * dz));
-  if (f < 1e-4) return base;
+  const { terrace } = LANDSCAPE;
+  const tx = (x - CLAY_CENTRE.x - terrace.centre.x) / terrace.radius;
+  const tz = (z - CLAY_CENTRE.y - terrace.centre.y) / terrace.radius;
+  const tr = tx * tx + tz * tz;
+  const lift = terrace.height * Math.exp(-tr * tr);
+  if (f < 1e-4) return base + lift;
   let shelf = 0;
   for (const s of LANDSCAPE.shelves) {
     const sx = (x - CLAY_CENTRE.x - s.x) / LANDSCAPE.shelfRadius;
@@ -197,7 +212,7 @@ export function liftedHeight(field: HeightField, base: number, x: number, z: num
   const rim = LANDSCAPE.rim * TERRAIN_SCALE;
   const smooth = TERRAIN_SCALE * sampleField(field, field.smooth, toLocal(x - CLAY_CENTRE.x), toLocal(z - CLAY_CENTRE.y));
   const stretch = (LANDSCAPE.stretch - 1) * f * (1 - 0.7 * shelf);
-  return base + LANDSCAPE.rise * f + (smooth - rim) * stretch;
+  return base + LANDSCAPE.rise * f + (smooth - rim) * stretch + lift;
 }
 
 /** Ground at map (x, z) for a landscape weight (CPU mirror of the clay mesh's vertex shader). */
@@ -400,14 +415,14 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Blend the camera mover (holding the shipped clip pose) toward the landscape pose by `clayState.weight`.
- * `phalanx` drives the slow heading drift; `aspect` widens the shot on narrow screens (ref: x1.25 below 1.4, x1.65
+ * `aspect` widens the shot on narrow screens (ref: x1.25 below 1.4, x1.65
  * below 1).
  */
-export function applyLandscapeCamera(mover: THREE.Object3D, phalanx: number, aspect: number) {
+export function applyLandscapeCamera(mover: THREE.Object3D, aspect: number) {
   const w = clayState.weight;
   if (w <= 0) return;
   const c = clayState.centreWorld;
-  const yaw = THREE.MathUtils.lerp(LANDSCAPE.yawFrom, LANDSCAPE.yawTo, THREE.MathUtils.smoothstep(phalanx, 0.5, 1));
+  const yaw = LANDSCAPE.yaw;
   const far = aspect < 1 ? 1.65 : aspect < 1.4 ? 1.25 : 1;
   const d = LANDSCAPE.distance * far;
   const cosE = Math.cos(LANDSCAPE.elevation);

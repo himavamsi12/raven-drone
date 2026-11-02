@@ -194,7 +194,9 @@ function SceneController() {
         else if (vel < 2 * dt && !scrollbarDrag.current && (!isTouchPhone || !touching.current)) {
           const sign = delta > 0 ? 1 : -1;
           // Raven: the opening move plays over OPENING_MS whatever the viewport height; the story keeps 2px/ms.
-          const rate = scroll < storyMap.P + 1 && t <= storyMap.P + 1 ? Math.max(storyMap.P / OPENING_MS, 0.2) : 2;
+          // The clay landscape climb (Care teams → village, storyMap.C0..C1) moves at half speed so the climb reads.
+          const inClimb = storyMap.C1 > storyMap.C0 && Math.min(scroll, t) >= storyMap.C0 - 1 && Math.max(scroll, t) <= storyMap.C1 + 1;
+          const rate = scroll < storyMap.P + 1 && t <= storyMap.P + 1 ? Math.max(storyMap.P / OPENING_MS, 0.2) : inClimb ? 1 : 2;
           const stepPx = rate * sign * dt;
           const next = sign > 0 ? Math.min(scroll + stepPx, t) : Math.max(scroll + stepPx, t);
           lenis.scrollTo(next, { immediate: true });
