@@ -383,7 +383,7 @@ Replaces the 2026-10-31 pad takeoff film (`TakeoffPlate`, `raven-takeoff*.mp4`, 
 
 ## Black overlay between terrain and clouds (user, 2026-11-02: "so the ground is a little less evident")
 
-- `groundDimUniforms.uGroundDim` (drone-shadow.ts), multiplied onto every TerrainMaterial's final colour (fog
+- `groundDimUniforms.uGroundDim` (`ground-dim.ts`, was drone-shadow.ts), multiplied onto every TerrainMaterial's final colour (fog
   included), equivalent to a black layer under the cloud wisps. CloudWisps writes `GROUND_DIM` 0.5 (was 0.35) x its strength,
   so it follows the wisps: off in the opening/hero, on from Airframe whenever the camera looks down, off from the
   Care teams map. Checked hero 2701 (unchanged), Airframe 7201, Connection 9500, Route 25201 (1440×900); build passes.
@@ -506,6 +506,8 @@ then "not this top-down view only ... directly show this view")
   more contrast. The rig was never committed, so it is not in git history.
 
 ## Drone shadow on the terrain + overhead cloud wisps (user, 2026-11-02: drone must stand out, no extra lights)
+
+> The drone shadow below was removed on 2026-11-03 (user); see "Drone shadow removed" at the end. The cloud wisps stay.
 
 - `DroneShadow.tsx` + `drone-shadow.ts`: each frame the drones' opaque meshes (layer 5, override black) are rendered
   from the light into a 1024 half-float map framing all visible drones; every TerrainMaterial (shared uniform
@@ -1013,3 +1015,16 @@ which is the name the shipped code looks up.
   the mountain terrain, which the reveal already required.
 - Checked: loader reveal, hero, page end at 1440x900 and 390x844; page height at vh 900 is 30325 (was ~31147).
 - Known (pre-existing): on mobile the About labels' two-column grid has no column gap, so the first two run together.
+
+## Drone shadow removed (user, 2026-11-03)
+
+- Request: "currently we are adding shadow of the drone when its flying over the terrain and the clouds. remove that
+  shadow."
+- Removed: `DroneShadow.tsx` (per-frame silhouette render from the light into a 1024 map, layer 5) and the shadow
+  half of `drone-shadow.ts` (`droneShadowUniforms`, `droneShadowAt`); the file is now `ground-dim.ts` with only
+  `groundDimUniforms`. The shadow sampling is gone from `TerrainMaterial`, `MountainMaterial` (`mountainDroneShadow`
+  and its slope fade) and the `CloudWisps` shader. `?shadow=off` no longer exists. This also drops one extra scene
+  render per frame.
+- Kept: the cloud wisps and the black ground-dim overlay under them, the mountain terrain's own ray-marched cast
+  shadows, and the drones' self-shadowing from the plate sun (`?plate=h00`, drones only).
+

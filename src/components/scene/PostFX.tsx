@@ -331,7 +331,7 @@ const _vp = new THREE.Matrix4();
 const _drone = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 
-/** Layer the hero drones' bodies are drawn on in their own render (DroneShadow uses 5). Lights are added to it too. */
+/** Layer the hero drones' bodies are drawn on in their own render Lights are added to it too. */
 const DRONE_LAYER = 6;
 const DRONE_GROUPS = ["Drone1Group", "Drone2Group", "Drone3Group"];
 const _clear = new THREE.Color();

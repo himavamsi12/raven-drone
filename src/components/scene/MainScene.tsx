@@ -14,7 +14,6 @@ import { useRenderScale } from "@/lib/render-scale";
 import { Clouds } from "./Clouds";
 import { CloudWisps } from "./CloudWisps";
 import { DroneRig } from "./DroneRig";
-import { DroneShadow } from "./DroneShadow";
 import { Flock } from "./Flock";
 import { GridRow } from "./Grid";
 import { HeroPlate, heroPlateEnabled } from "./HeroPlate";
@@ -278,9 +277,8 @@ export function MainScene() {
         {!clayMap && <GridRow offset={2 * TILE} isCity />}
       </group>
       <Clouds />
-      {/* Raven: overhead low-cloud wisps and the drones' shadow on the terrain (contrast without extra lights). */}
+      {/* Raven: overhead low-cloud wisps (the drones' shadow on terrain and clouds was removed, user 2026-11-03). */}
       <CloudWisps />
-      <DroneShadow />
       <directionalLight
         ref={sunRef}
         args={[0xffffff, 4]}

@@ -227,7 +227,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   around houses, village scans and detection anchors (so `RAVEN_DETECTION_Y` and the houses still fit), soft-capped at
   local ~34 under the measured flight path (drone 1 at map y 2.5, opening camera 2.13: `?probe=terrain`,
   `scene/TerrainProbe.tsx`). Tiles swap slice per strip like the tree variants. `materials/MountainMaterial.ts`
-  extends `TerrainMaterial` (fog, panorama, scan wipe, drone shadow unchanged): the vertex shader scales the
+  extends `TerrainMaterial` (fog, panorama, scan wipe unchanged; the drone shadow on terrain and clouds was removed 2026-11-03, user): the vertex shader scales the
   mountain part up away from the corridor (|x| > 13, far ahead) for horizon peaks; the fragment reads the baked map as
   land use and recolours it as grey-brown high country (turf, moss, heath, lichen; forest only below a low treeline;
   scree, strata rock, snow above a noisy snowline with streaks down steep faces and blue-grey shade), with procedural

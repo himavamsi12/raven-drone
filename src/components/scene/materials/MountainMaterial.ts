@@ -4,7 +4,7 @@ import { TerrainMaterial } from "./TerrainMaterial";
 
 /**
  * Raven mountain ground (`?terrain=mountain`, mountain-terrain.ts). Same shader as TerrainMaterial (fog, opening
- * panorama, diagonal-wipe scan grid, drone shadow, ground dim; every uniform the frame loop writes), with:
+ * panorama, diagonal-wipe scan grid, ground dim; every uniform the frame loop writes), with:
  *
  * - vertex: the relief's mountain part (`aData.z`) is scaled up away from the flight path (`liftAt`, map space), so
  *   peaks rise in the far side columns and ahead while the corridor under the drones keeps its measured budget.
@@ -111,29 +111,6 @@ varying vec4 vData;
 varying float vLift;
 
 float mLuma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-
-// Drone shadow, softer than droneShadowAt: on the sharp mountain ground (clarity pass) the map's low-res silhouette
-// (legs, rotor discs) showed as a blocky, striped ghost; three rings at up to 3x the penumbra make it a soft shadow.
-float mountainDroneShadow(vec3 worldPos) {
-    if (uDroneShadowStrength <= 0.0) return 0.0;
-    vec4 lp = uDroneShadowMatrix * vec4(worldPos, 1.0);
-    vec2 uv = lp.xy / lp.w * 0.5 + 0.5;
-    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-    float r = uDroneShadowSoft * 3.0;
-    float occ = 1.0 - texture2D(uDroneShadow, uv).r;
-    float wsum = 1.0;
-    for (int i = 0; i < 8; i++) {
-        float a = float(i) * 0.7853982;
-        vec2 o = vec2(cos(a), sin(a));
-        occ += (1.0 - texture2D(uDroneShadow, uv + o * r * 0.33).r) * 0.9;
-        occ += (1.0 - texture2D(uDroneShadow, uv + vec2(o.y, -o.x) * r * 0.66).r) * 0.7;
-        occ += (1.0 - texture2D(uDroneShadow, uv + o * r).r) * 0.45;
-        wsum += 2.05;
-    }
-    occ /= wsum;
-    vec2 e = smoothstep(0.0, 0.08, uv) * smoothstep(0.0, 0.08, 1.0 - uv);
-    return occ * e.x * e.y * uDroneShadowStrength;
-}
 
 vec4 triDetail(vec3 p, vec3 n, float f) {
     vec3 w = pow(abs(n), vec3(4.0));
@@ -270,16 +247,12 @@ export class MountainMaterial extends TerrainMaterial {
     this.vertexShader = VERTEX;
     const anchor = "vec3 inverseTransformDirection(";
     const base = "vec3 baseColor = textureColor.rgb;";
-    const shadow = "baseColor *= 1.0 - droneShadowAt(vWorldPosition);";
-    if (!this.fragmentShader.includes(anchor) || !this.fragmentShader.includes(base) || !this.fragmentShader.includes(shadow)) {
+    if (!this.fragmentShader.includes(anchor) || !this.fragmentShader.includes(base)) {
       throw new Error("MountainMaterial: TerrainMaterial shader changed, update the injection points");
     }
     this.fragmentShader = this.fragmentShader
       .replace(anchor, `${SURFACE}\n${anchor}`)
-      .replace(base, "vec3 baseColor = mountainSurface(textureColor.rgb);")
-      // The drone-shadow map stretches into streaks on steep faces (the mountain ground sits close under the drone):
-      // keep the shadow on gentle ground, fade it on steep slopes.
-      .replace(shadow, "baseColor *= 1.0 - mountainDroneShadow(vWorldPosition) * smoothstep(0.55, 0.85, normalize(vNormalW).y);");
+      .replace(base, "vec3 baseColor = mountainSurface(textureColor.rgb);");
     Object.assign(this.uniforms, {
       ...mountainDetailUniforms, // shared objects: filled once the worker's maps arrive
       uSunDir: { value: TERRAIN_SUN.clone() },

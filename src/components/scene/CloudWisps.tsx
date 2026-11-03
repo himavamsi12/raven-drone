@@ -5,7 +5,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RENDER_ORDER, terrainOffset } from "@/lib/constants";
 import { SCENE, scenes } from "@/lib/scenes";
-import { droneShadowTerrain, droneShadowUniforms, groundDimUniforms } from "./drone-shadow";
+import { groundDimUniforms } from "./ground-dim";
 
 /**
  * Low cloud wisps between the drone and the ground (Raven, user 2026-11-02): thin, broken, streaky stratus that
@@ -33,7 +33,6 @@ uniform float uStrength;
 uniform vec3 uFocus; // where the camera's view ray meets the layer
 uniform float uReach; // camera -> focus distance
 varying vec3 vWorld;
-${droneShadowTerrain}
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -59,9 +58,6 @@ void main() {
   // reads as a sheet running to the horizon.
   float fade = 1.0 - smoothstep(0.7 * uReach, 1.4 * uReach, length(vWorld.xz - uFocus.xz));
   vec3 col = mix(vec3(0.78, 0.83, 0.89), vec3(0.97, 0.98, 0.99), smoothstep(0.45, 0.8, d));
-  // The drones' shadow falls on the cloud too (same light-space map as the terrain, drone-shadow.ts). The layer is
-  // translucent, so the shadow also darkens what shows through; a cloud lit from above stays a little brighter.
-  col *= 1.0 - 0.85 * droneShadowAt(vWorld);
   gl_FragColor = vec4(col, cover * fade * uStrength * 0.68);
 }`;
 
@@ -79,7 +75,6 @@ export function CloudWisps() {
           uStrength: { value: 0 },
           uFocus: { value: new THREE.Vector3() },
           uReach: { value: 10 },
-          ...droneShadowUniforms, // shared instances with the terrain
         },
         vertexShader,
         fragmentShader,
