@@ -26,6 +26,8 @@ const _inverse = new THREE.Matrix4();
 const _local = new THREE.Matrix4();
 
 const time = { value: 0 };
+/** Raven payload stage (Drone.tsx): 0 = blur discs, 1 = vector form (outlined disc + faint blade images). */
+export const rotorBlurVector = { value: 0 };
 let geometry: THREE.CircleGeometry | null = null;
 
 const vertexShader = /* glsl */ `
@@ -49,6 +51,7 @@ uniform float uPhase;
 uniform float uSpeed; // per-rotor multiplier on the sweep speed
 uniform vec3 uSun;        // towards the sun, world space
 uniform float uShade;     // 1 clear sun, ~0.7 under cloud
+uniform float uVector;    // payload stage: vector form
 varying vec2 vDisc;
 varying vec3 vWorld;
 varying vec3 vAxis;
@@ -98,6 +101,13 @@ void main() {
   float alpha = clamp(smear + tip + glint * 0.6, 0.0, 1.0);
   vec3 lit = (col * (smear + tip) + sun * glint) / max(alpha, 1e-4);
   gl_FragColor = vec4(min(lit, vec3(4.0)), alpha);
+  // Vector form: a drawn prop disc (outer ring, hub ring, faint fill and blade images), no sun flash.
+  if (uVector > 0.0) {
+    float ring = band(0.94, 0.965, r) * (1.0 - band(0.985, 1.0, r));
+    float hub = band(0.13, 0.15, r) * (1.0 - band(0.17, 0.19, r));
+    float vA = ring * 0.85 + hub * 0.5 + span * (0.05 + 0.22 * presence);
+    gl_FragColor = mix(gl_FragColor, vec4(vec3(0.85, 0.87, 0.9), clamp(vA, 0.0, 1.0)), smoothstep(0.0, 1.0, uVector));
+  }
 }`;
 
 export type RotorBlur = { blades: THREE.Object3D[]; discs: THREE.Mesh[]; materials: THREE.ShaderMaterial[] };
@@ -134,6 +144,7 @@ export function attachRotorBlur(root: THREE.Object3D, rotors: RavenRotor[]): Rot
         uTime: time,
         uSun: { value: sunlight.direction },
         uShade: { value: 1 },
+        uVector: rotorBlurVector,
         uDirection: { value: direction },
         // Random per rotor and per drone instance (user, 2026-11-02: the three drones flashed in step): own phase and
         // a sweep speed within +-15%, so no two rotors or drones line up for long.

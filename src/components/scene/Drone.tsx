@@ -4,12 +4,13 @@ import { useFrame } from "@react-three/fiber";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
-import { RENDER_ORDER } from "@/lib/constants";
+import { DRONE_LAYER, RENDER_ORDER } from "@/lib/constants";
+import { payloadLook } from "@/lib/payload";
 import { damp } from "@/lib/math";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useGLB } from "./types";
 import { collectRavenRotors, advanceRavenRotors } from "./raven-rotors";
-import { attachRotorBlur, setRotorBlur, updateRotorBlur } from "./rotor-blur";
+import { attachRotorBlur, rotorBlurVector, setRotorBlur, updateRotorBlur } from "./rotor-blur";
 import { plateLight } from "./plate-light";
 import { HERO_LIGHT, heroLight } from "./hero-light";
 import { sunlight } from "./sunlight";
@@ -47,18 +48,135 @@ const DRONE_ANISOTROPY = 8;
 /** Model size across its widest axis, in tracker units. */
 const SPAN = 200;
 
+/**
+ * Raven payload stage (lib/payload.ts, user 2026-11-03: "change the drone into vectorise", after the reference's flock
+ * drones): flat light-grey facets with white outlines on the black clay view. It replaces the lit colour in the drone's
+ * own materials (no second model), sweeping top -> bottom with a thin scan line, so the same airframe changes form.
+ * The medical box (`MED_Box*` materials) turns the yellow token when the payload is highlighted.
+ */
+const PAYLOAD_MATERIALS = /^MED_Box/;
+const VECTOR_LOOK = {
+  light: new THREE.Color("#e6e8eb"),
+  dark: new THREE.Color("#4a4f55"),
+  payload: new THREE.Color("#ffcb47"), // yellow token
+  line: new THREE.Color("#ffffff"),
+  scan: new THREE.Color("#bff4ff"),
+};
+/** Outline crease angle (deg): silhouette-defining edges only, not the tessellation of round parts. */
+const EDGE_ANGLE = 32;
+/** Outlines per source geometry (clones share geometry, so the three drones share these). */
+const edgeCache = new WeakMap<THREE.BufferGeometry, THREE.EdgesGeometry>();
+
+type VectorUniforms = {
+  uVector: { value: number };
+  uHighlight: { value: number };
+  uVecMinY: { value: number };
+  uVecSpanY: { value: number };
+};
+
+const VECTOR_COMMON = /* glsl */ `
+uniform float uVector;
+uniform float uHighlight;
+uniform float uVecMinY;
+uniform float uVecSpanY;
+uniform float uIsPayload;
+uniform vec3 uVecLight;
+uniform vec3 uVecDark;
+uniform vec3 uVecPayload;
+uniform vec3 uVecScan;
+varying float vVecY;
+// 1 above the sweep front (vector form), 0 below; the front runs from the top of the airframe to the bottom.
+float vecFront() { return mix(1.08, -0.08, smoothstep(0.0, 1.0, uVector)); }
+float vecMask(float h) { float f = vecFront(); return smoothstep(f - 0.035, f + 0.035, h); }
+float vecScan(float h) { return exp(-pow((h - vecFront()) / 0.012, 2.0)) * step(0.001, uVector) * (1.0 - step(0.999, uVector)); }
+`;
+
+/** Patches a cloned drone material with the vector form (per-instance uniforms, per-material payload flag). */
+function vectorise(material: THREE.MeshStandardMaterial, u: VectorUniforms) {
+  const isPayload = PAYLOAD_MATERIALS.test(material.name) ? 1 : 0;
+  // Faces sit a hair behind their outlines (no z-fighting with the edge lines); invisible otherwise.
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = 1;
+  material.polygonOffsetUnits = 1;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, u, {
+      uIsPayload: { value: isPayload },
+      uVecLight: { value: VECTOR_LOOK.light },
+      uVecDark: { value: VECTOR_LOOK.dark },
+      uVecPayload: { value: VECTOR_LOOK.payload },
+      uVecScan: { value: VECTOR_LOOK.scan },
+    });
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vVecY;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvVecY = (modelMatrix * vec4(transformed, 1.0)).y;");
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${VECTOR_COMMON}`).replace(
+      "#include <tonemapping_fragment>",
+      /* glsl */ `
+if (uVector > 0.0) {
+  // Facet normal from the surface itself: flat low-poly shading whatever the mesh's smooth normals.
+  vec3 fN = normalize(cross(dFdx(-vViewPosition), dFdy(-vViewPosition)));
+  if (dot(fN, vViewPosition) < 0.0) fN = -fN;
+  float lam = clamp(dot(fN, normalize(vec3(-0.35, 0.75, 0.55))), 0.0, 1.0);
+  float rim = pow(1.0 - clamp(dot(fN, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+  vec3 vcol = mix(uVecDark, uVecLight, lam) + uVecLight * rim * 0.12;
+  vcol = mix(vcol, uVecPayload * (0.5 + 0.65 * lam) + uVecPayload * rim * 0.3, uIsPayload * uHighlight);
+  float h = clamp((vVecY - uVecMinY) / max(uVecSpanY, 1e-4), 0.0, 1.0);
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, vcol, vecMask(h)) + uVecScan * vecScan(h) * 1.4;
+}
+#include <tonemapping_fragment>`,
+    );
+  };
+  material.customProgramCacheKey = () => "raven-vector";
+}
+
+/** Outline material for one instance (white; yellow on the payload box when highlighted). */
+function edgeMaterial(u: VectorUniforms, payload: boolean) {
+  return new THREE.ShaderMaterial({
+    name: payload ? "RavenVectorEdgePayload" : "RavenVectorEdge",
+    uniforms: {
+      ...u,
+      uIsPayload: { value: payload ? 1 : 0 },
+      uVecLight: { value: VECTOR_LOOK.line },
+      uVecDark: { value: VECTOR_LOOK.dark },
+      uVecPayload: { value: VECTOR_LOOK.payload },
+      uVecScan: { value: VECTOR_LOOK.scan },
+    },
+    vertexShader: /* glsl */ `
+varying float vVecY;
+void main() {
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vVecY = w.y;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`,
+    fragmentShader: /* glsl */ `
+${VECTOR_COMMON}
+void main() {
+  float h = clamp((vVecY - uVecMinY) / max(uVecSpanY, 1e-4), 0.0, 1.0);
+  float a = vecMask(h) * 0.9;
+  if (a <= 0.002) discard;
+  vec3 c = mix(uVecLight, uVecPayload * 1.15, uIsPayload * uHighlight);
+  gl_FragColor = vec4(c, a);
+}`,
+    transparent: true,
+    depthWrite: false,
+  });
+}
+
 export function RavenModel({ envMap }: { envMap?: THREE.Texture }) {
   const { scene } = useGLB(ASSETS.raven);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const spin = !reducedMotion;
   const glint = useRef(0);
-  const { object, rotors, blur, ownedMaterials, live, envRotation, scale } = useMemo(() => {
+  const { object, rotors, blur, ownedMaterials, live, envRotation, vector, edges, yRange, scale } = useMemo(() => {
     const object = scene.clone(true);
     const rotors = collectRavenRotors(object);
     const ownedMaterials: THREE.Material[] = [];
     const live: LiveMaterial[] = [];
     // One rotation shared by this instance's materials; uniforms read it every render.
     const envRotation = new THREE.Euler();
+    const vector: VectorUniforms = { uVector: { value: 0 }, uHighlight: { value: 0 }, uVecMinY: { value: 0 }, uVecSpanY: { value: 1 } };
+    const edgeMats = [edgeMaterial(vector, false), edgeMaterial(vector, true)];
+    const edges: THREE.LineSegments[] = [];
     object.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
       child.renderOrder = RENDER_ORDER.HERO_DRONE;
@@ -83,22 +201,51 @@ export function RavenModel({ envMap }: { envMap?: THREE.Texture }) {
           const coat = material instanceof THREE.MeshPhysicalMaterial ? material.clearcoat : 0;
           live.push({ material, coat, glints: GLINT_MATERIALS.test(material.name) });
         }
+        if (material instanceof THREE.MeshStandardMaterial) vectorise(material, vector);
         ownedMaterials.push(material);
         return material;
       };
       child.material = Array.isArray(child.material) ? child.material.map(copy) : copy(child.material);
+      // Vector outlines: only on the drone layer (the bodies are drawn there, PostFX), shown during the payload stage.
+      let edge = edgeCache.get(child.geometry);
+      if (!edge) edgeCache.set(child.geometry, (edge = new THREE.EdgesGeometry(child.geometry, EDGE_ANGLE)));
+      const names = (Array.isArray(child.material) ? child.material : [child.material]).map((m) => m.name);
+      const lines = new THREE.LineSegments(edge, edgeMats[names.some((n) => PAYLOAD_MATERIALS.test(n)) ? 1 : 0]);
+      lines.layers.set(DRONE_LAYER);
+      lines.renderOrder = RENDER_ORDER.HERO_DRONE + 1;
+      lines.visible = false;
+      lines.name = `${child.name}_vector`;
+      lines.userData.parent = child;
+      edges.push(lines);
     });
+    // Added after the traverse (adding children while traversing would visit them).
+    for (const lines of edges) lines.userData.parent?.add(lines);
     const bounds = new THREE.Box3().setFromObject(object);
     const size = bounds.getSize(new THREE.Vector3());
+    ownedMaterials.push(...edgeMats);
     // After the material pass: blur discs keep their own shader and cast no shadow.
     const blur = attachRotorBlur(object, rotors);
     ownedMaterials.push(...blur.materials);
-    return { object, rotors, blur, ownedMaterials, live, envRotation, scale: SPAN / Math.max(size.x, size.z) };
+    const yRange = [bounds.min.y, bounds.max.y] as const; // model units (glTF Y up; the 180 deg yaw keeps Y)
+    return { object, rotors, blur, ownedMaterials, live, envRotation, vector, edges, yRange, scale: SPAN / Math.max(size.x, size.z) };
   }, [scene, envMap]);
   useEffect(() => () => ownedMaterials.forEach((material) => material.dispose()), [ownedMaterials]);
   // Still rotors (reduced motion) show the real blades instead of the blur.
   useEffect(() => setRotorBlur(blur, spin), [blur, spin]);
   useFrame(({ camera, clock }, dt) => {
+    // Payload stage: vector sweep over this instance's world height (airframe top -> bottom), payload highlight.
+    const look = payloadLook();
+    vector.uVector.value = look.vector;
+    vector.uHighlight.value = look.highlight;
+    rotorBlurVector.value = look.vector;
+    const showEdges = look.vector > 0;
+    if (showEdges) {
+      object.getWorldPosition(_p);
+      const s = object.getWorldScale(_n).y;
+      vector.uVecMinY.value = _p.y + yRange[0] * s;
+      vector.uVecSpanY.value = (yRange[1] - yRange[0]) * s;
+    }
+    if (edges[0] && edges[0].visible !== showEdges) for (const e of edges) e.visible = showEdges;
     if (spin) {
       advanceRavenRotors(rotors, dt);
       updateRotorBlur(blur, clock.getElapsedTime());

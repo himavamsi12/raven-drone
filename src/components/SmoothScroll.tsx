@@ -8,6 +8,7 @@ import { linear } from "@/lib/math";
 import { useLoading } from "@/lib/loading";
 import { isScrollLocked, LOCK_EVENT } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { PAYLOAD_MS, payloadProgress, payloadRange, usePayload } from "@/lib/payload";
 
 /** Returns a callback that scrolls to the end of `id` over 3s (shipped `w`). */
 export function useScrollToScene(id: SceneId) {
@@ -61,6 +62,7 @@ function useSceneProgressDriver() {
       const data = sceneDataAt(toStory(page), ranges.current, vh);
       const { updateSceneData } = useScenes.getState();
       for (const r of ranges.current) updateSceneData(r.id, data[r.id]);
+      usePayload.getState().setP(payloadProgress(page)); // hero copy / payload callout thresholds
     };
     const current = () => ({ scroll: lenis.actualScroll || lenis.scroll || 0 });
     measure();
@@ -199,7 +201,17 @@ function SceneController() {
           // Raven: the opening move plays over OPENING_MS whatever the viewport height; the story keeps 2px/ms.
           // The clay landscape climb (Care teams → village, storyMap.C0..C1) moves at half speed so the climb reads.
           const inClimb = storyMap.C1 > storyMap.C0 && Math.min(scroll, t) >= storyMap.C0 - 1 && Math.max(scroll, t) <= storyMap.C1 + 1;
-          const rate = scroll < storyMap.P + 1 && t <= storyMap.P + 1 ? Math.max(storyMap.P / OPENING_MS, 0.2) : inClimb ? 1 : 2;
+          // Raven payload stage (lib/payload.ts): one gesture plays it over PAYLOAD_MS whatever the viewport height.
+          const { Q, T } = payloadRange;
+          const inPayload = T > 0 && Math.min(scroll, t) >= Q - 1 && Math.max(scroll, t) <= Q + T + 1;
+          const rate =
+            scroll < storyMap.P + 1 && t <= storyMap.P + 1
+              ? Math.max(storyMap.P / OPENING_MS, 0.2)
+              : inPayload
+                ? Math.max(T / PAYLOAD_MS, 0.2)
+                : inClimb
+                  ? 1
+                  : 2;
           const stepPx = rate * sign * dt;
           const next = sign > 0 ? Math.min(scroll + stepPx, t) : Math.max(scroll + stepPx, t);
           lenis.scrollTo(next, { immediate: true });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
+import { payloadLook } from "@/lib/payload";
 import { memo, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RENDER_ORDER, TERRAIN_SCALE } from "@/lib/constants";
@@ -132,10 +133,11 @@ export const Clouds = memo(function Clouds() {
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     const ign = scenes()[SCENE.IGNITION_VERIFIED].progress;
+    const sky = payloadLook().sky;
     meshes.current.forEach((m, i) => {
       if (!m) return;
       materials[i].uniforms.uTime.value = 4.5 * t + i - LAYERS.length / 2;
-      materials[i].uniforms.uFade.value = 1 - ign;
+      materials[i].uniforms.uFade.value = (1 - ign) * (1 - sky); // Raven payload stage: sky to black
     });
   });
   return (

@@ -25,18 +25,19 @@ const CHAPTERS: [SceneId, string][] = [
 ];
 
 /** In-page destinations (the shipped menu linked to other products). `null` = top of the story. */
+// Raven payload page (user, 2026-11-03): the page is hero -> payload only, so the links go to those two frames.
 const MENU_LINKS: { label: string; target: string | null }[] = [
   { label: "The delivery story", target: null },
-  { label: "Care teams and network", target: "#care-teams" },
-  { label: "About Raven", target: "#our-team" },
+  { label: "Payload", target: "#payload" },
 ];
 
 /** Homepage bar links (asset/html/raven_homepage.html `.links`): in-page destinations. */
 const BAR_LINKS: { label: string; target: string | null }[] = [
   { label: "Story", target: null },
-  { label: "Network", target: "#care-teams" },
-  { label: "About", target: "#our-team" },
+  { label: "Payload", target: "#payload" },
 ];
+/** Chapter ticks (Airframe ... Care teams) are off: those chapters are no longer on the page. */
+const SHOW_CHAPTER_TICKS = false;
 
 const FADE_MS = 150;
 const SCROLL_S = 0.75;
@@ -387,7 +388,7 @@ export function Navbar() {
           ))}
         </ul>
       </div>
-      <ChapterNav />
+      {SHOW_CHAPTER_TICKS && <ChapterNav />}
       <ContactButton
         label="Contact"
         trigger={

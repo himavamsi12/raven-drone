@@ -4,7 +4,7 @@ Context for coding agents (Codex, Claude Code, others). Read this before editing
 
 ## Current direction — Raven (user update)
 
-The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. Hero/swarm use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The light-gray coaxial quad sources (`glb/raven-quad/`) are kept because `build_silhouettes.py` there builds the flock/ops silhouettes (still the quad); the loader and boot SVG show the hexa since 2026-10-31. The original `raven_drone.glb`, the earlier dark hexacopter (`glb/raven-refined/`) and the Blender story scene (`glb/raven-story/`) were removed in the 2026-10-31 cleanup (recoverable from git history). Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. Every jet silhouette is now a Raven drone (loader, sync flock, Raven Ops drones). The footer (CTA, legal links, landing drone, wordmark) was removed on 2026-11-03 (user): the page ends with the About section.
+The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. Hero/swarm use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The light-gray coaxial quad sources (`glb/raven-quad/`) are kept because `build_silhouettes.py` there builds the flock/ops silhouettes (still the quad); the loader and boot SVG show the hexa since 2026-10-31. The original `raven_drone.glb`, the earlier dark hexacopter (`glb/raven-refined/`) and the Blender story scene (`glb/raven-story/`) were removed in the 2026-10-31 cleanup (recoverable from git history). Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. The one exception is the user-supplied payload figure "15–25 kg" (2026-11-03), shown only in the payload callout (`lib/payload.ts` `PAYLOAD_COPY`). Every jet silhouette is now a Raven drone (loader, sync flock, Raven Ops drones). The footer (CTA, legal links, landing drone, wordmark) was removed on 2026-11-03 (user): the page ends with the About section.
 
 ## What this project is
 
@@ -101,6 +101,20 @@ scripts/asset-manifest.mjs  manifest generator
 
 ### Scroll / progress model (do not break)
 
+- **Payload page (user, 2026-11-03: "only these three things we are going to show")**: the page is now opening ->
+  hero -> payload stage, nothing after (`story-map.ts` `PAYLOAD_ONLY`; spacers `#opening` 300dvh, `#payload-band`
+  `calc(200dvh + 1px)` with the `#payload` anchor at its end, one closing screen). The story is held on the hero frame
+  (`toStory` <= 1), so Airframe ... Care teams, the diagonal wipe and the map capture are never reached (code kept);
+  nav chapter ticks are off (`SHOW_CHAPTER_TICKS`). One gesture plays the payload stage over `PAYLOAD_MS` (4.2 s),
+  everything a pure function of `payloadProgress` (`lib/payload.ts` `PAYLOAD_TIMELINE`): hero copy out at .02, sky and
+  clouds to black, the terrain shader's clay sweep far -> near (`TerrainMaterial` `payloadClay`, shared
+  `payloadClayUniforms`; clay colours, dot grid and black from `clay-map.ts` CLAY), terrain travel slowed to 0.4x and
+  the lens travel streak off, the camera eased toward the medical box (`scene/payload-camera.ts`, from the live hero
+  pose), the drone's own materials switched to the vector form top -> bottom (`Drone.tsx` `vectorise`, outline
+  `EdgesGeometry` on `DRONE_LAYER`, rotor discs drawn as rings), the box turned yellow, then the DOM callout
+  (`overlays/PayloadCallout.tsx`, box screen point from DroneRig `payloadScreen`). The bullets below describe the
+  shipped story bands, still in the code but off the page.
+
 - Opening (user, 2026-11-01; replaced the pad takeoff film): page [0, P] (`#opening`, `OPENING_VH` 300) flies the
   live camera from a low wide shot under the hovering drone (procedural sky dome + ridge rings + Blender land layer,
   `scene/OpeningSky.tsx`, source `glb/raven-sky/`; terrain fog fades into the land layer via `uPanoMix`) into the
@@ -180,6 +194,8 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Verification tips
 
+- Payload page at vh=900 (1440 wide): opening low shot 0, hero frame 2701, payload stage 2701 -> 4501 (callout from
+  ~4321), page height 5401; 390×844: hero 2533, payload frame 4221. The positions below are for the old story bands.
 - Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
   delta end 7201, swarm 11701, mission 16201, (Journey, compressed: 16201 → 17551), Route 22051 (= band 2 start, wipe
   22051 → 24301), Care teams frame 26551, Hill clinic stop 27676, Ridge village stop (story end) 28801, stage gone
@@ -199,6 +215,10 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Hexa build commands: `glb/new-drone/README.md`. The quad's Blender build/QA/export commands (silhouette source): `glb/raven-quad/README.md`.
 
 ## Open work (see RECONSTRUCTION.md for full list)
+
+- Payload page (2026-11-03): not checked on Safari/iOS or low-end GPUs; the callout's leader line crosses a front
+  rotor at 1440×900; the vector form is a shader switch on the real hexa (no separate low-poly model). Old story code
+  (bands, wipe, clay landscape, chapters) is unreachable but not removed.
 
 - Homepage layout (2026-10-30): hero composition and bar follow `asset/html/raven_homepage.html` (local only); its
   map section was replaced by story band 2 (user). The reference's specs (prop size, km/h, AGL, kg, ETA, altitudes)

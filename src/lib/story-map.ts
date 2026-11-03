@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { easeInOutCubic } from "./math";
+import { PAYLOAD_VH, payloadRange } from "./payload";
 import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange } from "./scenes";
 
 /**
@@ -38,8 +39,21 @@ export const BAND_2_VH = 850; // phalanx 500 + Review 500 × CLIMB_SHARE + 100 t
  * page.tsx.
  */
 export const OPENING_VH = 300;
+/** Payload stage spacer height in vh (page.tsx `#payload-band`). */
+const PAYLOAD_VH_PAGE = PAYLOAD_VH;
 
 export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F1: 0, C0: 0, C1: 0, preroll: false };
+
+/**
+ * Payload page (user, 2026-11-03: "only these three things we are going to show"): opening -> hero -> payload stage
+ * (lib/payload.ts), and the page ends there. The shipped story (Airframe ... Care teams) is no longer on the page:
+ * the story is held on the hero frame (story 1 = end of the 1px intro), so every scene component sits in its hero
+ * state, and the diagonal wipe / map capture are off (W = 0). The band functions below keep their names so the
+ * callers stay unchanged.
+ *   opening:  page [0, P]          story 0, camera flies into the hero frame (scene/opening.ts)
+ *   payload:  page [P + 1, P + 1 + T]  story 1 (hero), payload progress 0 -> 1
+ */
+export const PAYLOAD_ONLY = true;
 
 /**
  * Raven clay landscape (scene/ClayFlight.tsx, user 2026-11-02: the climb "should be interactive with the scroll",
@@ -75,7 +89,7 @@ export function measureStoryMap() {
   const ranges = computeSceneRanges(vh);
   const end = (id: SceneId) => ranges[SCENE_ORDER.indexOf(id)].end;
   storyMap.vh = vh;
-  const band1 = document.getElementById("story-band-1");
+  const band1 = document.getElementById(PAYLOAD_ONLY ? "payload-band" : "story-band-1");
   storyMap.P = band1 ? band1.getBoundingClientRect().top + window.scrollY : (OPENING_VH / 100) * vh;
   storyMap.E1 = end(BAND_1_END);
   storyMap.F1 = end(SCENE.FLOCK_SCENE);
@@ -86,11 +100,18 @@ export function measureStoryMap() {
   storyMap.W = 0.5 * ranges[SCENE_ORDER.indexOf(SCENE.PHALANX_AI)].height; // shipped wipe = phalanx-ai 0 → .5
   const band2 = document.getElementById("story-band-2");
   storyMap.X = band2 ? band2.getBoundingClientRect().top + window.scrollY : storyMap.P + band1Length();
+  if (PAYLOAD_ONLY) {
+    storyMap.W = 0; // no diagonal wipe, no off-screen map capture (PostFX preroll needs W > 0)
+    storyMap.X = storyMap.L2 = Number.POSITIVE_INFINITY;
+    payloadRange.Q = storyMap.P + 1; // the opening range ends at the end of the 1px intro (pageBands)
+    payloadRange.T = (PAYLOAD_VH_PAGE / 100) * vh;
+  }
   return ranges;
 }
 
 /** Page scroll → story scroll. Route holds through the wipe [X, X + W); then the story continues at phalanx .5. */
 export function toStory(page: number) {
+  if (PAYLOAD_ONLY) return Math.min(Math.max(page - storyMap.P, 0), 1); // held on the hero frame
   const { P, E1, S2, X, W } = storyMap;
   if (page <= P) return 0;
   if (page <= P + band1Length()) return band1Story(page - P);
@@ -103,6 +124,7 @@ export const mapStory = () => storyMap.S2 + storyMap.W;
 
 /** Story scroll → page scroll (skipped scenes clamp to the nearest band edge). */
 export function toPage(story: number) {
+  if (PAYLOAD_ONLY) return storyMap.P + Math.min(Math.max(story, 0), 1); // every chapter target is the hero frame
   const { P, E1, S2, X } = storyMap;
   if (story <= E1) return P + band1Page(story);
   if (story < S2) return story - E1 < S2 - story ? P + band1Length() : X;
@@ -115,6 +137,7 @@ export function toPage(story: number) {
  * screen.
  */
 export function stageTop(page: number): number | null {
+  if (PAYLOAD_ONLY) return 0; // the stage covers the whole page
   const { vh, X, L2 } = storyMap;
   if (page <= X + L2) return 0;
   if (page < X + L2 + vh) return -(page - X - L2);
@@ -128,6 +151,12 @@ export function pageBands(ranges: SceneRange[]) {
   // Band 1 opens with the opening move (page 0 → end of the 1px intro), so one gesture plays the whole move.
   const intro = map(ranges[SCENE_ORDER.indexOf(SCENE.INTRO_SCENE)]);
   const opening: SceneRange = { ...intro, start: 0, height: intro.end, end: intro.end };
+  if (PAYLOAD_ONLY) {
+    // One gesture plays the opening, the next one the whole payload stage (and back).
+    const { Q, T } = payloadRange;
+    storyMap.C0 = storyMap.C1 = 0;
+    return [[opening, { ...intro, start: Q, height: T, end: Q + T }]];
+  }
   // Journey is not a stop: Route's range starts where Journey starts, so one gesture from Prepare plays both.
   const band1 = pick(BAND_1).filter((r) => r.id !== SCENE.INTRO_SCENE && r.id !== SCENE.FLOCK_SCENE);
   const route = band1.find((r) => r.id === SCENE.REAL_TIME_DETECTION);

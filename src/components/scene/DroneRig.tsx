@@ -13,10 +13,12 @@ import { damp, lerp, remap } from "@/lib/math";
 import { SCENE, scenes, useMouse } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
 import { openingNow } from "@/lib/story-map";
+import { payloadLook, payloadScreen } from "@/lib/payload";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CAMERA_BINDINGS, ClipSeeker, DRONE1_BINDINGS, DRONE2_BINDINGS, DRONE3_BINDINGS } from "./ClipSeeker";
 import { Drone } from "./Drone";
 import { applyOpening } from "./opening";
+import { applyPayloadCamera } from "./payload-camera";
 import { SpecsCallouts } from "./overlays/SpecsCallouts";
 import { applyCameraTilt, cameraTilt } from "./camera-tilt";
 import { applyLandscapeCamera } from "./clay-map";
@@ -97,6 +99,29 @@ const _offA = new THREE.Vector3();
 const _offB = new THREE.Vector3();
 const _swing = new THREE.Quaternion();
 const _partial = new THREE.Quaternion();
+/** Payload box: its centre in Drone1Group space (measured once per model), the stable anchor and its screen point. */
+const PAYLOAD_BOX = /^MED_Box/;
+const _boxW = new THREE.Box3();
+const _boxPart = new THREE.Box3();
+const _inv = new THREE.Matrix4();
+const _anchor = new THREE.Vector3();
+const _onScreen = new THREE.Vector3();
+
+/** Centre of the medical box meshes in `drone`'s local space, or null before the model has mounted. */
+function measurePayloadBox(drone: THREE.Object3D) {
+  drone.updateWorldMatrix(true, true);
+  _boxW.makeEmpty();
+  drone.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (!mats.some((m) => PAYLOAD_BOX.test(m.name))) return;
+    mesh.geometry.boundingBox ?? mesh.geometry.computeBoundingBox();
+    _boxW.union(_boxPart.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld));
+  });
+  if (_boxW.isEmpty()) return null;
+  return _boxW.getCenter(new THREE.Vector3()).applyMatrix4(_inv.copy(drone.matrixWorld).invert());
+}
 
 const pose = (): Pose => ({ position: new THREE.Vector3(), rotation: new THREE.Vector3() });
 
@@ -189,6 +214,8 @@ export function DroneRig() {
   const tmpB = useRef(new THREE.Vector3());
   const first = useRef(true);
   const poses = useRef([pose(), pose(), pose()]);
+  const payloadBox = useRef<THREE.Vector3 | null>(null);
+  const payloadBoxOwner = useRef<THREE.Object3D | null>(null);
 
   // Clip seeking runs before the procedural pass, mirroring the shipped order 1..15.
   useFrame((_, dt) => {
@@ -233,6 +260,21 @@ export function DroneRig() {
         cameraTilt.weight = 1 - e; // drone-focus effects (blur, size, shadow) follow the same curve
       }
     }
+    // Raven payload stage (lib/payload.ts): ease in toward the medical box from the hero pose. The anchor is the box
+    // in the clip drone's frame (without the idle hover), so the camera glides instead of bobbing with the drone.
+    const look = payloadLook();
+    if (drone1.current && mover1.current && cameraMover.current && camera.current) {
+      const model = drone1.current.children[0]?.children[0] ?? null; // Drone > RavenModel primitive (remount check)
+      if (!payloadBox.current || payloadBoxOwner.current !== model) {
+        payloadBox.current = measurePayloadBox(drone1.current);
+        payloadBoxOwner.current = payloadBox.current ? model : null;
+      }
+      if (payloadBox.current && look.zoom > 0) {
+        mover1.current.updateWorldMatrix(true, false);
+        _anchor.copy(payloadBox.current).applyMatrix4(mover1.current.matrixWorld);
+        applyPayloadCamera(cameraMover.current, _anchor, look.zoom, camera.current.fov, camera.current.aspect);
+      }
+    }
     // Raven clay landscape: Care teams opens on a low view across the lifted relief, handing back to the shipped
     // track over early Review (clay-map.ts LANDSCAPE).
     if (cameraMover.current && camera.current) {
@@ -242,6 +284,18 @@ export function DroneRig() {
     // flank drones' clips still run (nothing else moves), but they are never shown.
     if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = false;
     if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = false;
+    // Payload callout (overlays/PayloadCallout.tsx): the real box (hover included) on screen, CSS px.
+    payloadScreen.ok = false;
+    if (look.p > 0 && payloadBox.current && drone1.current && camera.current) {
+      drone1.current.updateWorldMatrix(true, false);
+      camera.current.updateWorldMatrix(true, false);
+      _onScreen.copy(payloadBox.current).applyMatrix4(drone1.current.matrixWorld).project(camera.current);
+      if (_onScreen.z < 1) {
+        payloadScreen.x = (_onScreen.x * 0.5 + 0.5) * size.width;
+        payloadScreen.y = (0.5 - _onScreen.y * 0.5) * size.height;
+        payloadScreen.ok = true;
+      }
+    }
   }, 1);
 
   useFrame((state, dt) => {
@@ -278,7 +332,8 @@ export function DroneRig() {
     settle.current = damp(settle.current, delta > 0.01 && swarm === 0 ? 0 : 1, 1, dt);
 
     const { left, right } = getKeys() as { left: boolean; right: boolean };
-    const heroIdle = delta < 0.001 && !isScrollLocked();
+    // Arrow-key steering only on the hero frame itself (not during the payload stage).
+    const heroIdle = delta < 0.001 && !isScrollLocked() && payloadLook().p <= 0;
     if (heroIdle) {
       const force = 100 * (Number(left) - Number(right)) - 1.25 * steer.current;
       steerVel.current = damp(steerVel.current, force, 1.5, dt);

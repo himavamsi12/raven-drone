@@ -44,3 +44,6 @@ export const RENDER_ORDER = {
 
 export const BG_COLOR = new THREE.Color().setHex(0x000000);
 export const SKY_COLOR = new THREE.Color().setHex(0xc9e0f7);
+
+/** Layer the hero drones' bodies render on in their own antialiased pass (PostFX DroneCompositePass). */
+export const DRONE_LAYER = 6;

@@ -22,7 +22,8 @@ import { useLoading } from "@/lib/loading";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useRenderScale } from "@/lib/render-scale";
 import { MountainMaterial } from "./materials/MountainMaterial";
-import { TerrainMaterial } from "./materials/TerrainMaterial";
+import { payloadClayUniforms, TerrainMaterial } from "./materials/TerrainMaterial";
+import { PAYLOAD_TIMELINE, payloadLook } from "@/lib/payload";
 import { buildMountainSlices, mountainSlice, mountainTerrainEnabled, type MountainSlices } from "./mountain-terrain";
 import { getNoiseTexture } from "./textures";
 import { openingEase } from "./opening";
@@ -221,7 +222,11 @@ export function Terrain() {
   const [natural] = useState(() => new TerrainMaterial(getNoiseTexture()));
   const [urban] = useState(() => new TerrainMaterial(getNoiseTexture()));
   // Same fog/scan treatment as the ground so houses never sit crisp over hazy terrain.
-  const [village] = useState(() => new TerrainMaterial(getNoiseTexture()));
+  const [village] = useState(() => {
+    const m = new TerrainMaterial(getNoiseTexture());
+    m.uniforms.uPayloadHouse.value = 1; // payload stage: light clay houses
+    return m;
+  });
   // Raven tree-layout variants of the natural tile: one material per base map, same fog/scan as `natural`.
   const [naturalVariants] = useState(() => [natural, ...RAVEN_TILE_MAPS.map(() => new TerrainMaterial(getNoiseTexture()))]);
   // Mountain terrain: same base maps, MountainMaterial; used once the slices are built (old tiles until then).
@@ -333,10 +338,14 @@ export function Terrain() {
     const heroIdle = delta.progress < 0.001 && !isScrollLocked();
     boost.current += ((shift && heroIdle ? 6 : 1) - boost.current) * (shift ? 0.05 : 0.025);
 
+    // Raven payload stage: the ground turns to clay (far -> near) and slows to a calm drift.
+    const look = payloadLook();
+    payloadClayUniforms.uPayloadClay.value = look.clay;
     const speed =
       (0.25 + 0.2 * delta.progress + 0.2 * detection.progress) *
       (1 - remapEased(thermal.progress, 0, 0.75, 0, 1, easeInOutCubic)) *
-      boost.current;
+      boost.current *
+      (1 - (1 - PAYLOAD_TIMELINE.claySpeed) * look.clay);
 
     const inThermal = thermal.showRatio > 0;
     if (inThermal !== wasThermal.current) {

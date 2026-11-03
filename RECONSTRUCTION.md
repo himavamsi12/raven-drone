@@ -12,6 +12,40 @@ User direction: Raven is a medical delivery drone concept for remote mountain vi
 
 Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HUD details, fire/emergency simulations, mission card/demo imagery, reference legal/Notes content, and baked footer sequence/wordmarks still come from the source reconstruction. They need a separate medical-delivery art/content pass. The existing terrain has not been replaced with snow/tundra. This first pass is model integration and core copy, not a finished Raven site.
 
+## Payload page: hero -> clay terrain + vector drone + payload callout (user, 2026-11-03)
+
+- User direction: keep the hero (structure, look, copy); one or two scrolls in, the real terrain turns into the clay
+  model on black (reference: the clay landscape frame), aligned with the hero terrain; the camera zooms in a little
+  toward the drone, which turns into a vector form (reference recordings in `assets/videos/`, local: the far terrain
+  changes first; the reference's flock drones are flat light facets with outlines), and the payload is highlighted with
+  "we can carry up to 15 to 25 kg". Only these three things are on the page.
+- Scroll: opening (0 -> P) -> hero -> payload stage (one gesture, 4.2 s) -> end of page. `PAYLOAD_ONLY` in
+  `story-map.ts` holds the story on the hero frame; `lib/payload.ts` holds the timeline, copy and progress.
+- Terrain: same mountain tiles and houses, colour swept to clay from 46 to 0 world units from the camera (soft 4-unit
+  band, faint scan line on the front); clay = CLAY low/high by height, lit from the upper left, round dot grid on
+  gentle ground, fog to #0e0e0e; clear colour and cloud layers fade to black first; travel slows to 0.4x; no travel
+  motion blur on the clay. Houses take the light clay house tone.
+- Drone: the hexa's own materials (onBeforeCompile) switch to flat facet shading (light #e6e8eb / dark #4a4f55) with
+  white crease outlines (32 deg `EdgesGeometry`, shared per geometry, drone layer only) above a front that runs from
+  the top of the airframe to the bottom with a cyan scan line; rotor blur discs become drawn rings; `MED_Box*` turns
+  the yellow token. Camera: radius 0.86x of the hero distance, elevation 21 deg, +10 deg orbit, box at NDC (-0.26,
+  0.02) (portrait: centred, upper); the aim moves from the hero aim point to the box so the drone stays framed.
+- Callout: yellow ring on the box, drawn leader line to a label in the right-hand column ("Payload capacity",
+  "15–25 kg", "We can carry up to 15–25 kg of medical supplies."); portrait: straight down to a centred label.
+- Nav: bar/menu links Story + Payload; chapter ticks off. Hero CTA "Follow the delivery" plays the payload stage.
+- Checked (headless Chrome, dev server): 1440×900 at 2701 / 3071 / 3431 / 3791 / 4151 / 4501 and the sweep at
+  2971-3521; 390×844 at 2533 -> 4221 in six steps (continuous camera, drone framed); real wheel events 0 -> 2701 ->
+  4501 -> 2701 -> 0; typecheck and production build pass; only console error the missing favicon. Not checked:
+  Safari/iOS, fps on low-end GPUs, tablet widths, reduced motion.
+- Known: the leader line crosses the front-right rotor at 1440×900; the far ridges keep their real colour until the
+  front reaches them (by design, far -> near); the old story's code paths are unreachable but kept.
+
+## Prepare copy at the bottom of the frame (user, 2026-11-03)
+
+- `ChapterCopy.tsx` `Mission`: heading + body now sit bottom-left and "Explore the route" bottom-right on the same
+  baseline (hero composition); the shipped layout had them at the top. Copy, timing and motion unchanged. Checked
+  1440×900 at 16201 (headless Chrome); typecheck passes. Not checked: mobile/tablet widths.
+
 ## GPU performance pass, same output (user request, 2026-11-01)
 
 Measured in headless Chrome on an Apple M3 at 1440×900, DPR 2 (canvas 2160×1350), vsync off, interleaved A/B,

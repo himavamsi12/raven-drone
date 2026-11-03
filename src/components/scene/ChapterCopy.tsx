@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/Button";
 import { useLoading } from "@/lib/loading";
 import { SCENE, useScenes, type SceneId } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { useLenis } from "lenis/react";
+import { linear } from "@/lib/math";
+import { PAYLOAD_MS, PAYLOAD_TIMELINE, payloadRange, usePayload } from "@/lib/payload";
+import { PayloadCallout } from "./overlays/PayloadCallout";
 
 const ENTER = { opacity: 0, y: 8, color: "#FF2200" };
 const SETTLE = { opacity: 1, y: 0, color: "#FFFFFF" };
@@ -112,7 +116,9 @@ function SquareCta({ onClick, children }: { onClick?: () => void; children: Reac
 
 /** Hero in the homepage composition: headline bottom-left, supporting copy + CTA bottom-right on one baseline. */
 function Hero() {
-  const explore = useScrollToScene(SCENE.DELTA_DRONE);
+  // Raven payload page: the CTA plays the payload stage (same pace as the scroll snap).
+  const lenis = useLenis();
+  const explore = () => lenis?.scrollTo(payloadRange.Q + payloadRange.T, { duration: PAYLOAD_MS / 1000, easing: linear });
   return (
     <Frame innerClassName="!flex flex-col justify-end">
       <div className="flex flex-col items-start justify-between gap-5 px-1 sm:flex-row sm:items-end sm:gap-8 md:px-[clamp(0rem,1.1vw,1.375rem)]">
@@ -167,15 +173,18 @@ function Swarm() {
 function Mission() {
   const start = useScrollToScene(SCENE.REAL_TIME_DETECTION); // Journey removed: straight to Route
   return (
-    <Frame innerClassName="md:!block">
-      <div className="contents w-full flex-wrap justify-between gap-4 md:flex">
-        <Heading as="h2" variant="h2" className="text-balance">
-          Start with what the clinic needs.
-        </Heading>
+    // Raven (user, 2026-11-03): heading + body bottom-left, CTA bottom-right on one baseline (was top, shipped layout).
+    <Frame innerClassName="!flex flex-col justify-end">
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end md:gap-8">
         <div className="flex flex-col gap-4 md:gap-6 lg:max-w-204">
-          <Support>
+          <Heading as="h2" variant="h2" className="text-balance">
+            Start with what the clinic needs.
+          </Heading>
+          <Support className="max-w-133.5">
             In this illustrative journey, a care team prepares the supplies and reviews the destination before dispatch.
           </Support>
+        </div>
+        <div className="shrink-0">
           <Cta className="w-62.5" onClick={start}>
             Explore the route
           </Cta>
@@ -233,10 +242,14 @@ export function ChapterCopy() {
     ),
   );
   const hidden = useLoading((s) => s.loadingCanvasHidden);
-  const Active = index >= 0 ? CHAPTERS[index].component : null;
+  // Raven payload page (lib/payload.ts): the hero copy leaves as the stage starts; the payload callout comes in at its end.
+  const stage = usePayload((s) => (s.p >= PAYLOAD_TIMELINE.callout ? 2 : s.p > PAYLOAD_TIMELINE.heroExit ? 1 : 0));
+  const Active = stage === 2 ? PayloadCallout : stage === 1 ? null : index >= 0 ? CHAPTERS[index].component : null;
+  const key = stage === 2 ? "payload" : index;
   return (
-    <div className={clsx("z-navbar absolute inset-0 h-dvh w-full justify-center md:flex", Active ? "opacity-100" : "opacity-0")}>
-      <AnimatePresence mode="wait">{hidden && Active && <Active key={index} />}</AnimatePresence>
+    // Always shown (was opacity-0 without an active chapter, which cut the hero copy's exit when the stage starts).
+    <div className="z-navbar absolute inset-0 h-dvh w-full justify-center md:flex">
+      <AnimatePresence mode="wait">{hidden && Active && <Active key={key} />}</AnimatePresence>
     </div>
   );
 }

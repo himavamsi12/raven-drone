@@ -24,3 +24,6 @@ node_modules
 /glb/raven-terrain/textures/raven-natural-bake-4096.png
 __pycache__/
 /glb/raven-terrain/raven-terrain-v03.blend*
+
+# User reference recordings (local only, 2026-11-03)
+assets/

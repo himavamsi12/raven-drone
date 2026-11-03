@@ -21,3 +21,5 @@ node_modules
 /scripts/check-raven-rotors.mjs
 /prompt.md
 /RAVEN_DRONE_BLENDER_BRIEF.md
+
+assets/

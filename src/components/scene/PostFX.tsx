@@ -4,7 +4,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { BlendFunction, CopyPass, Effect, EffectComposer, EffectPass, Pass, RenderPass, SMAAEffect, SMAAPreset } from "postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { BG_COLOR, SKY_COLOR, terrainOffset } from "@/lib/constants";
+import { BG_COLOR, DRONE_LAYER, SKY_COLOR, terrainOffset } from "@/lib/constants";
+import { PAYLOAD_BG, payloadLook } from "@/lib/payload";
 import { damp, remap } from "@/lib/math";
 import { computeSceneRanges, SCENE, sceneDataAt, scenes, useScenes, type SceneData, type SceneId } from "@/lib/scenes";
 import { mapStory, openingNow, storyMap, useStage, wipeProgress, wipeRatioAt } from "@/lib/story-map";
@@ -332,9 +333,10 @@ const _drone = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 
 /** Layer the hero drones' bodies are drawn on in their own render Lights are added to it too. */
-const DRONE_LAYER = 6;
+// DRONE_LAYER (lib/constants): the drone bodies and their vector outlines (Drone.tsx).
 const DRONE_GROUPS = ["Drone1Group", "Drone2Group", "Drone3Group"];
 const _clear = new THREE.Color();
+const _clearMix = new THREE.Color();
 const _box3 = new THREE.Box3();
 const _part3 = new THREE.Box3();
 const _corner = new THREE.Vector4();
@@ -658,7 +660,9 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     wipe.u("uBorder").value = 2 / size.width; // shipped: uDpr / uResolution.x * 2 in drawing-buffer pixels
     gl.outputColorSpace = THREE.LinearSRGBColorSpace;
     const night = s[SCENE.IGNITION_VERIFIED].progress > 0.99;
-    gl.setClearColor(night ? BG_COLOR : SKY_COLOR, 1);
+    // Raven payload stage (lib/payload.ts): the sky goes to the clay model's black.
+    _clearMix.copy(night ? BG_COLOR : SKY_COLOR).lerp(PAYLOAD_BG, payloadLook().sky);
+    gl.setClearColor(_clearMix, 1);
     gl.outputColorSpace = THREE.SRGBColorSpace;
     renderSceneAndDrones(dt);
     composer.render(dt);
@@ -823,7 +827,8 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     lens.u("uTerrainStep").value = st.step;
     // Streak = per-frame screen motion scaled to the exposure: velocity x shutter time.
     lens.u("uShutter").value = dt > 0 ? Math.min(SHUTTER_S / dt, 4) : 0;
-    lens.u("uMotion").value = reducedMotion || !lensOn ? 0 : 1;
+    // Payload stage: no travel streak on the clay model (it smeared the dot grid into dashes).
+    lens.u("uMotion").value = reducedMotion || !lensOn ? 0 : 1 - payloadLook().clay;
     lens.u("uSpeedGain").value = mountainLens ? MOUNTAIN_CLARITY.speedGain : SPEED_GAIN;
     lens.u("uFocus").value = focus;
     pc.getWorldDirection(_camDir);
