@@ -4,7 +4,7 @@ Context for coding agents (Codex, Claude Code, others). Read this before editing
 
 ## Current direction — Raven (user update)
 
-The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. Hero/swarm/footer use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The light-gray coaxial quad sources (`glb/raven-quad/`) are kept because `build_silhouettes.py` there builds the flock/ops silhouettes (still the quad); the loader and boot SVG show the hexa since 2026-10-31. The original `raven_drone.glb`, the earlier dark hexacopter (`glb/raven-refined/`) and the Blender story scene (`glb/raven-story/`) were removed in the 2026-10-31 cleanup (recoverable from git history). Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. Every jet silhouette is now a Raven drone (loader, sync flock, Raven Ops drones); the footer shows the live hexa.
+The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. Hero/swarm use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The light-gray coaxial quad sources (`glb/raven-quad/`) are kept because `build_silhouettes.py` there builds the flock/ops silhouettes (still the quad); the loader and boot SVG show the hexa since 2026-10-31. The original `raven_drone.glb`, the earlier dark hexacopter (`glb/raven-refined/`) and the Blender story scene (`glb/raven-story/`) were removed in the 2026-10-31 cleanup (recoverable from git history). Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. Every jet silhouette is now a Raven drone (loader, sync flock, Raven Ops drones). The footer (CTA, legal links, landing drone, wordmark) was removed on 2026-11-03 (user): the page ends with the About section.
 
 ## What this project is
 
@@ -64,7 +64,7 @@ Key shipped modules (in `page-33beb1af07230f28.js` unless noted): `7370` main sc
 
 ```
 src/app/layout.tsx          fonts, <SmoothScroll>, <Navbar>
-src/app/page.tsx            Loader, FixedContainer (fixed stage), opening, story band 1 + band 2 spacers (contiguous), team, footer, LandingSequence
+src/app/page.tsx            Loader, FixedContainer (fixed stage), opening, story band 1 + band 2 spacers (contiguous), team (About)
 src/lib/
   scenes.ts                 SCENE ids, SCENE_SPAN (vh), SCENE_ORDER, computeSceneRanges, zustand store
   constants.ts              shared mutable refs (terrain travel), RENDER_ORDER, sun, colors
@@ -72,6 +72,7 @@ src/lib/
   assets.ts                 asset paths, DRACO_PATH=/draco/
   loading.ts                loader state machine store
   scroll-lock.ts            ref-counted Lenis lock + "lenis-lock-change" event
+  render-scale.ts           canvas / scene / drone-layer densities (no drone pixelation)
 src/components/
   SmoothScroll.tsx          ONE Lenis instance (lerp .95, syncTouch) + scene progress writer + scene-end snapping
   Navbar.tsx                logo, chapter ticks (150ms fade → .75s scroll → restore), Contact, menu <dialog>
@@ -79,9 +80,9 @@ src/components/
   ContactForm / ContactButton
   loading/Loader.tsx        boot splash + loading-drone canvas + status line
   scene/
-    FixedContainer.tsx      Canvas (dpr [1,1.5], no AA, no depth buffer), KeyboardControls, ChapterCopy, HudLog
+    FixedContainer.tsx      Canvas (screen dpr max 2, no AA, no depth buffer), PerformanceMonitor, ChapterCopy, HudLog
     MainScene.tsx           assembly, flock FBO portal, hero audio, sets mainAppLoaded
-    PostFX.tsx              composer: RenderPass → flock mix → SMAA (inferred) → FinalEffect (grade/grain/vignette)
+    PostFX.tsx              scene composer (RenderPass → lens → SMAA) + drone layer → DroneCompositePass → fisheye → flock mix → wipe → FinalEffect
     DroneRig.tsx            camera + 3 drones, ClipSeeker per tracker, hover/steer, shake, engine scene copy
     ClipSeeker.ts           deterministic GLB clip seeking (time = duration*progress - 1e-6)
     Drone.tsx               PBR drone (5 nodes), engine flame shader, hull number via RenderTexture
@@ -92,7 +93,7 @@ src/components/
     overlays/               SpecsCallouts, SwarmTags, GroundHtml
     materials/              TerrainMaterial
     shaders/screen-uv.ts    shared GLSL (diagonal scan wipe, grid AA)
-  sections/                 Sections (team, footer), FooterDrone, LandingSequence, HeroLogo
+  sections/                 Sections (team / About; the footer and its landing sequence were removed 2026-11-03)
 public/assets/              mirrored reference assets (same paths as live site); images/media = _next/static/media
 public/draco/               Draco decoder copied from three/examples (do not CDN)
 scripts/asset-manifest.mjs  manifest generator
@@ -140,9 +141,13 @@ scripts/asset-manifest.mjs  manifest generator
 - Hero drone grows to 1.35x in top views (`TOP_VIEW_SCALE` in DroneRig, eased top-view blend, user 2026-11-02) and is
   1.25x in the opening and hero frame (`HERO_SCALE`, eased out over DELTA_DRONE 0-0.2 so the two never stack; user
   2026-11-03). Drone maps get anisotropy 8 (`RavenModel`).
-- Pixel ratio is adaptive (FixedContainer `useAdaptiveDpr` + drei `PerformanceMonitor`): starts at min(1.5, device),
-  climbs to native (max 2) while the GPU holds the refresh rate, falls back to the start value. No MSAA (4x with the
-  depth-reading lens cost ~3x the frame). Performance budget: 60 fps on an M3 at 1x and 2x on `next start`.
+- Render resolution (`lib/render-scale.ts`, user 2026-11-03: the drone must not pixelate on any screen): canvas at
+  the screen density (max 2). The scene renders in PostFX's scene composer at an adaptive density (1x .. native,
+  start 1.5, drei `PerformanceMonitor` in FixedContainer); the drone bodies render on their own layer (6) with MSAA at
+  canvas density, cropped to their screen bounds, and `DroneCompositePass` lays them over the scene before fisheye,
+  wipe and grade. Rotor discs stay in the scene render (the lens blurs them as before) and draw over the body via
+  stencil. Screen-space uniforms rendered in the scene (`resolution`, Terrain/Grid `uDpr`) use the scene density.
+  Performance budget: 60 fps on an M3 at 1x and 2x on `next start`.
 - Overlay gates from the bundle, e.g. specs callouts: delta > .9 && swarm < .01; hero copy exits at delta .075.
 
 ### Rendering notes
@@ -151,14 +156,9 @@ scripts/asset-manifest.mjs  manifest generator
 - Clear color: sky `#c9e0f7`, black after ignition > .99. Final grade fades to black with multi-threat hideRatio.
 - Custom ShaderMaterials output raw values: textures sampled there must not be sRGB-decoded unless the source did
   (landing frames use `NoColorSpace`).
-- Footer drone flight (user, 2026-11-01, after drone.riotters.com; `sections/drone-flight.ts`): the live `raven_hexa`
-  lands on the pad (last shipped FRAME_Y position, frame travel still scroll-driven) with a timed 4 s ease-out-cubic
-  landing once `#footer` is 30% visible (banked glide-in from above the screen: roll -31°, yaw 21°, pitch -12°, size
-  0.19 → 1, then a vertical let-down), a 0.3 Hz float (1/35 drone width), and pointer response (flight lean while
-  airborne, landed tilt + drift + EO/IR turret head after 47% of the landing). Replays after the footer has left the
-  view. Desktop (≥1024px) in `LandingSequence` (copy-side drift/lift damped ×0.4 so the drone keeps clear of the CTA);
-  below 1024px the same flight in `FooterDrone`. Reduced motion: parked on the pad, rotors still. No GSAP: per-frame
-  maths in the existing R3F loops, like the reference. Canvas has a depth buffer.
+- Footer removed (user, 2026-11-03): `Footer`, `LandingSequence` (desktop WebGL landing drone, wordmark, team text),
+  `FooterDrone`, `HeroLogo`, `drone-flight.ts` and the footer-only `Geist-SemiBold.woff` are gone (recoverable from git
+  history). The About section is plain DOM on every size; the loader's "Preparing scene" step now waits on the terrain.
 
 ## Design tokens (from shipped CSS, in `globals.css @theme`)
 
@@ -183,7 +183,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
   delta end 7201, swarm 11701, mission 16201, (Journey, compressed: 16201 → 17551), Route 22051 (= band 2 start, wipe
   22051 → 24301), Care teams frame 26551, Hill clinic stop 27676, Ridge village stop (story end) 28801, stage gone
-  29701, page height ~31147. Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
+  29701, page height ~30325 (footer removed). Test snapping with real wheel events (agent-browser `mouse wheel`, not `scroll`).
 - Up to the story end, same vh on reference and local gives identical scrollY ↔ scene mapping (verified before the
   homepage change; the later shipped chapters are no longer on the page).
 - Built-in preview pane throttles RAF between tool calls: wait a few seconds before screenshots; FPS dips there are
@@ -210,7 +210,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   a low camera on one mountain raised out of our real Raven relief (its ridges are the tile's own, no noise or
   texture); over early Review the camera hands back to the shipped track and the relief settles to real heights. Still open with the user: pins/routes like
   the reference, the flat overlays in the landscape view.
-- Raven follow-up: all jet imagery is replaced (silhouettes, mission cards, demo, footer sequence). The footer wordmark is "RAVEN" (Geist text: SVG on mobile/tablet, canvas texture for the desktop WebGL outline). The third-party team-logos texture, the USAvionix legal copy and the Notes link were removed. Preserve current camera/scroll choreography.
+- Raven follow-up: all jet imagery is replaced (silhouettes, mission cards, demo). The footer and its "RAVEN" wordmark were removed (2026-11-03). The third-party team-logos texture, the USAvionix legal copy and the Notes link were removed. Preserve current camera/scroll choreography.
 - Story/content Phase 1 is done (copy only, 2026-10-30): one illustrative health-centre → hill-clinic delivery across chapters, HUD, scene labels, nav, menu and sections. Inventory and claim status: `RAVEN_CONTENT_MAP.md`. Chapter/HUD text lives beside its timing (`ChapterCopy.tsx`, `HudLog.tsx`); repeated notice/CTA copy lives in `src/lib/copy.ts`. Keep labels display-only: no fake confirmations ("delivered", "clinic notified", "cold chain maintained"), no numbers (temperature, confidence, speed).
 - Story Phase 2 (visual, plan only): `RAVEN_VISUAL_STORY_PLAN.md`. The fire/thermal detour is the main replacement candidate; preparation, launch, handoff and return are not animated yet. Product decisions D1–D5 in that file are open.
 - Quad site-imagery renders (`glb/raven-quad/render_media.py` + `encode_media.mjs`: cards, demo, 96 landing frames) are no longer used by the page; their outputs were deleted in the 2026-10-31 cleanup.
@@ -243,8 +243,6 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Terrain lens (`scene/TerrainLensEffect.ts`, first EffectPass after the RenderPass in `PostFX.tsx`): depth-reconstructed motion blur (terrain travel + camera reprojection, 1/30 s shutter) and thin-lens DoF focused on `Drone1Group`, applied only below world y -1.55 so drones stay sharp. Exaggerated for a high-speed look (travel streak x`SPEED_GAIN` 1.5, cap 9 px since 2026-11-02, user: was too strong at 3 / 16; `COC_INF_PX` 5, rising to 60 in top views only with an eased blend, disc cap 14 px since 2026-11-02: drone-focused depth of field, user): tune those constants in `PostFX.tsx`. Anything drawn after the terrain must not write depth (the clouds did, which hid the ground from the lens). `?lens=off` disables it. If drones ever fly lower or the terrain parent moves, re-check `TERRAIN_TOP`.
 - Silhouette assets: `drone-lowpoly.glb` (nodes `mainBody` + `outlineHull`, jet axis contract) and `loading-drone.glb`; the boot SVG is traced to sit over the 3D loader. Rebuild with `glb/raven-quad/build_silhouettes.py` (see its README section).
 
-1. Footer heat-distortion / jet-beam (module 85508) not ported.
-2. Confirm WebGL outlined wordmark (module 38219) visible in footer in a foreground browser.
-3. Loader is a stand-in for the worker OffscreenCanvas (chunk 4867 not captured).
-4. 821×1109 capture set and upward-travel checks for every chapter not done; no image-diff tooling yet.
-5. Phosphor icons are stand-ins; menu links are `#`.
+1. Loader is a stand-in for the worker OffscreenCanvas (chunk 4867 not captured).
+2. 821×1109 capture set and upward-travel checks for every chapter not done; no image-diff tooling yet.
+3. Phosphor icons are stand-ins; menu links are `#`.

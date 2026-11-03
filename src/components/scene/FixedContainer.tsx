@@ -6,6 +6,7 @@ import { useLenis } from "lenis/react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useLoading } from "@/lib/loading";
+import { canvasDpr, initialSceneFactor, sceneDprFor, useRenderScale } from "@/lib/render-scale";
 import { remap } from "@/lib/math";
 import { SCENE, useMouse, useScenes } from "@/lib/scenes";
 import { measureStoryMap, stageTop, storyMap, useStage, wipeClipPath, wipeProgress, wipeRatioAt } from "@/lib/story-map";
@@ -20,24 +21,32 @@ const KEYS: KeyboardControlsEntry<string>[] = [
 ];
 
 /**
- * Adaptive pixel ratio (user 2026-11-03: "no pixelation should happen with the drone, it should be immersive"):
- * starts at the previous fixed cap (1.5, or the screen's own density if lower), climbs to native (up to 2) while the
- * GPU holds the refresh rate, and falls back to the start value, never below it; settles after 3 flip-flops.
- * Replaces drei AdaptiveDpr, whose `pixelated` mode upscaled with hard nearest-neighbour pixels when it adapted down.
+ * Render resolution (user 2026-11-03: "no pixelation should happen with the drone"; again: still pixelated on larger
+ * screens). See lib/render-scale.ts: the canvas runs at the screen's own density (max 2) and the drones are rendered
+ * on their own at 2x with MSAA (PostFX); only the scene behind them (terrain, sky, lens) adapts to the GPU, between 1x
+ * and native, starting at 1.5. Settles after 3 flip-flops on the lower of the last two levels.
+ * Replaces drei AdaptiveDpr, whose `pixelated` mode upscaled with hard nearest-neighbour pixels.
  */
-function useAdaptiveDpr() {
-  const [range] = useState(() => {
-    const device = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-    return { base: Math.min(1.5, device), max: Math.min(2, device) };
-  });
-  const [dpr, setDpr] = useState(range.base);
-  return { dpr, up: () => setDpr(range.max), down: () => setDpr(range.base) };
+function useSceneResolution() {
+  const [canvas] = useState(canvasDpr);
+  const [factor] = useState(() => initialSceneFactor(canvas));
+  const setSceneDpr = useRenderScale((s) => s.setSceneDpr);
+  const lastStep = useRef(0);
+  return {
+    canvas,
+    factor,
+    onIncline: () => void (lastStep.current = 1),
+    onDecline: () => void (lastStep.current = -1),
+    onChange: ({ factor: f }: { factor: number }) => setSceneDpr(sceneDprFor(f, canvas)),
+    // A flip-flop ending on a climb leaves the level that just failed: step back down to the one that held.
+    onFallback: ({ factor: f }: { factor: number }) => setSceneDpr(sceneDprFor(lastStep.current > 0 ? f - 0.1 : f, canvas)),
+  };
 }
 
 /** WebGL canvas shown once the loader has the boot splash up (shipped `t8`). */
 function SceneCanvas() {
   const loaded = useLoading((s) => s.loadingCanvasLoaded);
-  const adaptive = useAdaptiveDpr();
+  const scale = useSceneResolution();
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   if (!loaded) return null;
   return (
@@ -46,12 +55,19 @@ function SceneCanvas() {
     <div className={hiding ? "absolute inset-0 touch-auto!" : "invisible absolute inset-0 touch-auto!"}>
       <Canvas
         camera={{ position: [0, 5, 0], fov: 60 }}
-        dpr={adaptive.dpr}
+        dpr={scale.canvas}
         shadows="soft" // drone self-shadowing only (sun shadow camera is fitted to the hero drone in MainScene)
         gl={{ powerPreference: "high-performance", antialias: false, stencil: false, depth: false, outputColorSpace: THREE.SRGBColorSpace }}
         onCreated={({ gl }) => gl.setClearColor(0x000000, 1)}
       >
-        <PerformanceMonitor flipflops={3} onIncline={adaptive.up} onDecline={adaptive.down} onFallback={adaptive.down} />
+        <PerformanceMonitor
+          flipflops={3}
+          factor={scale.factor}
+          onIncline={scale.onIncline}
+          onDecline={scale.onDecline}
+          onChange={scale.onChange}
+          onFallback={scale.onFallback}
+        />
         <KeyboardControls map={KEYS}>
           <Suspense fallback={null}>
             <MainScene />

@@ -104,7 +104,7 @@ function ChapterNav() {
     }),
   );
   const leaving = useScenes((s) => s[SCENE.MULTI_THREAT_RESPONSE].hideRatio > 0);
-  const offStage = useStage((s) => s.cover < 0.5); // after the story (team, footer)
+  const offStage = useStage((s) => s.cover < 0.5); // after the story (team section)
   const active = pending ?? touched ?? hovered ?? current ?? CHAPTERS[0][0];
 
   const clear = useCallback(() => {

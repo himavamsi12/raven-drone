@@ -85,7 +85,8 @@ const STATUS = {
 function LoadingStatus() {
   const loaded = useLoading((s) => s.loadingCanvasLoaded);
   const main = useLoading((s) => s.mainAppLoaded);
-  const seq = useLoading((s) => s.imageSequenceLoaded);
+  // "Preparing scene" until the mountain terrain is built (it was the footer sequence until the footer was removed).
+  const terrain = useLoading((s) => s.terrainReady);
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   const hidden = useLoading((s) => s.loadingCanvasHidden);
   const degraded = useLoading((s) => s.degraded);
@@ -100,7 +101,7 @@ function LoadingStatus() {
       ? STATUS.degraded
       : loaded
         ? main
-          ? seq
+          ? terrain
             ? STATUS.ready
             : STATUS.calibrating
           : STATUS.loading
@@ -136,7 +137,6 @@ export function Loader() {
   const hidden = useLoading((s) => s.loadingCanvasHidden);
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   const main = useLoading((s) => s.mainAppLoaded);
-  const seq = useLoading((s) => s.imageSequenceLoaded);
   const terrain = useLoading((s) => s.terrainReady);
   const [width, setWidth] = useState(1280);
 
@@ -154,8 +154,8 @@ export function Loader() {
   }, []);
 
   useEffect(() => {
-    if (main && seq && terrain) useLoading.getState().setCanRemoveLoading();
-  }, [main, seq, terrain]);
+    if (main && terrain) useLoading.getState().setCanRemoveLoading();
+  }, [main, terrain]);
 
   useEffect(() => {
     if (!loaded || hiding) return;

@@ -1,11 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Footer, OurTeam } from "@/components/sections/Sections";
+import { OurTeam } from "@/components/sections/Sections";
 
 const Loader = dynamic(() => import("@/components/loading/Loader").then((m) => m.Loader), { ssr: false });
 const FixedContainer = dynamic(() => import("@/components/scene/FixedContainer").then((m) => m.FixedContainer), { ssr: false });
-const LandingSequence = dynamic(() => import("@/components/sections/LandingSequence").then((m) => m.LandingSequence), { ssr: false });
 
 export default function Home() {
   return (
@@ -23,11 +22,10 @@ export default function Home() {
       <div id="story-band-2" className="pointer-events-none relative w-full" style={{ height: "850dvh" }}>
         <div id="care-teams" className="absolute top-[500dvh] left-0 h-px w-full" />
       </div>
-      <div className="flex w-full flex-col items-center gap-30 pt-30 md:gap-40 md:pt-40 lg:gap-55 lg:pt-55">
+      {/* Footer and its landing sequence removed (user, 2026-11-03): the page ends with the team section. */}
+      <div className="flex w-full flex-col items-center py-30 md:py-40 lg:py-55">
         <OurTeam />
-        <Footer />
       </div>
-      <LandingSequence />
     </main>
   );
 }

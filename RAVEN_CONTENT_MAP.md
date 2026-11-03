@@ -131,11 +131,8 @@ Removed from the HUD:
   - Heading: "From one health centre to the communities around it."
   - Body: the network view is illustrative, not confirmed routes, an operating service or a guaranteed coverage radius.
 - **Demo:** heading "Follow a medical delivery scenario." and the brief's body copy. CTA "Discuss a use case" opens the existing contact dialog.
-- **About text** (DOM, and the WebGL `Text` on lg+): the brief's about copy.
-- **Footer:**
-  - Headline: "Start with a place that needs the connection."
-  - CTA: "Discuss a use case".
-  - Concept notice: shared with the menu via `src/lib/copy.ts`. On desktop it sits in the left column; on mobile it sits below the legal links.
+- **About text** (DOM on every size): the brief's about copy.
+- **Footer:** removed (user, 2026-11-03), with its headline, "Discuss a use case" CTA, legal links and concept notice. The concept notice is still in the menu (`src/lib/copy.ts`).
 - **Contact result:** "Not sent: this concept site has no form backend, so your message was not delivered." Still nothing is sent.
 - **Metadata:** the description leads with the road/air line. `noindex` is unchanged.
 

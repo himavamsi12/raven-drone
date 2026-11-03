@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { BlendFunction, CopyPass, Effect, EffectComposer, EffectPass, RenderPass, SMAAEffect } from "postprocessing";
+import { BlendFunction, CopyPass, Effect, EffectComposer, EffectPass, Pass, RenderPass, SMAAEffect, SMAAPreset } from "postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { BG_COLOR, SKY_COLOR, terrainOffset } from "@/lib/constants";
@@ -9,6 +9,7 @@ import { damp, remap } from "@/lib/math";
 import { computeSceneRanges, SCENE, sceneDataAt, scenes, useScenes, type SceneData, type SceneId } from "@/lib/scenes";
 import { mapStory, openingNow, storyMap, useStage, wipeProgress, wipeRatioAt } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { droneLayerSamples, useRenderScale } from "@/lib/render-scale";
 import { clayState } from "./clay-map";
 import { fisheyeAt } from "./opening";
 import { TerrainLensEffect } from "./TerrainLensEffect";
@@ -330,9 +331,142 @@ const _vp = new THREE.Matrix4();
 const _drone = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 
+/** Layer the hero drones' bodies are drawn on in their own render (DroneShadow uses 5). Lights are added to it too. */
+const DRONE_LAYER = 6;
+const DRONE_GROUPS = ["Drone1Group", "Drone2Group", "Drone3Group"];
+const _clear = new THREE.Color();
+const _box3 = new THREE.Box3();
+const _part3 = new THREE.Box3();
+const _corner = new THREE.Vector4();
+const _crop = new THREE.Matrix4();
+const _proj = new THREE.Matrix4();
+const _projInv = new THREE.Matrix4();
+/** Drone layer region padding (drawing-buffer px): the MSAA edge, the 3x3 depth taps and rounding. */
+const REGION_PAD = 8;
+/** Region allocations grow in these steps and are kept while the need stays within 60-100% (no per-frame reallocs). */
+const REGION_STEP = 64;
+const REGION_KEEP = 0.6;
+const REGION_HEADROOM = 1.15;
+/** Stencil value the drone bodies write in the drone layer; the rotor blur discs draw there only over it. */
+const BODY_STENCIL = 1;
+/** Rotor blur discs hang off an anchor named `<rotor>_blur` (rotor-blur.ts). */
+const isRotorDisc = (o: THREE.Object3D) => !!o.parent?.name.endsWith("_blur");
+
+/**
+ * Raven drone layer (user 2026-11-03: "the drone ... should not pixelate in any of the screens"). The scene renders at
+ * the adaptive scene density (lib/render-scale.ts) without the drone bodies; the bodies render on their own into
+ * `tDrone` at the canvas density with MSAA (premultiplied: clear alpha 0). This pass lays them over the scene at the
+ * canvas density, so their edges are never stretched or stair-stepped. Everything after (fisheye, wipe capture, grade,
+ * grain) sees one frame, as before.
+ * The look of the single-pass render is kept: the rotor blur discs (no depth write) stay in the scene render, where
+ * the lens blurs them with the ground behind them as it always did; in the drone layer they are drawn only over the
+ * body (stencil), where the lens never reached. The depth test keeps terrain that is nearer than the body in front of
+ * it (nearest body depth around the pixel, so antialiased edge samples are never dropped).
+ * Difference: depth-test-free overlays drawn after the drones (clay map pins) now sit under the body.
+ */
+class DroneCompositePass extends Pass {
+  readonly uniforms = {
+    tScene: new THREE.Uniform<THREE.Texture | null>(null),
+    tSceneDepth: new THREE.Uniform<THREE.Texture | null>(null),
+    tDrone: new THREE.Uniform<THREE.Texture | null>(null),
+    tDroneDepth: new THREE.Uniform<THREE.Texture | null>(null),
+    uSceneDepth: new THREE.Uniform(0),
+    uDrones: new THREE.Uniform(0),
+    uDroneTexel: new THREE.Uniform(new THREE.Vector2(1, 1)),
+    /** Drone layer region in canvas uv: x, y (bottom-left), width, height. */
+    uDroneRect: new THREE.Uniform(new THREE.Vector4(0, 0, 1, 1)),
+  };
+  constructor() {
+    super("DroneCompositePass");
+    this.needsSwap = false; // writes the input buffer, like the RenderPass it replaces
+    this.fullscreenMaterial = new THREE.ShaderMaterial({
+      name: "DroneComposite",
+      uniforms: this.uniforms,
+      depthTest: false,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = position.xy * 0.5 + 0.5;
+  gl_Position = vec4(position.xy, 1.0, 1.0);
+}`,
+      fragmentShader: /* glsl */ `
+uniform sampler2D tScene;
+uniform sampler2D tSceneDepth;
+uniform sampler2D tDrone;
+uniform sampler2D tDroneDepth;
+uniform float uSceneDepth;
+uniform float uDrones;
+uniform vec2 uDroneTexel;
+uniform vec4 uDroneRect;
+varying vec2 vUv;
+void main() {
+  vec4 scene = texture2D(tScene, vUv);
+  // The layer covers only the drones' screen region (texel-aligned with the canvas pixels).
+  vec2 duv = (vUv - uDroneRect.xy) / uDroneRect.zw;
+  bool inside = uDrones > 0.5 && all(greaterThanEqual(duv, vec2(0.0))) && all(lessThanEqual(duv, vec2(1.0)));
+  vec4 drone = inside ? texture2D(tDrone, duv) : vec4(0.0);
+  if (drone.a > 0.0 && uSceneDepth > 0.5) {
+    float dz = 1.0;
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) dz = min(dz, texture2D(tDroneDepth, duv + vec2(float(x), float(y)) * uDroneTexel).r);
+    }
+    if (dz < 1.0 && texture2D(tSceneDepth, vUv).r < dz) drone = vec4(0.0);
+  }
+  gl_FragColor = vec4(drone.rgb + scene.rgb * (1.0 - drone.a), drone.a + scene.a * (1.0 - drone.a));
+}`,
+    });
+  }
+  render(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget | null) {
+    renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer);
+    renderer.render(this.scene, this.camera);
+  }
+}
+
+/**
+ * Puts one hero drone on the drone layer: bodies leave the scene render (layer 0) and write the body stencil; rotor
+ * blur discs stay in the scene render and, in the drone layer, draw only over the body. Idempotent (every frame, so a
+ * remounted model is picked up); stencil settings are GL state, no shader recompiles. Only the three stage drones
+ * are touched.
+ */
+function assignDroneLayer(group: THREE.Object3D) {
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const disc = isRotorDisc(mesh);
+    mesh.layers.enable(DRONE_LAYER);
+    if (!disc) mesh.layers.disable(0);
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      if (m.stencilWrite) continue;
+      m.stencilWrite = true; // also enables the stencil test; the scene buffers have no stencil, so it always passes there
+      m.stencilRef = BODY_STENCIL;
+      if (disc) {
+        m.stencilFunc = THREE.EqualStencilFunc;
+        m.stencilZPass = THREE.KeepStencilOp;
+      } else {
+        m.stencilFunc = THREE.AlwaysStencilFunc;
+        m.stencilZPass = THREE.ReplaceStencilOp;
+      }
+    }
+  });
+}
+
+/** Scene composer buffers at their own size (EffectComposer.setSize always uses the canvas drawing buffer). */
+function setComposerBufferSize(composer: EffectComposer, width: number, height: number) {
+  composer.inputBuffer.setSize(width, height);
+  composer.outputBuffer.setSize(width, height);
+  (composer as unknown as { depthRenderTarget: THREE.WebGLRenderTarget | null }).depthRenderTarget?.setSize(width, height);
+  for (const pass of composer.passes) pass.setSize(width, height);
+}
+
 /** Composer: scene -> terrain lens (Raven) -> flock crossfade -> AA -> final grade (shipped module 41480). */
 export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const { gl, scene, size, camera } = useThree();
+  const dpr = useThree((s) => s.viewport.dpr);
+  const sceneDpr = useRenderScale((s) => s.sceneDpr);
+  const droneGroups = useRef<THREE.Object3D[]>([]);
+  /** Canvas drawing-buffer size (fw, fh) and the drone layer's current allocation (aw, ah), in pixels. */
+  const droneRegion = useRef({ fw: 1, fh: 1, aw: 0, ah: 0 });
   const aspect = useRef(new THREE.Vector2());
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   // `?lens=off` disables the Raven lens pass (comparison).
@@ -344,22 +478,41 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
   const captured = useRef(false);
   const lastSide = useRef(0);
   const mixWarm = useRef(3);
-  const [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] = useMemo(() => {
-    // No MSAA: tried 4x (2026-11-03) for the drone's edges; with the depth-reading lens it cost ~3x the frame (8-20 fps
-    // headless at 1x). Edges use SMAA plus the adaptive pixel ratio (FixedContainer).
+  const [composer, sceneComposer, droneTarget, composite, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] = useMemo(() => {
+    // No MSAA on the scene: tried 4x (2026-11-03); with the depth-reading lens it cost ~3x the frame (8-20 fps headless
+    // at 1x). The drones get MSAA in their own layer (DroneCompositePass) instead.
+    // Scene composer (scene density, drones hidden): scene -> terrain lens -> SMAA. Its result feeds the composite.
+    const sceneComposer = new EffectComposer(gl, { multisampling: 0 });
+    sceneComposer.autoRenderToScreen = false;
+    const lens = new TerrainLensEffect();
+    sceneComposer.addPass(new RenderPass(scene, camera));
+    sceneComposer.addPass(new EffectPass(camera, lens)); // needs the scene depth: first pass after the render
+    // Shipped bundle constructs a default effect here (minified `eF`); SMAA is inferred. Raven: before the fisheye now
+    // (the drones are antialiased in their own layer); HIGH preset (was MEDIUM) for the terrain on 1x screens.
+    sceneComposer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
+    // Drone layer: same 8-bit sRGB storage as the composer buffers; depth + stencil (body mask for the rotor discs).
+    const droneDepth = new THREE.DepthTexture(1, 1, THREE.UnsignedInt248Type);
+    droneDepth.format = THREE.DepthStencilFormat;
+    const droneTarget = new THREE.WebGLRenderTarget(1, 1, {
+      samples: droneLayerSamples(gl.getPixelRatio()),
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: true,
+      stencilBuffer: true,
+      depthTexture: droneDepth,
+      colorSpace: sceneComposer.inputBuffer.texture.colorSpace,
+    });
+    droneTarget.texture.generateMipmaps = false;
     const composer = new EffectComposer(gl, { multisampling: 0 });
+    const composite = new DroneCompositePass();
+    composer.addPass(composite);
     const final = new FinalEffect();
     const mix = new RenderTargetMixEffect(flockTarget);
-    const lens = new TerrainLensEffect();
     const fisheye = new FisheyeEffect();
     const fisheyePass = new EffectPass(camera, fisheye);
-    composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new EffectPass(camera, lens)); // needs the scene depth: first pass after the render
-    composer.addPass(fisheyePass); // Raven opening: bends the finished frame, before AA and grade
+    composer.addPass(fisheyePass); // Raven opening: bends the finished frame (drones included), before the grade
     const mixPass = new EffectPass(camera, mix);
     composer.addPass(mixPass);
-    // Shipped bundle constructs a default effect here (minified `eF`); SMAA is inferred.
-    composer.addPass(new EffectPass(camera, new SMAAEffect()));
     // Raven band 1 → band 2: the Care teams map is captured here once (off screen, no swap), then laid over the live
     // Route on the swept side; both before the grade, so grain and vignette stay live across the edge.
     // Own-size capture target (autoResize off): a resize must not clear the map the wipe is showing. It keeps the
@@ -380,20 +533,40 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     composer.addPass(wipePass);
     const finalPass = new EffectPass(camera, final);
     composer.addPass(finalPass);
-    return [composer, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] as const;
+    return [composer, sceneComposer, droneTarget, composite, final, mix, mixPass, lens, fisheye, fisheyePass, capturePass, captureTarget, wipe, wipePass, finalPass] as const;
   }, [gl, scene, camera, flockTarget]);
 
   useEffect(() => {
+    // Also on a pixel-ratio change (moving the window to another screen): R3F resizes the canvas but not the composer,
+    // whose buffers then stayed at the old resolution and were stretched over the new drawing buffer.
     composer.setSize(size.width, size.height);
     // The capture target was resized (cleared) and the camera track may have switched (mobile/desktop): re-render.
     if (pre.current.state === "done") pre.current = { state: "idle", frame: 0, saved: [], warm: 0 };
-  }, [composer, size]);
+  }, [composer, size, dpr]);
+  useEffect(() => {
+    setComposerBufferSize(sceneComposer, Math.max(1, Math.round(size.width * sceneDpr)), Math.max(1, Math.round(size.height * sceneDpr)));
+  }, [sceneComposer, size, sceneDpr]);
+  useEffect(() => {
+    // Same size as the canvas drawing buffer (the composite samples it 1:1).
+    const samples = droneLayerSamples(dpr);
+    if (droneTarget.samples !== samples) {
+      droneTarget.dispose(); // the sample count is fixed when the buffers are created
+      droneTarget.samples = samples;
+    }
+    // Canvas drawing-buffer size; the layer itself is sized to the drones' region each frame (renderSceneAndDrones).
+    const r = droneRegion.current;
+    r.fw = Math.max(1, Math.round(size.width * dpr));
+    r.fh = Math.max(1, Math.round(size.height * dpr));
+    r.aw = r.ah = 0; // reallocate on the next frame
+  }, [droneTarget, size, dpr]);
   useEffect(
     () => () => {
       composer.dispose();
+      sceneComposer.dispose();
+      droneTarget.dispose();
       captureTarget.dispose(); // not owned by the composer (own size)
     },
-    [composer, captureTarget],
+    [composer, sceneComposer, droneTarget, captureTarget],
   );
   useEffect(() => {
     const k = size.height / Math.sqrt(size.width * size.width + size.height * size.height);
@@ -487,8 +660,134 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     const night = s[SCENE.IGNITION_VERIFIED].progress > 0.99;
     gl.setClearColor(night ? BG_COLOR : SKY_COLOR, 1);
     gl.outputColorSpace = THREE.SRGBColorSpace;
+    renderSceneAndDrones(dt);
     composer.render(dt);
     lensState.current.prevVP.copy(_vp);
+  }
+
+  /** Current hero drone groups (re-resolved if a remount replaced them). */
+  function drones() {
+    const list = droneGroups.current;
+    if (list.length !== DRONE_GROUPS.length || list.some((g) => !g.parent)) {
+      droneGroups.current = DRONE_GROUPS.map((n) => scene.getObjectByName(n)).filter((g): g is THREE.Object3D => !!g);
+    }
+    return droneGroups.current;
+  }
+
+  /**
+   * Scene at the scene density without the drone bodies, then the bodies alone into the drone layer
+   * (DroneCompositePass). The sun's shadow map is only cast by and received on the drones (Drone.tsx), so it is
+   * rendered in the drone pass only.
+   */
+  function renderSceneAndDrones(dt: number) {
+    const groups = drones();
+    const shownGroups: THREE.Object3D[] = [];
+    for (const g of groups) {
+      assignDroneLayer(g); // before the scene render: the bodies must already be off its layer
+      let shown = true;
+      for (let o: THREE.Object3D | null = g; o; o = o.parent) if (!o.visible) shown = false;
+      if (shown) shownGroups.push(g);
+    }
+    let anyShown = shownGroups.length > 0;
+    const autoShadow = gl.shadowMap.autoUpdate;
+    gl.shadowMap.autoUpdate = false;
+    sceneComposer.render(dt);
+    gl.shadowMap.autoUpdate = autoShadow;
+    // The scene composer swaps its buffers once per swapping pass: the result is in the input buffer after an even count.
+    let swaps = 0;
+    for (const pass of sceneComposer.passes) if (pass.enabled && pass.needsSwap) swaps++;
+    const u = composite.uniforms;
+    u.tScene.value = (swaps % 2 === 0 ? sceneComposer.inputBuffer : sceneComposer.outputBuffer).texture;
+    const depth = (sceneComposer as unknown as { depthRenderTarget: THREE.WebGLRenderTarget | null }).depthRenderTarget;
+    u.tSceneDepth.value = depth?.depthTexture ?? null;
+    u.uSceneDepth.value = depth?.depthTexture ? 1 : 0;
+    // The region the drones cover on screen (the scene render just updated every world matrix and the camera).
+    const r = droneRegion.current;
+    const rect = anyShown ? droneScreenRect(shownGroups, r.fw, r.fh) : null;
+    anyShown = !!rect;
+    u.uDrones.value = anyShown ? 1 : 0;
+    if (!rect) return;
+    // Allocation: grows in steps with headroom and is kept while the need stays within 60-100% of it, so it is
+    // reallocated only on large changes (chapter switches), never per frame. Near full screen it is the full canvas.
+    const nw = Math.min(r.fw, rect[2] - rect[0]);
+    const nh = Math.min(r.fh, rect[3] - rect[1]);
+    if (r.aw === 0 || nw > r.aw || nh > r.ah || nw < REGION_KEEP * r.aw || nh < REGION_KEEP * r.ah) {
+      r.aw = Math.min(r.fw, Math.max(REGION_STEP, Math.ceil((nw * REGION_HEADROOM) / REGION_STEP) * REGION_STEP));
+      r.ah = Math.min(r.fh, Math.max(REGION_STEP, Math.ceil((nh * REGION_HEADROOM) / REGION_STEP) * REGION_STEP));
+      if (r.aw * r.ah > 0.8 * r.fw * r.fh) {
+        r.aw = r.fw;
+        r.ah = r.fh;
+      }
+      droneTarget.setSize(r.aw, r.ah);
+    }
+    const rx = Math.min(Math.max(Math.round((rect[0] + rect[2] - r.aw) / 2), 0), r.fw - r.aw);
+    const ry = Math.min(Math.max(Math.round((rect[1] + rect[3] - r.ah) / 2), 0), r.fh - r.ah);
+    u.uDroneRect.value.set(rx / r.fw, ry / r.fh, r.aw / r.fw, r.ah / r.fh);
+    u.uDroneTexel.value.set(1 / r.aw, 1 / r.ah);
+
+    // Every light joins the drone layer, so the bodies are lit exactly as in a single-pass render (same light set,
+    // same shader programs as the prewarm compiled).
+    scene.traverse((o) => {
+      if ((o as THREE.Light).isLight) o.layers.enable(DRONE_LAYER);
+    });
+    const mask = camera.layers.mask;
+    const prevTarget = gl.getRenderTarget();
+    const prevAlpha = gl.getClearAlpha();
+    gl.getClearColor(_clear);
+    const background = scene.background;
+    scene.background = null;
+    camera.layers.set(DRONE_LAYER);
+    // Crop the camera's own projection to the region (clip-space scale + offset), restored exactly afterwards; no
+    // updateProjectionMatrix, so the layer always uses the very projection the scene was rendered with.
+    _proj.copy(camera.projectionMatrix);
+    _projInv.copy(camera.projectionMatrixInverse);
+    const sx = r.fw / r.aw;
+    const sy = r.fh / r.ah;
+    _crop.set(sx, 0, 0, sx - 1 - (2 * rx) / r.aw, 0, sy, 0, sy - 1 - (2 * ry) / r.ah, 0, 0, 1, 0, 0, 0, 0, 1);
+    camera.projectionMatrix.premultiply(_crop);
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+    gl.setRenderTarget(droneTarget);
+    gl.setClearColor(0x000000, 0);
+    gl.clear(true, true, true);
+    gl.render(scene, camera);
+    camera.projectionMatrix.copy(_proj);
+    camera.projectionMatrixInverse.copy(_projInv);
+    camera.layers.mask = mask;
+    scene.background = background;
+    gl.setRenderTarget(prevTarget);
+    gl.setClearColor(_clear, prevAlpha);
+    u.tDrone.value = droneTarget.texture;
+    u.tDroneDepth.value = droneTarget.depthTexture;
+  }
+
+  /**
+   * Drawing-buffer rect [x0, y0, x1, y1] (bottom-left origin, padded) of the shown drones' world bounds, or the whole
+   * canvas if a corner is behind the camera; null if nothing of them is on screen.
+   */
+  function droneScreenRect(groups: THREE.Object3D[], fw: number, fh: number): [number, number, number, number] | null {
+    _box3.makeEmpty();
+    for (const g of groups) _box3.union(_part3.setFromObject(g));
+    if (_box3.isEmpty()) return null;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      _corner.set(i & 1 ? _box3.max.x : _box3.min.x, i & 2 ? _box3.max.y : _box3.min.y, i & 4 ? _box3.max.z : _box3.min.z, 1);
+      _corner.applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
+      if (_corner.w <= 1e-6) return [0, 0, fw, fh];
+      const px = (_corner.x / _corner.w) * 0.5 + 0.5;
+      const py = (_corner.y / _corner.w) * 0.5 + 0.5;
+      x0 = Math.min(x0, px);
+      y0 = Math.min(y0, py);
+      x1 = Math.max(x1, px);
+      y1 = Math.max(y1, py);
+    }
+    const ax = Math.max(0, Math.floor(x0 * fw) - REGION_PAD);
+    const ay = Math.max(0, Math.floor(y0 * fh) - REGION_PAD);
+    const bx = Math.min(fw, Math.ceil(x1 * fw) + REGION_PAD);
+    const by = Math.min(fh, Math.ceil(y1 * fh) + REGION_PAD);
+    return bx > ax && by > ay ? [ax, ay, bx, by] : null;
   }
 
   function updateLens(cam: THREE.Camera, dt: number) {
@@ -511,12 +810,13 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     st.drone ??= scene.getObjectByName("Drone1Group") ?? null;
     cam.getWorldPosition(_eye);
     const focus = st.drone ? st.drone.getWorldPosition(_drone).distanceTo(_eye) : 10;
-    const ratio = gl.getPixelRatio();
+    // The lens runs in the scene composer: its drawing-buffer pixels (scene density), not the canvas.
+    const ratio = sceneComposer.inputBuffer.height / Math.max(size.height, 1);
     const u = (n: string) => lens.u(n).value;
     u("uInvProj").copy(pc.projectionMatrixInverse);
     u("uCamWorld").copy(pc.matrixWorld);
     u("uPrevViewProj").copy(st.prevVP);
-    u("uTexel").set(1 / (size.width * ratio), 1 / (size.height * ratio));
+    u("uTexel").set(1 / sceneComposer.inputBuffer.width, 1 / sceneComposer.inputBuffer.height);
     lens.u("uPxScale").value = (size.height * ratio) / 1080;
     lens.u("uNear").value = pc.near;
     lens.u("uFar").value = pc.far;

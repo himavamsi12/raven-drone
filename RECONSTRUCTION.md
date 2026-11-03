@@ -924,6 +924,35 @@ Hot paths use refs and uniforms. Per-frame React state is avoided except where t
   Result: 60 fps at every measured position at 1x, 58-60 at 2x (v09: 60).
 - Not checked: a slower GPU, Safari, phone hardware.
 
+## Drone layer: no pixelation on large screens (user, 2026-11-03)
+
+- Request: "In larger screens the drone asset/visual is still getting pixelate ... it should not pixelate in any of
+  the screens."
+- Causes found: (1) the composer was sized only on CSS resize, so when the adaptive DPR climbed to 2 the canvas grew
+  but every buffer stayed at 1.5 and was stretched (stair-stepped edges at 1.33x on Retina); (2) on 1x monitors the
+  frame rendered at 1x with SMAA only (jagged legs/arms); (3) the footer canvases were capped at 1.5.
+- Not affordable: the whole frame at native density. Headless M3, `next start`: 2560x1440 at 2x ran ~7 fps,
+  1440x900 at 2x below 60.
+- Now (`lib/render-scale.ts`, `PostFX.tsx`): canvas at the screen density (max 2). The scene (terrain, sky, clouds,
+  rotor discs, lens, SMAA) renders in its own composer at an adaptive scene density (1x .. native, start 1.5,
+  quarter steps, PerformanceMonitor). The drone bodies render on their own layer (6) into a MSAA target (4 samples
+  below 1.5x, 2 above) at canvas density, cropped to the drones' projected bounds (camera projection multiplied by a
+  clip-space crop, restored exactly; allocation grows in 64 px steps, kept within 60-100%). `DroneCompositePass`
+  lays them over the scene (premultiplied, depth-tested so nearer terrain still covers them), then fisheye, wipe
+  capture and grade run on the one frame as before. Rotor discs stay in the scene render, where the lens blurs them
+  with the ground as it always did; in the drone layer they draw only over the body (stencil). The sun shadow map is
+  rendered in the drone pass only (only the drones cast and receive it). SMAA (now HIGH) runs on the scene before the
+  fisheye. Terrain travel keeps the shipped [1, 1.5] DPR factor (`TRAVEL_DPR`), so the ground speed does not change
+  with the new canvas density. Footer canvases: dpr [1, 2], AdaptiveDpr `pixelated` removed.
+- Measured (headless M3, `next start`, interleaved with the previous build; noise ±5 fps): 1920x1080 1x 52-60 vs
+  55-60; 1440x900 2x 49-54 vs 52-57; 2560x1440 1x 37-42 vs 33-51. Tried and dropped: 2x supersampling of the layer
+  on 1x screens (-15 fps), full-screen layer without the crop (1440x900 2x: 43 fps).
+- Checked visually at 1920x1080 1x, 1440x900 2x, 2560x1440 2x, 390x844 3x: opening, hero, Airframe, Connection,
+  Prepare, Route, mid-wipe, Care teams clay map, footer, live resize. No GL errors.
+- Differences from the single pass: depth-test-free overlays drawn after the drones (clay map pins) sit under the
+  body instead of over it; the grade/grain now run at canvas density (finer grain on Retina).
+- Not checked: a slower GPU, Safari, phone hardware, a 2x screen larger than 2560x1440.
+
 ## Verification done
 
 - `tsc --noEmit` and `next build` pass.
@@ -969,3 +998,18 @@ Hot paths use refs and uniforms. Per-frame React state is avoided except where t
 SHA-256, MIME, dimensions or GLB nodes/materials/clips. 0 HTML error pages, 0 external glTF URIs.
 GLB node name normalization: GLTFLoader sanitizes `Drone.001` → `Drone001` (`PropertyBinding.sanitizeNodeName`),
 which is the name the shipped code looks up.
+
+## Footer removed (user, 2026-11-03)
+
+- Request: "remove the whole footer section and the footer asset."
+- Removed: `<footer id="footer">` (headline, "Discuss a use case" CTA, concept notice, Privacy Policy / Terms of Use
+  dialogs, year line), the desktop WebGL `LandingSequence` (shipped module 73560 port: landing hexa, RAVEN wordmark
+  outline, ground glow, top fade, team text), the mobile `FooterDrone`, `HeroLogo`, `drone-flight.ts`, the footer-only
+  font `public/assets/3d-fonts/Geist-SemiBold.woff` and the `USE_CASE_CTA` string. `raven_hexa.glb` stays (hero and
+  story). `RavenModel` lost its footer-only `still` / `onObject` / `span` props.
+- The About section (`#our-team`, nav "About") is now plain DOM on every size (it was hidden on lg+, where the
+  landing sequence drew it in WebGL). The page ends with it (`py` padding instead of the gap above the footer).
+- Loader: the "Preparing scene" step waited for the footer sequence (`imageSequenceLoaded`, removed); it now waits for
+  the mountain terrain, which the reveal already required.
+- Checked: loader reveal, hero, page end at 1440x900 and 390x844; page height at vh 900 is 30325 (was ~31147).
+- Known (pre-existing): on mobile the About labels' two-column grid has no column gap, so the first two run together.

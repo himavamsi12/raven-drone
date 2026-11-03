@@ -10,6 +10,7 @@ import { useLoading } from "@/lib/loading";
 import { SCENE, scenes } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { useRenderScale } from "@/lib/render-scale";
 import { Clouds } from "./Clouds";
 import { CloudWisps } from "./CloudWisps";
 import { DroneRig } from "./DroneRig";
@@ -165,7 +166,8 @@ function FlockPortal({ target, enabled }: { target: THREE.WebGLRenderTarget; ena
 export function MainScene() {
   const width = useThree((s) => s.size.width);
   const height = useThree((s) => s.size.height);
-  const dpr = useThree((s) => s.viewport.dpr);
+  // Scene render density (lib/render-scale.ts): terrain/sky screen-space maths and the flock target follow it.
+  const dpr = useRenderScale((s) => s.sceneDpr);
   const announced = useRef(false);
   const flockOn = useRef(false);
   const [renderFlock, setRenderFlock] = useState(false);

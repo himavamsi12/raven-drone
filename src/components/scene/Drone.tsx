@@ -38,27 +38,19 @@ type LiveMaterial = { material: THREE.MeshStandardMaterial; coat: number; glints
 
 /**
  * Raven adapter: only the visual child changes; shipped flight/camera trackers stay intact.
- * `still` parks the rotors and shows the real blades (studio close-ups), as reduced motion does.
+ * Reduced motion parks the rotors and shows the real blades.
  */
 const DRONE_MAP_KEYS = ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap", "clearcoatNormalMap"];
 /** 8 is the widely supported maximum (three clamps to the GPU limit). */
 const DRONE_ANISOTROPY = 8;
 
-export function RavenModel({
-  envMap,
-  span = 200,
-  still = false,
-  onObject,
-}: {
-  envMap?: THREE.Texture;
-  span?: number;
-  still?: boolean;
-  /** Receives this instance's cloned scene once mounted (footer: turret pivot). */
-  onObject?: (object: THREE.Object3D) => void;
-}) {
+/** Model size across its widest axis, in tracker units. */
+const SPAN = 200;
+
+export function RavenModel({ envMap }: { envMap?: THREE.Texture }) {
   const { scene } = useGLB(ASSETS.raven);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const spin = !reducedMotion && !still;
+  const spin = !reducedMotion;
   const glint = useRef(0);
   const { object, rotors, blur, ownedMaterials, live, envRotation, scale } = useMemo(() => {
     const object = scene.clone(true);
@@ -101,11 +93,10 @@ export function RavenModel({
     // After the material pass: blur discs keep their own shader and cast no shadow.
     const blur = attachRotorBlur(object, rotors);
     ownedMaterials.push(...blur.materials);
-    return { object, rotors, blur, ownedMaterials, live, envRotation, scale: span / Math.max(size.x, size.z) };
-  }, [scene, envMap, span]);
+    return { object, rotors, blur, ownedMaterials, live, envRotation, scale: SPAN / Math.max(size.x, size.z) };
+  }, [scene, envMap]);
   useEffect(() => () => ownedMaterials.forEach((material) => material.dispose()), [ownedMaterials]);
-  useEffect(() => onObject?.(object), [object, onObject]);
-  // Still rotors (reduced motion, close-ups) show the real blades instead of the blur.
+  // Still rotors (reduced motion) show the real blades instead of the blur.
   useEffect(() => setRotorBlur(blur, spin), [blur, spin]);
   useFrame(({ camera, clock }, dt) => {
     if (spin) {

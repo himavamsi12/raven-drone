@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useKeyboardControls, useTexture } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -20,6 +20,7 @@ import { isScrollLocked } from "@/lib/scroll-lock";
 import { openingNow } from "@/lib/story-map";
 import { useLoading } from "@/lib/loading";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { useRenderScale } from "@/lib/render-scale";
 import { MountainMaterial } from "./materials/MountainMaterial";
 import { TerrainMaterial } from "./materials/TerrainMaterial";
 import { buildMountainSlices, mountainSlice, mountainTerrainEnabled, type MountainSlices } from "./mountain-terrain";
@@ -34,6 +35,8 @@ import { TerrainProbe, probeEnabled } from "./TerrainProbe";
 
 /** Distance between tile origins (shipped `X`). */
 export const TILE_STEP = 2 * TERRAIN_SCALE * 200 - 0.01;
+/** The shipped canvas dpr ([1, 1.5], clamped device ratio), which the travel speed was tuned against. */
+const TRAVEL_DPR = typeof window === "undefined" ? 1 : Math.min(Math.max(window.devicePixelRatio || 1, 1), 1.5);
 
 type FogValues = {
   uFogStart: number;
@@ -186,7 +189,8 @@ export function Terrain() {
   const isRaven = variant === "raven";
   const [mountainOn] = useState(() => isRaven && mountainTerrainEnabled());
   const [, getKeys] = useKeyboardControls();
-  const dpr = useThree((s) => s.viewport.dpr);
+  // Screen-space borders are in drawing-buffer pixels of the scene render (lib/render-scale.ts), not the canvas.
+  const dpr = useRenderScale((s) => s.sceneDpr);
   const isMd = useMediaQuery("(min-width: 768px)");
   const boost = useRef(1);
   const appear = useRef(0);
@@ -343,7 +347,9 @@ export function Terrain() {
     if (inThermal) {
       terrainOffset.current = terrainTravel.current + thermal.progress * (terrainRamp.current || 0);
     } else {
-      terrainTravel.current += 2 * dt * dpr * speed;
+      // Shipped speed scales with the canvas dpr, which was [1, 1.5]; the render dpr now goes to 2 (FixedContainer), so
+      // the travel keeps the old factor instead of speeding the ground up on sharper screens.
+      terrainTravel.current += 2 * dt * TRAVEL_DPR * speed;
       terrainOffset.current = terrainTravel.current;
     }
     terrainWrapped.current =

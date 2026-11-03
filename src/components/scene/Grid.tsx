@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
 import { RENDER_ORDER, TERRAIN_SCALE, terrainOffset } from "@/lib/constants";
 import { easeInOutCubic, remapEased } from "@/lib/math";
+import { useRenderScale } from "@/lib/render-scale";
 import { SCENE, scenes } from "@/lib/scenes";
 import { computeScreenUv, gridFunctions } from "./shaders/screen-uv";
 import { useGLB } from "./types";
@@ -115,7 +116,7 @@ export function TacticalGrid({ forceActive, position = [0, 0, 0], scale = 1, isC
   const grid = useGLB(ASSETS.grid);
   const gridCity = useGLB(ASSETS.gridCity);
   const geometry = (isCity ? gridCity : grid).nodes.Plane?.geometry;
-  const { size, viewport } = useThree();
+  const size = useThree((s) => s.size);
   const mesh = useRef<THREE.Mesh>(null);
   const [material] = useState(createGridMaterial);
 
@@ -128,8 +129,10 @@ export function TacticalGrid({ forceActive, position = [0, 0, 0], scale = 1, isC
   useFrame(() => {
     const ph = scenes()[SCENE.PHALANX_AI].progress;
     const ratio = forceActive ? 1 : remapEased(ph, 0, 0.5, 0, 1, easeInOutCubic);
-    material.uniforms.uResolution.value.set(size.width * viewport.dpr, size.height * viewport.dpr);
-    material.uniforms.uDpr.value = viewport.dpr;
+    // Drawn in the scene render (lib/render-scale.ts): its drawing buffer, not the canvas.
+    const dpr = useRenderScale.getState().sceneDpr;
+    material.uniforms.uResolution.value.set(size.width * dpr, size.height * dpr);
+    material.uniforms.uDpr.value = dpr;
     material.uniforms.uHideRatio.value = ratio;
     material.uniforms.uGridDensity.value = 3;
     // Shipped expression `(RW && !force) || 0` evaluates to a boolean; kept as 1/0.
