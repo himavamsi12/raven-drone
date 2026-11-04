@@ -7,6 +7,9 @@
 @theme {
   --font-sans: var(--font-geist-sans), "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  /* Sections 03/04 (user's Figma "Drone Website"): Inter Tight + DM Mono. */
+  --font-tight: var(--font-inter-tight), "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --font-dm: var(--font-dm-mono), "DM Mono", ui-monospace, monospace;
 
   --text-d-h0: 5rem;
   --text-d-h0--line-height: 4.75rem;
@@ -229,5 +232,229 @@ dialog::backdrop {
   }
   .village-scan-line {
     top: 50%;
+  }
+}
+
+/*
+ * Section 03 (Figma 128:804 / 128:830 / 128:857, 1920 x 1207). Desktop: the frame's own sizes in --u (one frame
+ * pixel), fitted to the viewport width or height, whichever is tighter. Phones: a stacked layout in px.
+ */
+.feature-stage {
+  --u: min(100vw / 1920, 100dvh / 1207);
+}
+.feature-heading {
+  position: absolute;
+  left: calc(var(--u) * 120);
+  top: calc(var(--u) * 120);
+  width: calc(var(--u) * 756);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 9);
+}
+.feature-h {
+  font-size: calc(var(--u) * 72);
+  line-height: 1.1;
+  font-weight: 500;
+}
+.feature-p {
+  max-width: calc(var(--u) * 566);
+  font-size: max(calc(var(--u) * 16), 12px);
+  line-height: 1.4;
+}
+.feature-card {
+  position: absolute;
+  left: calc(var(--u) * 120);
+  top: calc(var(--u) * 378);
+  width: calc(var(--u) * 824);
+  height: calc(var(--u) * 709);
+  padding: calc(var(--u) * 48) calc(var(--u) * 40) calc(var(--u) * 40);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.feature-copy {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 12);
+  max-width: calc(var(--u) * 427);
+}
+.feature-title {
+  font-size: calc(var(--u) * 40);
+  line-height: 1.1;
+  font-weight: 500;
+}
+.feature-body {
+  max-width: calc(var(--u) * 400);
+  font-size: max(calc(var(--u) * 16), 12px);
+  line-height: 1.4;
+}
+.feature-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.feature-tags {
+  display: flex;
+  gap: calc(var(--u) * 12);
+}
+.feature-tag {
+  padding: calc(var(--u) * 10);
+  font-size: max(calc(var(--u) * 16), 11px);
+  line-height: 1.4;
+}
+.feature-mark {
+  width: calc(var(--u) * 34);
+  height: calc(var(--u) * 38);
+  margin: 0 calc(var(--u) * 11) calc(var(--u) * 9) 0;
+}
+.feature-dots {
+  position: absolute;
+  left: calc(var(--u) * 85);
+  top: calc(var(--u) * 684);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 4);
+}
+.feature-dot {
+  width: max(calc(var(--u) * 6), 4px);
+  height: max(calc(var(--u) * 6), 4px);
+  background-color: #8d8d8d;
+  transition: height 0.6s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.4s ease;
+}
+.feature-dot[data-active] {
+  height: max(calc(var(--u) * 45), 30px);
+  background-color: #eda401;
+}
+@media (max-width: 767px) {
+  .feature-heading {
+    left: 20px;
+    right: 20px;
+    top: calc(var(--nav-height) + 24px);
+    width: auto;
+    gap: 10px;
+  }
+  .feature-h {
+    font-size: 34px;
+  }
+  .feature-p {
+    max-width: none;
+    font-size: 14px;
+  }
+  .feature-card {
+    left: 20px;
+    right: 20px;
+    top: auto;
+    bottom: 24px;
+    width: auto;
+    height: min(44dvh, 360px);
+    padding: 24px 20px 20px;
+  }
+  .feature-copy {
+    gap: 10px;
+    max-width: none;
+  }
+  .feature-title {
+    font-size: 26px;
+  }
+  .feature-body {
+    max-width: 32ch;
+    font-size: 14px;
+  }
+  .feature-tags {
+    gap: 8px;
+  }
+  .feature-tag {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  .feature-mark {
+    width: 26px;
+    height: 29px;
+    margin: 0;
+  }
+  .feature-dots {
+    left: 8px;
+    top: auto;
+    bottom: calc(24px + min(44dvh, 360px) / 2);
+    transform: translateY(50%);
+  }
+}
+
+/* Section 04 (Figma 100:622 "Section 4", 1920 x 1433): sizes in --u (one frame pixel of the page width). */
+.caps {
+  --u: min(100vw / 1920, 1px);
+  padding: calc(var(--u) * 120) 0;
+}
+.caps-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 9);
+  text-align: center;
+  margin: 0 auto;
+  width: min(calc(var(--u) * 756), calc(100% - 40px));
+}
+.caps-h {
+  font-size: calc(var(--u) * 72);
+  line-height: 1.1;
+  font-weight: 500;
+}
+.caps-p {
+  max-width: calc(var(--u) * 566);
+  font-size: max(calc(var(--u) * 16), 12px);
+  line-height: 1.4;
+}
+.caps-body {
+  margin: calc(var(--u) * 80) auto 0;
+  width: calc(var(--u) * 1680);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 4);
+}
+.caps-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--u) * 4);
+}
+.caps-tab {
+  height: calc(var(--u) * 94);
+  font-size: max(calc(var(--u) * 20), 11px);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.caps-tab:focus-visible {
+  outline: 1px solid #ffcb47;
+  outline-offset: -1px;
+}
+.caps-panel {
+  aspect-ratio: 1680 / 804;
+}
+@media (max-width: 767px) {
+  .caps {
+    padding: 64px 0;
+  }
+  .caps-heading {
+    width: calc(100% - 40px);
+  }
+  .caps-h {
+    font-size: 34px;
+  }
+  .caps-p {
+    max-width: none;
+    font-size: 14px;
+  }
+  .caps-body {
+    margin-top: 32px;
+    width: calc(100% - 40px);
+    gap: 4px;
+  }
+  .caps-tabs {
+    gap: 4px;
+  }
+  .caps-tab {
+    height: 48px;
+  }
+  .caps-panel {
+    aspect-ratio: 16 / 9;
   }
 }

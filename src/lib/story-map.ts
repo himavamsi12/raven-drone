@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { easeInOutCubic } from "./math";
-import { PAYLOAD_VH, payloadRange } from "./payload";
+import { FEATURES } from "./features";
+import { altitudeRange, PAYLOAD_VH, payloadRange, ROUTE_VH, routeRange, SPEED_VH, speedRange } from "./payload";
 import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange } from "./scenes";
 
 /**
@@ -42,7 +43,7 @@ export const OPENING_VH = 300;
 /** Payload stage spacer height in vh (page.tsx `#payload-band`). */
 const PAYLOAD_VH_PAGE = PAYLOAD_VH;
 
-export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F1: 0, C0: 0, C1: 0, preroll: false };
+export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F1: 0, C0: 0, C1: 0, FT: Number.POSITIVE_INFINITY, preroll: false };
 
 /**
  * Payload page (user, 2026-11-03: "only these three things we are going to show"): opening -> hero -> payload stage
@@ -52,6 +53,7 @@ export const storyMap = { vh: 0, P: 0, E1: 0, S2: 0, L2: 0, X: 0, W: 0, F0: 0, F
  * callers stay unchanged.
  *   opening:  page [0, P]          story 0, camera flies into the hero frame (scene/opening.ts)
  *   payload:  page [P + 1, P + 1 + T]  story 1 (hero), payload progress 0 -> 1
+ *   altitude: page [P + 1 + T, ... + T2]  story 1, altitude progress 0 -> 1 (lib/payload.ts ALTITUDE_*)
  */
 export const PAYLOAD_ONLY = true;
 
@@ -105,6 +107,16 @@ export function measureStoryMap() {
     storyMap.X = storyMap.L2 = Number.POSITIVE_INFINITY;
     payloadRange.Q = storyMap.P + 1; // the opening range ends at the end of the 1px intro (pageBands)
     payloadRange.T = (PAYLOAD_VH_PAGE / 100) * vh;
+    // The altitude side view was removed (user, 2026-11-03): its range is empty, the mountain stage follows the payload.
+    altitudeRange.Q = payloadRange.Q + payloadRange.T;
+    altitudeRange.T = 0;
+    routeRange.Q = payloadRange.Q + payloadRange.T; // `#route-band` follows the payload band directly
+    routeRange.T = (ROUTE_VH / 100) * vh;
+    speedRange.Q = routeRange.Q + routeRange.T; // `#speed-band` follows the mountain band directly
+    speedRange.T = (SPEED_VH / 100) * vh;
+    // Section 03 (`#features-band`, user 2026-11-04) slides up over the stage; FT = its top = where it covers the screen.
+    const features = document.getElementById("features-band");
+    storyMap.FT = features ? features.getBoundingClientRect().top + window.scrollY : Number.POSITIVE_INFINITY;
   }
   return ranges;
 }
@@ -137,7 +149,8 @@ export function toPage(story: number) {
  * screen.
  */
 export function stageTop(page: number): number | null {
-  if (PAYLOAD_ONLY) return 0; // the stage covers the whole page
+  // Payload page: the stage covers the page until Section 03 has slid over it, then it is off (no renders behind it).
+  if (PAYLOAD_ONLY) return page < storyMap.FT ? 0 : null;
   const { vh, X, L2 } = storyMap;
   if (page <= X + L2) return 0;
   if (page < X + L2 + vh) return -(page - X - L2);
@@ -155,7 +168,16 @@ export function pageBands(ranges: SceneRange[]) {
     // One gesture plays the opening, the next one the whole payload stage (and back).
     const { Q, T } = payloadRange;
     storyMap.C0 = storyMap.C1 = 0;
-    return [[opening, { ...intro, start: Q, height: T, end: Q + T }]];
+    const R = routeRange; // and one more the mountain stage (pull-back, route line, altitude)
+    return [
+      [
+        opening,
+        { ...intro, start: Q, height: T, end: Q + T },
+        { ...intro, start: R.Q, height: R.T, end: R.Q + R.T },
+        { ...intro, start: speedRange.Q, height: speedRange.T, end: speedRange.Q + speedRange.T }, // and the speed stage
+        ...featureStops(intro),
+      ],
+    ];
   }
   // Journey is not a stop: Route's range starts where Journey starts, so one gesture from Prepare plays both.
   const band1 = pick(BAND_1).filter((r) => r.id !== SCENE.INTRO_SCENE && r.id !== SCENE.FLOCK_SCENE);
@@ -174,6 +196,20 @@ export function pageBands(ranges: SceneRange[]) {
   storyMap.C1 = cuts[cuts.length - 1];
   const band2 = [...phalanx, ...cuts.slice(1).map((end, i) => ({ ...review, start: cuts[i], height: end - cuts[i], end }))];
   return [[opening, ...band1, ...band2]];
+}
+
+/**
+ * Section 03 stops (user, 2026-11-04): one gesture slides the section up over the speed frame, then one per feature
+ * (the pinned screen of `#features-band` moves one viewport per feature, FeatureSection picks the nearest). After the
+ * last feature the page scrolls freely into Section 04.
+ */
+function featureStops(intro: SceneRange): SceneRange[] {
+  const { FT, vh } = storyMap;
+  const S = speedRange.Q + speedRange.T;
+  if (!Number.isFinite(FT) || FT <= S) return [];
+  const stops: SceneRange[] = [{ ...intro, start: S, height: FT - S, end: FT }];
+  for (let k = 1; k < FEATURES.length; k++) stops.push({ ...intro, start: FT + (k - 1) * vh, height: vh, end: FT + k * vh });
+  return stops;
 }
 
 /** Diagonal wipe progress for a page scroll (0 = Route, 1 = Care teams map fully swept). */

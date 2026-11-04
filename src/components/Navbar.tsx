@@ -29,12 +29,16 @@ const CHAPTERS: [SceneId, string][] = [
 const MENU_LINKS: { label: string; target: string | null }[] = [
   { label: "The delivery story", target: null },
   { label: "Payload", target: "#payload" },
+  { label: "Altitude", target: "#route" },
+  { label: "Speed", target: "#speed" },
 ];
 
 /** Homepage bar links (asset/html/raven_homepage.html `.links`): in-page destinations. */
 const BAR_LINKS: { label: string; target: string | null }[] = [
   { label: "Story", target: null },
   { label: "Payload", target: "#payload" },
+  { label: "Altitude", target: "#route" },
+  { label: "Speed", target: "#speed" },
 ];
 /** Chapter ticks (Airframe ... Care teams) are off: those chapters are no longer on the page. */
 const SHOW_CHAPTER_TICKS = false;

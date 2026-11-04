@@ -21,3 +21,18 @@ The first argument is any `node_modules` folder holding `@gltf-transform/core` a
 v2 result: 1,995,084 bytes; the 11 JPEG maps are byte-identical to the source. Lossless WebP of those JPEG-decoded
 pixels was 6.59 MB, so it is skipped (v1 used `webp --lossless --effort 100` on its single PNG: 186,780 bytes).
 Rotor hubs after recentring: X/Z unchanged from v1, Y 0.3385 (v1 0.3485: the new underslung pods move the bounds).
+
+## Feature-card studio renders
+
+`render_feature_cards.py` imports the black hexa into its own scene `Raven_Studio` (other scenes untouched), swaps
+`REF_Carbon` for two lacquered-twill copies (`RAVEN_Carbon_Arm` at 1.8x UV scale, `RAVEN_Carbon_Plate` at 1x), adds a
+black cyclorama, grid softboxes and rim strips, and renders seven cameras with Cycles (GPU, 512 adaptive samples,
+OIDN, AgX Medium High Contrast) to 2560x1440 16-bit PNG: carbon arm, sealed motor pod, carbon frame plate, carbon
+landing gear, EO/IR camera, medical box, hero. Close-ups hide the floor from camera (black ground, reflections kept).
+
+```bash
+blender -b -P glb/new-drone/render_feature_cards.py -- <Hexa_Medical_Drone_Black.glb> <out_dir> [carbon-arm motor-pod ...]
+```
+
+First set (2026-11-03) was rendered on the Windows workstation (RTX 3060, 30-95 s per frame) into
+`C:\Users\india\Documents\raven-feature-renders\` (PNG masters, `web/` WebP q90 at 54-171 KB, `raven-studio.blend`).

@@ -14,7 +14,7 @@ import {
   terrainTravel,
   terrainWrapped,
 } from "@/lib/constants";
-import { easeInOutCubic, remap, remapEased, wrap } from "@/lib/math";
+import { easeInOutCubic, lerp, remap, remapEased, wrap } from "@/lib/math";
 import { SCENE, scenes, type SceneId } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
 import { openingNow } from "@/lib/story-map";
@@ -22,7 +22,7 @@ import { useLoading } from "@/lib/loading";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useRenderScale } from "@/lib/render-scale";
 import { MountainMaterial } from "./materials/MountainMaterial";
-import { payloadClayUniforms, TerrainMaterial } from "./materials/TerrainMaterial";
+import { CLAY_FOG_PAYLOAD, CLAY_FOG_SIDE, payloadClayUniforms, TerrainMaterial } from "./materials/TerrainMaterial";
 import { PAYLOAD_TIMELINE, payloadLook } from "@/lib/payload";
 import { buildMountainSlices, mountainSlice, mountainTerrainEnabled, type MountainSlices } from "./mountain-terrain";
 import { getNoiseTexture } from "./textures";
@@ -36,6 +36,8 @@ import { TerrainProbe, probeEnabled } from "./TerrainProbe";
 
 /** Distance between tile origins (shipped `X`). */
 export const TILE_STEP = 2 * TERRAIN_SCALE * 200 - 0.01;
+/** Altitude stage: lift (x the mountain part) of the ridges the drone flies toward, so the side view shows them taller. */
+const ALTITUDE_RISE_LIFT = 8;
 /** The shipped canvas dpr ([1, 1.5], clamped device ratio), which the travel speed was tuned against. */
 const TRAVEL_DPR = typeof window === "undefined" ? 1 : Math.min(Math.max(window.devicePixelRatio || 1, 1), 1.5);
 
@@ -118,6 +120,11 @@ type TileProps = {
   variants?: readonly THREE.Material[];
   /** Mountain terrain (`?terrain=mountain`): the tile shows its super-tile slice for its column and ground strip. */
   slices?: MountainSlices | null;
+  /**
+   * City tile only: the natural mountain look used in the altitude and route side views, which see this tile from
+   * afar; the shipped city ground has no mountain part, so it read as a flat hole between the raised ridges.
+   */
+  sideNatural?: { variants: readonly THREE.Material[]; slices: MountainSlices } | null;
 };
 
 /** Tile rows the wrapped travel has advanced: a ground strip keeps its variant when the tiles jump back a row. */
@@ -137,10 +144,12 @@ function Tile({
   detectionY,
   variants,
   slices,
+  sideNatural,
 }: TileProps) {
   const is2xl = useMediaQuery("(min-width: 1536px)");
   const ref = useRef<THREE.Group>(null);
   const land = useRef<THREE.Mesh>(null);
+  const buildings = useRef<THREE.Group>(null);
   const z = TILE_STEP * row;
   const x = TILE_STEP * col;
   useEffect(() => {
@@ -152,10 +161,17 @@ function Tile({
   useFrame(() => {
     if (!ref.current) return;
     ref.current.position.z = z - (terrainWrapped.current || 0);
-    if (desktopOnly) ref.current.visible = is2xl;
+    // The side views (altitude, route) see the whole field from afar: the wide-screen-only tiles fill it there too.
+    if (desktopOnly) ref.current.visible = is2xl || payloadLook().a > 0;
     const strip = row + wrapsTravelled();
     if (variants && land.current) land.current.material = variants[ravenTileVariant(col, strip)];
     if (slices && land.current) land.current.geometry = mountainSlice(slices, col, strip);
+    if (sideNatural && land.current) {
+      const side = payloadLook().a > 0;
+      land.current.material = side ? sideNatural.variants[ravenTileVariant(col, strip)] : material;
+      land.current.geometry = side ? mountainSlice(sideNatural.slices, col, strip) : geometries[1];
+      if (buildings.current) buildings.current.visible = !side;
+    }
   });
   return (
     <group ref={ref}>
@@ -172,7 +188,9 @@ function Tile({
         <mesh frustumCulled={false} renderOrder={RENDER_ORDER.TERRAIN} geometry={houses.geometry} material={houses.material} />
       )}
       {isCity && (
-        <Buildings material={material} />
+        <group ref={buildings}>
+          <Buildings material={material} />
+        </group>
       )}
       {withPoints && <DetectionPoints groundY={detectionY} villages={!!houses} />}
     </group>
@@ -345,7 +363,7 @@ export function Terrain() {
       (0.25 + 0.2 * delta.progress + 0.2 * detection.progress) *
       (1 - remapEased(thermal.progress, 0, 0.75, 0, 1, easeInOutCubic)) *
       boost.current *
-      (1 - (1 - PAYLOAD_TIMELINE.claySpeed) * look.clay);
+      (1 - (1 - PAYLOAD_TIMELINE.claySpeed) * look.clay * (1 - look.fog)); // full speed again in the side view
 
     const inThermal = thermal.showRatio > 0;
     if (inThermal !== wasThermal.current) {
@@ -374,6 +392,7 @@ export function Terrain() {
     const scan = remapEased(phalanx.progress, 0, 0.5, 0, 1, easeInOutCubic);
     for (const m of materials) m.uniforms.uHideRatio.value = scan;
     // Raven clay map (clay-map.ts): ClayTerrain draws the swept ground, the tiles step aside.
+    // Payload page: DroneRig hides the tiles once the clay front has handed the ground to the section terrain.
     if (tiles.current) tiles.current.visible = !(clayState.enabled && clayOn(state));
     urban.uniforms.uisCity.value = nearCity;
 
@@ -390,7 +409,17 @@ export function Terrain() {
     for (const m of materials) applyFog(m, steps);
 
     const opening = openingNow();
-    if (groupOpening.current) groupOpening.current.visible = opening < 1;
+    // Also in the altitude stage: its side view looks along the flight path at the ground ahead (rows -1..-3).
+    if (groupOpening.current) groupOpening.current.visible = opening < 1 || look.a > 0;
+    // The side view looks along +z (flight direction): rows 3-4 carry the rising ridges ahead of the drone.
+    if (look.a > 0) {
+      if (groupCity.current) groupCity.current.visible = true;
+      if (groupWide.current) groupWide.current.visible = true;
+    }
+    // Altitude side view: the ridges the drone flies toward (+z, right of the frame) rise taller.
+    payloadClayUniforms.uPayloadSide.value = look.fog;
+    payloadClayUniforms.uPayloadRiseLift.value = ALTITUDE_RISE_LIFT;
+    payloadClayUniforms.uPayloadFog.value.set(lerp(CLAY_FOG_PAYLOAD.x, CLAY_FOG_SIDE.x, look.fog), lerp(CLAY_FOG_PAYLOAD.y, CLAY_FOG_SIDE.y, look.fog));
     const w = 1 - openingEase(opening);
     for (const m of materials) {
       // Opening: far tiles dissolve into the panorama behind them (OpeningSky), not into a flat haze colour.
@@ -417,7 +446,7 @@ export function Terrain() {
   );
 
   return (
-    <group ref={tiles}>
+    <group ref={tiles} name="TerrainTiles">
       {probe && <TerrainProbe />}
       <group ref={groupA}>
         {tile([-1, 0], { desktopOnly: true })}
@@ -434,7 +463,13 @@ export function Terrain() {
       </group>
       <group ref={groupCity}>
         {tile([-1, 3])}
-        {tile([0, 3], { material: urban, isCity: true, variants: undefined, slices: undefined })}
+        {tile([0, 3], {
+          material: urban,
+          isCity: true,
+          variants: undefined,
+          slices: undefined,
+          sideNatural: slices && variants ? { variants, slices } : null,
+        })}
         {tile([1, 3])}
       </group>
       <group ref={groupWide}>

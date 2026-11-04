@@ -41,6 +41,11 @@ attribute vec4 aGrad;  // xy: height gradient (x, z), zw: gradient of the mounta
 attribute vec4 aData;  // x: concavity, y: village mask, z: mountain part of the height, w: cast shadow
 uniform vec3 uMapOrigin;
 uniform float uLiftMax;
+// Payload page altitude stage (TerrainMaterial payloadClayUniforms): the side view looks from -x, flight direction +z
+// on the right. uPayloadSide (0..1) eases off the lifts that would sit behind the drone (-z) or between the camera and
+// the drone (-x), and raises the ridges the drone flies toward (+z) by uPayloadRiseLift.
+uniform float uPayloadSide;
+uniform float uPayloadRiseLift;
 
 varying vec2 vUv;
 varying vec3 vViewNormal;
@@ -54,9 +59,13 @@ varying float vLift;
 // 1 in the camera corridor (|x| < 13 map units, measured drone/camera paths reach x ~ +-11), rising toward the far
 // side columns and ahead of the drones.
 float liftAt(vec2 m) {
-    float side = smoothstep(13.0, 26.0, abs(m.x));
+    float w = uPayloadSide;
+    float sideFar = smoothstep(13.0, 26.0, m.x);   // behind the drone in the side view (backdrop)
+    float sideNear = smoothstep(13.0, 26.0, -m.x); // camera side in the side view
     float ahead = smoothstep(-6.0, -34.0, m.y);
-    return 1.0 + uLiftMax * max(side, ahead);
+    float rise = smoothstep(13.0, 38.0, m.y);      // where the drone heads in the side view (none under it, m.y ~8.6)
+    float base = max(max(sideFar * (1.0 - 0.45 * w), sideNear * (1.0 - w)), ahead * (1.0 - w));
+    return 1.0 + uLiftMax * base + uPayloadRiseLift * rise * w;
 }
 
 void main() {

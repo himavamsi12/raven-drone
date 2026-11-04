@@ -8,7 +8,7 @@ import { linear } from "@/lib/math";
 import { useLoading } from "@/lib/loading";
 import { isScrollLocked, LOCK_EVENT } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { PAYLOAD_MS, payloadProgress, payloadRange, usePayload } from "@/lib/payload";
+import { altitudeProgress, altitudeRange, PAYLOAD_MS, payloadProgress, payloadRange, routeProgress, routeRange, speedProgress, speedRange, usePayload } from "@/lib/payload";
 
 /** Returns a callback that scrolls to the end of `id` over 3s (shipped `w`). */
 export function useScrollToScene(id: SceneId) {
@@ -62,7 +62,7 @@ function useSceneProgressDriver() {
       const data = sceneDataAt(toStory(page), ranges.current, vh);
       const { updateSceneData } = useScenes.getState();
       for (const r of ranges.current) updateSceneData(r.id, data[r.id]);
-      usePayload.getState().setP(payloadProgress(page)); // hero copy / payload callout thresholds
+      usePayload.getState().setP(payloadProgress(page), altitudeProgress(page), routeProgress(page), speedProgress(page)); // hero copy / payload callout thresholds
     };
     const current = () => ({ scroll: lenis.actualScroll || lenis.scroll || 0 });
     measure();
@@ -203,7 +203,16 @@ function SceneController() {
           const inClimb = storyMap.C1 > storyMap.C0 && Math.min(scroll, t) >= storyMap.C0 - 1 && Math.max(scroll, t) <= storyMap.C1 + 1;
           // Raven payload stage (lib/payload.ts): one gesture plays it over PAYLOAD_MS whatever the viewport height.
           const { Q, T } = payloadRange;
-          const inPayload = T > 0 && Math.min(scroll, t) >= Q - 1 && Math.max(scroll, t) <= Q + T + 1;
+          // Same pace for the altitude and route stages right after it.
+          const stagesEnd =
+            speedRange.T > 0
+              ? speedRange.Q + speedRange.T
+              : routeRange.T > 0
+                ? routeRange.Q + routeRange.T
+                : altitudeRange.T > 0
+                  ? altitudeRange.Q + altitudeRange.T
+                  : Q + T;
+          const inPayload = T > 0 && Math.min(scroll, t) >= Q - 1 && Math.max(scroll, t) <= stagesEnd + 1;
           const rate =
             scroll < storyMap.P + 1 && t <= storyMap.P + 1
               ? Math.max(storyMap.P / OPENING_MS, 0.2)

@@ -4,7 +4,7 @@ Context for coding agents (Codex, Claude Code, others). Read this before editing
 
 ## Current direction — Raven (user update)
 
-The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. Hero/swarm use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The light-gray coaxial quad sources (`glb/raven-quad/`) are kept because `build_silhouettes.py` there builds the flock/ops silhouettes (still the quad); the loader and boot SVG show the hexa since 2026-10-31. The original `raven_drone.glb`, the earlier dark hexacopter (`glb/raven-refined/`) and the Blender story scene (`glb/raven-story/`) were removed in the 2026-10-31 cleanup (recoverable from git history). Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. The one exception is the user-supplied payload figure "15–25 kg" (2026-11-03), shown only in the payload callout (`lib/payload.ts` `PAYLOAD_COPY`). Every jet silhouette is now a Raven drone (loader, sync flock, Raven Ops drones). The footer (CTA, legal links, landing drone, wordmark) was removed on 2026-11-03 (user): the page ends with the About section.
+The user has repurposed this project as **Raven**, a medical delivery drone concept for remote mountain villages and cold-climate/tundra communities. This overrides the original brand/copy fidelity goal. Preserve existing camera tracks, scene spans, scrolling, and transitions. Hero/swarm use `public/assets/models/raven_hexa.glb`, the user-supplied black hexacopter medical drone (`glb/new-drone/Hexa_Medical_Drone_Black.glb`, v2 from 2026-10-30: 6 props, white medical box, EO/IR turret, LiDAR and thermal pods; v1 kept as `Hexa_Medical_Drone_Black_v1.glb`), prepared by `glb/new-drone/prepare_hexa.mjs`. The light-gray coaxial quad sources (`glb/raven-quad/`) are kept because `build_silhouettes.py` there builds the flock/ops silhouettes (still the quad); the loader and boot SVG show the hexa since 2026-10-31. The original `raven_drone.glb`, the earlier dark hexacopter (`glb/raven-refined/`) and the Blender story scene (`glb/raven-story/`) were removed in the 2026-10-31 cleanup (recoverable from git history). Product performance is unspecified: do not invent payload, range, speed, certification, or cold-weather ratings. The exceptions are the user-supplied figures "15–25 kg" payload and "5,000 m" altitude (2026-11-03), shown only in their callouts (`lib/payload.ts` `PAYLOAD_COPY`, `ALTITUDE_COPY`). Every jet silhouette is now a Raven drone (loader, sync flock, Raven Ops drones). The footer (CTA, legal links, landing drone, wordmark) was removed on 2026-11-03 (user): the page ends with the About section.
 
 ## What this project is
 
@@ -112,8 +112,21 @@ scripts/asset-manifest.mjs  manifest generator
   the lens travel streak off, the camera eased toward the medical box (`scene/payload-camera.ts`, from the live hero
   pose), the drone's own materials switched to the vector form top -> bottom (`Drone.tsx` `vectorise`, outline
   `EdgesGeometry` on `DRONE_LAYER`, rotor discs drawn as rings), the box turned yellow, then the DOM callout
-  (`overlays/PayloadCallout.tsx`, box screen point from DroneRig `payloadScreen`). The bullets below describe the
-  shipped story bands, still in the code but off the page.
+  (`overlays/PayloadCallout.tsx`, box screen point from DroneRig `payloadScreen`). From the payload sweep on, the
+  ground is the terrain of the `net` section of `assets/html/raven_homepage (3).html` ("Mapped to the last ridge"),
+  ported exactly (`scene/net-terrain-field.ts` + worker, `scene/net-terrain.ts`: height field, contours, dot grid, hover
+  glow, idle sway): the clay front cuts the tiles (`uPayloadNet`) and draws it beyond, pivoted on the drone over its
+  depot. Then the **mountain stage** (`#route-band` 200dvh, `#route` anchor; same pace): the camera pulls back to the
+  section's view (its fog takes over, the massif comes out of the haze) while the drone turns to face up its route; the
+  yellow route ribbon draws to Ridge Clinic (a faint white one to Summit Station, the second checkpoint), then the
+  drone flies the route and "Operating altitude" counts 0 -> 5,000 m with its climb (`ROUTE_FLIGHT`,
+  `overlays/RouteCallout.tsx`); leg 2 of the connected route then draws on in green from the clinic to Summit Station
+  (`netArcRoute`: climb, cruise, descend). Then the **speed stage** (`#speed-band`, `#speed`): same view, the drone
+  flies leg 2 while `overlays/SpeedCallout.tsx` shows speed (~79 km/h from the user's own `net` section figures,
+  `SPEED_FIGURES`), distance left and time. The altitude side
+  view (user removed it 2026-11-03) is still in the code (`applyAltitudeCamera`, the altitude line) but has no page
+  range. No speed/distance figures until the user supplies them. After the speed stage (2026-11-04): Section 03 (`#features-band`, three feature stops, slides up over the stage, which then hides) and Section 04 (`#capabilities`, auto-advancing capability videos); see RECONSTRUCTION.md "Sections 03 and 04". The
+  bullets below describe the shipped story bands, still in the code but off the page.
 
 - Opening (user, 2026-11-01; replaced the pad takeoff film): page [0, P] (`#opening`, `OPENING_VH` 300) flies the
   live camera from a low wide shot under the hovering drone (procedural sky dome + ridge rings + Blender land layer,
@@ -195,7 +208,8 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 ## Verification tips
 
 - Payload page at vh=900 (1440 wide): opening low shot 0, hero frame 2701, payload stage 2701 -> 4501 (callout from
-  ~4321), page height 5401; 390×844: hero 2533, payload frame 4221. The positions below are for the old story bands.
+  ~4321), mountain stage 4501 -> 6301 (route line and altitude from ~6121), speed stage 6301 -> 8101 (flight and HUD
+  from ~7921), page height 9001; 390×844: hero 2533, payload 4221, mountain 5909, speed 7597. The positions below are for the old story bands.
 - Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
   delta end 7201, swarm 11701, mission 16201, (Journey, compressed: 16201 → 17551), Route 22051 (= band 2 start, wipe
   22051 → 24301), Care teams frame 26551, Hill clinic stop 27676, Ridge village stop (story end) 28801, stage gone
@@ -216,7 +230,8 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Open work (see RECONSTRUCTION.md for full list)
 
-- Payload page (2026-11-03): not checked on Safari/iOS or low-end GPUs; the callout's leader line crosses a front
+- Sections 03/04 (2026-11-04, user Figma): feature cards 1-2 use titles/tags chosen from their images (Figma has a placeholder card); confirm copy with the user. Not checked on Safari/iOS touch.
+- Payload page (2026-11-03): the route stage has no speed/distance figures yet (waiting on the user). Not checked on Safari/iOS or low-end GPUs; the callout's leader line crosses a front
   rotor at 1440×900; the vector form is a shader switch on the real hexa (no separate low-poly model). Old story code
   (bands, wipe, clay landscape, chapters) is unreachable but not removed.
 

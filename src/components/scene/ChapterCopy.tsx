@@ -11,7 +11,9 @@ import { SCENE, useScenes, type SceneId } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useLenis } from "lenis/react";
 import { linear } from "@/lib/math";
-import { PAYLOAD_MS, PAYLOAD_TIMELINE, payloadRange, usePayload } from "@/lib/payload";
+import { PAYLOAD_MS, PAYLOAD_TIMELINE, payloadRange, ROUTE_TIMELINE, SPEED_TIMELINE, usePayload } from "@/lib/payload";
+import { SpeedCallout } from "./overlays/SpeedCallout";
+import { RouteCallout } from "./overlays/RouteCallout";
 import { PayloadCallout } from "./overlays/PayloadCallout";
 
 const ENTER = { opacity: 0, y: 8, color: "#FF2200" };
@@ -243,9 +245,36 @@ export function ChapterCopy() {
   );
   const hidden = useLoading((s) => s.loadingCanvasHidden);
   // Raven payload page (lib/payload.ts): the hero copy leaves as the stage starts; the payload callout comes in at its end.
-  const stage = usePayload((s) => (s.p >= PAYLOAD_TIMELINE.callout ? 2 : s.p > PAYLOAD_TIMELINE.heroExit ? 1 : 0));
-  const Active = stage === 2 ? PayloadCallout : stage === 1 ? null : index >= 0 ? CHAPTERS[index].component : null;
-  const key = stage === 2 ? "payload" : index;
+  // Then the mountain stage: the payload callout leaves as it starts; altitude and checkpoint come in with the route line.
+  // Then the speed stage: the mountain callout leaves, the speed HUD comes in as the drone starts leg 2.
+  const stage = usePayload((s) =>
+    s.sp >= SPEED_TIMELINE.fly
+      ? 6
+      : s.sp > SPEED_TIMELINE.routeExit
+        ? 5
+        : s.r >= ROUTE_TIMELINE.path
+      ? 4
+      : s.r > ROUTE_TIMELINE.payloadExit
+        ? 3
+        : s.p >= PAYLOAD_TIMELINE.callout
+          ? 2
+          : s.p > PAYLOAD_TIMELINE.heroExit
+            ? 1
+            : 0,
+  );
+  const Active =
+    stage === 6
+      ? SpeedCallout
+      : stage === 4
+        ? RouteCallout
+        : stage === 2
+          ? PayloadCallout
+          : stage === 1 || stage === 3 || stage === 5
+            ? null
+            : index >= 0
+              ? CHAPTERS[index].component
+              : null;
+  const key = stage === 6 ? "speed" : stage === 4 ? "route" : stage === 2 ? "payload" : index;
   return (
     // Always shown (was opacity-0 without an active chapter, which cut the hero copy's exit when the stage starts).
     <div className="z-navbar absolute inset-0 h-dvh w-full justify-center md:flex">

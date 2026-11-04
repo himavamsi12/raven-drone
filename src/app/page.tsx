@@ -1,13 +1,15 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { CapabilityVideos } from "@/components/sections/CapabilityVideos";
+import { FeatureSection } from "@/components/sections/FeatureSection";
 
 const Loader = dynamic(() => import("@/components/loading/Loader").then((m) => m.Loader), { ssr: false });
 const FixedContainer = dynamic(() => import("@/components/scene/FixedContainer").then((m) => m.FixedContainer), { ssr: false });
 
 /**
  * Raven payload page (user, 2026-11-03: "only these three things we are going to show"): opening -> hero -> payload
- * stage (real terrain to clay, drone to vector form, payload callout). The fixed stage covers the whole page; the
+ * stage (real terrain to clay, drone to vector form, payload callout) -> mountain stage (the `net` section terrain, route line to the top, altitude). The fixed stage covers the whole page; the
  * spacers below are its scroll (lib/story-map.ts, lib/payload.ts).
  */
 export default function Home() {
@@ -21,8 +23,20 @@ export default function Home() {
       <div id="payload-band" className="pointer-events-none relative w-full" style={{ height: "calc(200dvh + 1px)" }}>
         <div id="payload" className="absolute left-0 h-0 w-full" style={{ top: "calc(200dvh + 1px)" }} />
       </div>
-      {/* One screen: the payload frame is the last scroll position (page height - viewport). */}
+      {/* Mountain stage (ROUTE_VH): pull-back to the section terrain, route line, altitude; `#route` marks its end frame. */}
+      <div id="route-band" className="pointer-events-none relative w-full" style={{ height: "200dvh" }}>
+        <div id="route" className="absolute left-0 h-0 w-full" style={{ top: "200dvh" }} />
+      </div>
+      {/* Speed stage (SPEED_VH): drone POV along the valley leg, speed / distance / time; `#speed` marks its end frame. */}
+      <div id="speed-band" className="pointer-events-none relative w-full" style={{ height: "200dvh" }}>
+        <div id="speed" className="absolute left-0 h-0 w-full" style={{ top: "200dvh" }} />
+      </div>
+      {/* One screen: the speed frame stays on screen while Section 03 slides up over it. */}
       <div className="pointer-events-none relative w-full" style={{ height: "100dvh" }} />
+      {/* Section 03 (Figma 128:804/830/857): pinned, one feature per scroll stop; the stage hides once it is covered. */}
+      <FeatureSection />
+      {/* Section 04 (Figma 100:622): capability videos, played one after another. */}
+      <CapabilityVideos />
     </main>
   );
 }

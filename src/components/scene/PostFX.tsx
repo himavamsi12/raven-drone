@@ -635,7 +635,8 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     if (mountainLens) {
       // A real 1 px unsharp kernel (in drawing-buffer pixels) at a fixed strength; light grain.
       final.u("uGrainAmount").value = MOUNTAIN_CLARITY.grain + (MOUNTAIN_CLARITY.heroGrain - MOUNTAIN_CLARITY.grain) * h;
-      final.u("uSharpenOpacity").value = MOUNTAIN_CLARITY.sharpen;
+      // Payload page: no unsharp mask on the clay view (it ringed the altitude line and the vector outlines).
+      final.u("uSharpenOpacity").value = MOUNTAIN_CLARITY.sharpen * (1 - payloadLook().clay);
       final.u("uSharpenKernelOffset").value = 1 / Math.max(size.width * gl.getPixelRatio(), 1);
     } else {
       final.u("uGrainAmount").value = DAYLIGHT.grain + (HERO_LIGHT.post.grain - DAYLIGHT.grain) * h;
@@ -839,7 +840,8 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
     // Raven clay map (clay-map.ts): a sharp model, no depth of field (its contours and dots are the content).
     const dof = lensOn && !clayState.on;
     const [cocBase, cocTop] = mountainLens ? [MOUNTAIN_CLARITY.cocBase, MOUNTAIN_CLARITY.cocTop] : [COC_INF_PX_BASE, COC_INF_PX];
-    lens.u("uCocInf").value = dof ? cocBase + (cocTop - cocBase) * topView : 0;
+    // Payload page route stage: the `net` section terrain is a sharp model like the clay map (no defocus).
+    lens.u("uCocInf").value = dof ? (cocBase + (cocTop - cocBase) * topView) * (1 - payloadLook().section) : 0;
     lens.u("uMaxBlurPx").value = (mountainLens ? MOUNTAIN_CLARITY.maxBlurPx : MAX_BLUR_PX) * ((size.height * ratio) / 1080);
     lens.u("uMaxCocPx").value = MAX_COC_PX * ((size.height * ratio) / 1080);
     lens.u("uTerrainTop").value = mountainLens ? MOUNTAIN_TERRAIN_TOP : TERRAIN_TOP;

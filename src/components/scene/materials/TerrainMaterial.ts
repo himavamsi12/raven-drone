@@ -9,6 +9,14 @@ import { computeScreenUv } from "../shaders/screen-uv";
  * ridges toward the camera (user's reference recording: the far terrain changes first), with a faint scan line on
  * the front. Shared uniform objects: one write reaches every terrain material (tiles, villages).
  */
+/**
+ * Clay fog to the background (world units from the camera, start/end): far ridges fade into black like the reference.
+ * The altitude side view looks along the flight path, so it opens up to show the ridges ahead (they end ~56 units
+ * ahead of the drone with the last opening row, so the fog must close before that edge).
+ */
+export const CLAY_FOG_PAYLOAD = new THREE.Vector2(16, 58);
+export const CLAY_FOG_SIDE = new THREE.Vector2(26, 62);
+
 export const payloadClayUniforms = {
   /** Sweep progress 0 (live ground) -> 1 (all clay). */
   uPayloadClay: { value: 0 },
@@ -18,12 +26,32 @@ export const payloadClayUniforms = {
   uPayloadIce: { value: new THREE.Color("#e4e4e4") }, // CLAY.ice
   /** Clay key light (world): from the upper left of the hero/payload views (camera looks toward -z). */
   uPayloadLight: { value: new THREE.Vector3(-0.62, 0.62, -0.2).normalize() },
+  /** Altitude side view weight and the lift of the ridges the drone flies toward (MountainMaterial liftAt). */
+  uPayloadSide: { value: 0 },
+  uPayloadRiseLift: { value: 0 },
+  /**
+   * Altitude stage ground ripples (user, 2026-11-03: "where the line is meeting the terrain a little waves should come
+   * and it will disappear ... fade in fade out"): broken rings painted on the ground itself around the point the
+   * altitude line meets it (world), so they follow the relief and hide behind ridges. DroneRig writes them.
+   */
+  uPayloadRippleAt: { value: new THREE.Vector3() },
+  uPayloadRipple: { value: 0 },
+  uPayloadTime: { value: 0 },
+  uPayloadRippleColor: { value: new THREE.Color("#ffcb47") },
+  /**
+   * 1 once the `net` section terrain is built (scene/net-terrain.ts): the clay front then hands the ground over to it
+   * (tiles are cut beyond the front, the section terrain is drawn there), so the payload frame already stands on the
+   * section's valley with its massif behind. DroneRig writes it.
+   */
+  uPayloadNet: { value: 0 },
+  /** Clay fog start/end (Terrain writes it: payload view -> altitude side view). */
+  uPayloadFog: { value: CLAY_FOG_PAYLOAD.clone() },
 };
 
 /** Clay sweep: front distance from the camera at progress 0 / 1, and the soft band either side of it (world units). */
-const CLAY_FRONT = { far: 46, near: 0, band: 4 }; // the hero/payload views see ground from ~5 to ~40 units
-/** Clay fog to the background (world units from the camera): far ridges fade into black like the reference. */
-const CLAY_FOG = { start: 16, end: 58 };
+export const CLAY_FRONT = { far: 46, near: 0, band: 4 }; // the hero/payload views see ground from ~5 to ~40 units
+/** Ground ripples (world units / s): ring reach, line width, one ring's life. */
+const RIPPLE = { radius: 1.3, width: 0.04, period: 2.6, gain: 1.6 };
 /** Dot grid: 3 dots per map unit (CLAY.dotDensity) in tile-local units (TERRAIN_SCALE .04: 25 local per map unit). */
 const CLAY_DOTS = 3 * 0.04;
 
@@ -79,11 +107,17 @@ uniform float uFogBlendFactor;
 uniform float uPanoMix;
 uniform float uGroundDim; // black overlay under the cloud wisps (ground-dim.ts)
 uniform float uPayloadClay;
+uniform float uPayloadNet;
 uniform vec3 uPayloadBg;
 uniform vec3 uPayloadLow;
 uniform vec3 uPayloadHigh;
 uniform vec3 uPayloadIce;
 uniform vec3 uPayloadLight;
+uniform vec2 uPayloadFog;
+uniform vec3 uPayloadRippleAt;
+uniform float uPayloadRipple;
+uniform float uPayloadTime;
+uniform vec3 uPayloadRippleColor;
 uniform float uPayloadHouse; // 1 on the village houses (light clay, like the clay map's houses)
 ${panoramaLookup}
 
@@ -130,12 +164,35 @@ vec3 payloadClay(vec3 col, float distance) {
     float dotMask = (1.0 - smoothstep(0.8, 1.5, rpx)) * (1.0 - smoothstep(0.12, 0.3, max(fw.x, fw.y)));
     dotMask *= smoothstep(0.5, 0.75, n.y); // steep faces stretch the draped grid into dashes: dots on gentle ground only
     clay = mix(clay, uPayloadIce * 0.75, dotMask * 0.32);
-    clay = mix(clay, uPayloadBg, smoothstep(${CLAY_FOG.start.toFixed(1)}, ${CLAY_FOG.end.toFixed(1)}, distance));
+    clay = mix(clay, uPayloadBg, smoothstep(uPayloadFog.x, uPayloadFog.y, distance));
     // Front: far ridges first, then toward the camera.
     float front = mix(${CLAY_FRONT.far.toFixed(1)}, ${CLAY_FRONT.near.toFixed(1)}, uPayloadClay);
+    if (uPayloadNet > 0.5 && distance > front) discard; // the section terrain takes the ground from here (net-terrain.ts)
     float w = smoothstep(front - ${CLAY_FRONT.band.toFixed(1)}, front + ${CLAY_FRONT.band.toFixed(1)}, distance);
     float line = exp(-pow((distance - front) / 0.6, 2.0)) * (1.0 - smoothstep(0.85, 1.0, uPayloadClay));
-    return mix(col, clay, w) + uPayloadIce * line * 0.22;
+    vec3 outc = mix(col, clay, w) + uPayloadIce * line * 0.22;
+    // Ground ripples at the altitude line's foot: three rings spreading and fading one after another, broken into arcs,
+    // only on ground near the contact height (not up a cliff face), plus a soft contact glow.
+    if (uPayloadRipple > 0.0) {
+        vec3 rp = vWorldPosition - uPayloadRippleAt;
+        float rd = length(rp.xz);
+        if (rd < ${RIPPLE.radius.toFixed(2)} + 0.1) {
+            float ang = atan(rp.z, rp.x);
+            float rip = 0.0;
+            for (int i = 0; i < 3; i++) {
+                float f = fract(uPayloadTime / ${RIPPLE.period.toFixed(2)} + float(i) / 3.0);
+                float ring = exp(-pow((rd - ${RIPPLE.radius.toFixed(2)} * f) / ${RIPPLE.width.toFixed(3)}, 2.0));
+                float env = smoothstep(0.0, 0.15, f) * pow(1.0 - f, 1.5);
+                float arcs = smoothstep(-0.2, 0.6, sin(ang * 3.0 + float(i) * 2.1 + uPayloadTime * 0.5));
+                rip += ring * env * arcs;
+            }
+            rip *= 1.0 - smoothstep(0.35, 0.9, abs(rp.y)); // ground around the foot, not a cliff above or below
+            rip *= ${RIPPLE.gain.toFixed(2)};
+            rip += exp(-rd * rd / 0.004) * 0.9;        // soft contact glow
+            outc += uPayloadRippleColor * rip * uPayloadRipple;
+        }
+    }
+    return outc;
 }
 
 vec3 sampleMaterials() {

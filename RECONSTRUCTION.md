@@ -12,6 +12,188 @@ User direction: Raven is a medical delivery drone concept for remote mountain vi
 
 Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HUD details, fire/emergency simulations, mission card/demo imagery, reference legal/Notes content, and baked footer sequence/wordmarks still come from the source reconstruction. They need a separate medical-delivery art/content pass. The existing terrain has not been replaced with snow/tundra. This first pass is model integration and core copy, not a finished Raven site.
 
+## Sections 03 and 04 after the 3D stage (user's Figma "Drone Website", 2026-11-04)
+
+- Section 03 (`components/sections/FeatureSection.tsx`, Figma frames 128:804 / 128:830 / 128:857): `#features-band`
+  (3 screens) follows the one-screen spacer after the speed band, so one gesture from the speed frame slides it up over
+  the stage; its sticky screen then shows one feature per scroll stop (snap stops added to band 0 by
+  `story-map.ts` `featureStops`, 2px/ms). The stage is hidden (`stageTop` null, cover 0, PostFX off) once the section
+  covers it (`storyMap.FT`). Feature switch: images (gradient vignettes baked in, `public/assets/features/`) cross-fade
+  with a slow settle, card copy and tags slide toward the scroll direction, the left indicator grows into the active bar.
+- Section 04 (`components/sections/CapabilityVideos.tsx`, Figma 100:622): tabs Sensor / Crosswind / Auto pilot over one
+  panel; the active clip plays once when the section is in view, then the next tab takes over (loops), the tab fills with
+  playback; out of view pauses; a click jumps; reduced motion does not autoplay. Clips from `assets/Section 04 videos`,
+  audio stripped (`public/assets/video/section04/`).
+- Copy in `lib/features.ts`. The Figma repeats one placeholder card ("Sealed motor pods", Propulsion / Status LED) on all
+  three frames; cards 1-2 are titled after their images (Carbon-fibre arms, Sensor gimbal). Body copy is the Figma line
+  (typo "fornext-generation" fixed). Type: Inter Tight + DM Mono (next/font/google). Desktop sizes are the frames' own
+  pixels scaled to the viewport (`--u`); phones get a stacked layout.
+- Checked: headless Chrome 1440x900 and 390x844 with wheel gestures (stops 9001 / 9901 / 10801 at 1440x900), clip
+  hand-off Sensor -> Crosswind. Not checked: Safari/iOS touch snapping.
+
+## Speed stage: same view, simple green leg (user, 2026-11-03)
+
+- The drone-POV chase camera and its 40 deg lens are removed: the speed stage keeps the section view of the altitude
+  frame (leg 1 stays visible).
+- Leg 2 is no longer the valley pathfinder (`netValleyRoute` removed): `netArcRoute` runs straight across the ground
+  from clinic to summit station, climbs out, cruises level and descends (smootherstep plateau over the line between
+  the two hover points, lifted just enough that the cruise clears the ground by 6), like the altitude leg. ~4.6 km.
+- Then (user: "the green pathway feels old, try randomization, some curves"): `netArcRoute` meanders sideways (two
+  long sine waves, seeded random phases `NET_LEG2_SEED`, zero at both sites, up to 12% of the leg), the cruise swells
+  in one long wave (up to 25%) and the climb / descent corners are rounded; same seed, same line (and HUD distance) on
+  every load. Km marks hide on the last 10% (the line dips behind the ridge into the summit).
+- Then (user: "make the green pathway near to the terrain surface, like the yellow pathway"): its height is 6 over
+  the highest ground within 3 of the line (the section's rule, as leg 1), smoothed (24 passes, never under 2 above the
+  ground) and eased off / onto the site hover points; the plateau lift is gone. The meander stays.
+- Kilometre marks on leg 2 removed (user: "remove the km in the line"); the HUD keeps distance and time.
+- Leg 2 is green (`ROUTE_GREEN` #4ade80; the HUD kicker and km marks too), leg 1 stays yellow: altitude yellow,
+  distance and speed green. The whole of leg 2 stays drawn while the drone flies it. Both pins show in the HUD.
+- Checked: timed 1440×900 and 390×844 captures, wheel run, typecheck and build pass.
+
+## Connected checkpoints and the speed stage (user, 2026-11-03)
+
+- Connected route: one line drone -> Ridge Clinic (leg 1, the section's rule, flown in the mountain stage) -> Summit
+  Station (leg 2, starts where leg 1 ends, both NET_SITE_HOVER over the site). Leg 2 draws on from the clinic once the
+  drone has arrived; the separate drone -> summit line is gone. Both legs yellow.
+- Leg 2 "through the valleys" (`net-terrain-field.ts` `netValleyRoute`): Dijkstra on a 4-unit grid around both sites,
+  step cost length x (1 + height / 25) + climb x 1.5, Chaikin-smoothed, flown 5 over the highest ground within 3 and
+  smoothed hard in height (never under 2), eased from/to the hover points. Measured length ~5.3 km at the section's
+  "scene units ~ 50 m".
+- Speed stage (`#speed-band` 200dvh, `#speed`, nav "Speed"; page 9001 at vh 900, frame 8101; 390×844: 7597): the
+  camera drops from the section view to a chase view behind the drone (DroneRig `CHASE`, in drone heights; lens 20 ->
+  40 deg), leg 1 fades out; at .9 the drone flies leg 2 in 11 s with a trapezoid speed profile; leg 2 is cut behind
+  the drone (`uFrom`). HUD (`overlays/SpeedCallout.tsx`): speed counting up to ~79 km/h and back to 0 on arrival,
+  distance to Summit Station and time at cruise counting down, the summit pin ahead, 1 km marks along the path still
+  to fly. 79 km/h comes from the user's own `net` section cards (11.8 km / 9 min, 18.4 km / 14 min); time = distance
+  / speed. Not invented: if the user gives a real speed, change `SPEED_FIGURES.kmh`.
+- Checked: timed captures 1440×900 and 390×844 (mountain frame with both legs, the drop, flight at 1.5 / 5 / 9 / 15 s),
+  wheel run 0 -> 2701 -> 4501 -> 6301 -> 8101 and back, typecheck and build pass.
+
+## Mountain stage: drone turns, flies the route, altitude counts up, second checkpoint (user, 2026-11-03)
+
+- Drone heading: while the camera zooms out (look.wide 0 -> .7) the drone yaws to face up its route (DroneRig
+  `heading`, about its parent's up axis; its front is Drone1Group -Z), and leans nose down by 0.14 rad while flying.
+- Flight: after the yellow line has drawn (1.6 s, `ROUTE_FLIGHT.drawS`) the drone flies the clinic route over 6.5 s
+  (`flyS`, smootherstep along the evenly spaced samples, `NetTerrain.along`); its offset is added to `droneRoot` and
+  subtracted again for the cameras and the section's pivot, so only the drone moves. Scrolling back returns it in
+  0.8 s.
+- Counter: "Operating altitude" counts from 0 m to 5,000 m (`ROUTE_FLIGHT.topM`, the user's figure) with the highest
+  point of the route reached so far (running maximum, so it never counts down on the final approach); tabular
+  figures, screen readers get "5,000 m".
+- Second checkpoint: Summit Station (the section's third site) with its own route from the drone, drawn as a fainter
+  ice-white ribbon (the section showed the route not being flown faint); pins use the section's stems (84 / 96 px).
+  On narrow screens the summit can fall outside the frame; its pin is then hidden.
+- Checked: timed 1440×900 and 390×844 captures at 1.5 / 3.5 / 5.5 / 9 s after the mountain frame (0 m -> ~1,700 m
+  -> ~4,600 m -> 5,000 m), wheel run, typecheck and build pass.
+
+## Story is now payload -> mountain (user, 2026-11-03)
+
+- Request: drop the altitude side view; scroll 1 = payload, scroll 2 = the big `net` section mountain, where the line
+  from the drone to the top is the altitude; the previous hand-over (tiles flattening, mountain growing out of a flat
+  floor) "is not making sense": make it realistic.
+- Page: `#altitude-band` removed (altitudeRange empty, its code paths stay unreachable), `#route-band` follows the
+  payload band; nav "Altitude" -> `#route`. At vh 900: hero 2701, payload 4501, mountain frame 6301, page height 7201
+  (390×844: 2533, 4221, 5909). Wheel: 0 -> 2701 -> 4501 -> 6301 and back.
+- Hand-over: the section terrain is the ground from the payload stage on. The payload clay front (far -> near, the
+  one the user approved) now cuts the clay tiles beyond it (`uPayloadNet` discard) and the section terrain is drawn
+  there (same front in its shader, `netFront`, with the scan line), turned to look the payload camera's way and
+  pivoted on the drone over its depot; the tiles hide once the front reaches the drone. Close up it fogs like the clay
+  view (`uPayloadFog`); over the mountain stage its own fog takes over (`uSection`) while the camera pulls back to the
+  section pose, so the massif behind the drone comes out of the haze. Nothing changes shape. The flatten/rise
+  uniforms of the previous pass are removed. Sway and pointer tilt only in the mountain stage.
+- Mountain callout (`overlays/RouteCallout.tsx`): "Operating altitude / 5,000 m" top left where the section had its
+  heading, the Ridge Clinic pin, both with the route line. `AltitudeCallout.tsx` removed.
+- Checked: 1440×900 frames 2701 -> 6301, 390×844 at 4221 and 5909, wheel run, typecheck and build pass.
+
+## Route stage: the `net` section's terrain (user, 2026-11-03)
+
+- Request: the third scroll (distance) shows the terrain of the "Mapped to the last ridge" section of
+  `assets/html/raven_homepage (3).html` exactly (terrain and hover animation, not our own), the drone smaller in front
+  of it, the line drawn to the destination on top; none of the section's text, and one checkpoint instead of two.
+- Replaces the first route attempt (clay village on our lifted tiles, hilltop shelf, near tile column), which is
+  removed (`RouteVillage.tsx`, `route-ground.ts`, `uRouteShelf`).
+- Port (`scene/net-terrain-field.ts`, built in `net-terrain.worker.ts`; `scene/net-terrain.ts`): same seeded noise,
+  ridged/fbm stacks and height function, 900 x 700 plane at 520 x 400 segments shifted 150 toward the camera, contour
+  shader (minor every 4, index every 20), 2.6 dot grid, fog 300 -> 700, hover glow on terrain and dots (raycast on a
+  1/4-resolution proxy instead of the full mesh), idle sway sin(t * .12) * .12 and pointer tilt, colours unchanged.
+  Left out: heading, lede, footer hint and legend, info card, drag to turn, the depot and summit pins and the summit
+  route. The kept checkpoint is the Ridge Clinic (the top of the main massif); the route uses the section's rule from
+  the drone, which hovers 9 units over the depot site.
+- Placement: the section world is scaled x0.3 and pivots on the drone (sway and tilt turn it about the drone, so the
+  route start stays on it), turned -90 deg so the section camera's view matches the altitude side view. The camera
+  eases (log distance) from the altitude pose to the section camera pose (its eye/target, moved back for our fov 20 vs
+  its 30, its per-aspect distance factor); portrait slides the camera 50 units toward the depot so drone and clinic fit.
+- Transition (`ROUTE_TIMELINE`; user: the two terrains did not match mid-way, the tiles broke up into the fog while a
+  different massif faded in): one ground changing shape. The clay tiles settle flat onto the depot's ground level
+  over .05 -> .36 (`uPayloadFlat` in TerrainMaterial and MountainMaterial; their fog follows the camera out), the
+  section terrain comes in flat just under them (.26 -> .36) and takes over at .37, then its relief rises (`uRise`,
+  .37 -> .88) while the camera keeps pulling back; the yellow route ribbon draws from the drone from .9 (2.6 s), the section-style
+  pin (44 px ring, mono label, 84 px stem; label flips left at the screen edge) comes in as the line arrives. Lens depth
+  of field off in this view.
+- Checked: 1440×900 at 6301 -> 8101 (cross-fade frames, hover glow), 390×844 at 7597; wheel run 0 -> 8101 and back;
+  typecheck and build pass. Not checked: Safari/iOS, low-end GPUs (the section mesh is 416k triangles + 93k dots).
+
+## Altitude stage: drone lower among the ridges (user, 2026-11-03)
+
+- Side view drone centre NDC y 0.3 -> 0.06 (desktop) and elevation 8 -> 15 deg, so the camera looks down onto the
+  ridges and they rise behind the drone instead of the camera tilting up into empty sky. Portrait keeps y 0.16 at
+  15 deg (26 deg sank the ground behind the drone into the fog). Checked 1440×900 at 6301 and 390×844 at 5909; wheel
+  run and build pass.
+
+## Altitude stage, third pass (user recording 2026-11-03: drone resized, line ignored the terrain, numbers)
+
+- Cause of the resizing: the side camera's radius came from the drone-to-ground span, which changes as the terrain
+  slides under the drone. It is now framed on the drone alone (drone height = 7% of the frame height, 5% portrait),
+  drone centre at NDC (-0.3, 0.3): smaller and constant.
+- The line is a 3D ribbon in the scene (DroneRig `createAltitudeLine`): camera-facing, 7 px half-width with a 0.9 px
+  core and soft glow, depth-tested against the terrain (no depth write) so ridges in front hide it; fades from the
+  skids to 28% at the ground; drawn downward over 0.9 s when the callout stage starts. Ground re-measured every other
+  frame without damping, so the foot stays on the drawn ground.
+- Ground ripples are painted by the terrain shader (`payloadClay`, uPayloadRipple*): three rings 1.3 world units
+  wide spreading and fading one after another, broken into arcs, only near the foot's height, plus a soft contact
+  glow; they follow the relief and hide with it. Start when the line arrives.
+- Removed: scale ticks, tick numbers, "0 m", the DOM line and ripples. The label sits beside the line just under the
+  skids. The final unsharp mask fades out on the clay view (it ringed the line and the outlines).
+- Checked (headless Chrome): 1440×900 at 6301 over 0.5-6.5 s (draw, ripples, steady drone size, label clear of the
+  drone); 390×844 at 5909; wheel 0 -> 2701 -> 4501 -> 6301 and back; typecheck and build pass.
+
+## Altitude stage, second pass (user, 2026-11-03: drone must fly right toward taller terrain, smaller, line "feels old")
+
+- Camera on the -x side (azimuth -90 deg, elevation 8) instead of +x: the ground travels toward -z, which is now
+  screen left, so the drone (left of frame, NDC -0.46) visibly flies right. Drone top -> ground fills 36% of the
+  frame height (was 56%; portrait 26%), so the drone reads smaller with more terrain.
+- Terrain: MountainMaterial `liftAt` takes `uPayloadSide` (eased with the clay fog) and `uPayloadRiseLift` (8): the
+  ridges the drone heads toward (+z, map z 13 -> 38) rise; the lifts that sat behind the drone (-z) and between the
+  camera and the drone (-x) ease off, the backdrop (+x) to 55%. Nothing changes under the drone (the raycast ground
+  stays exact). Rows 3-4 shown in the stage; travel back to full speed in the side view.
+- Line: fades from the drone (full yellow) to the ground (20%) with a soft blurred glow, drawn downward from the
+  skids over 0.8 s; on arrival a glowing contact dot and three flattened rings spread on the ground and fade, then
+  repeat (2.2 s, 0.42 s stagger); ticks and numbers fainter and revealed as the line passes them; the white ground bar
+  removed. Label side chosen with hysteresis (it flipped as the line swayed with the hover).
+- Checked (headless Chrome): 1440×900 at 5401 / 6301 and 0.5-5 s after arrival (draw, ripples, label stays left,
+  ground moving left); 390×844 at 5909; wheel 0 -> 2701 -> 4501 -> 6301 and back; typecheck and build pass.
+
+## Altitude stage after the payload frame (user, 2026-11-03)
+
+- User direction: after the payload, the next scroll zooms out to a side view of the drone, a line from the ground
+  with "5000m", same clay environment, and the upcoming terrain taller than the ground below.
+- Scroll: `#altitude-band` (200dvh) right after the payload band, one gesture at the payload pace (4.2 s); snap stops
+  2701 / 4501 / 6301 at 1440×900.
+- Camera (`payload-camera.ts` `applyAltitudeCamera`, from the finished payload pose): orbit centre payload box ->
+  middle of the altitude line, radius until drone top -> ground fills 56% of the frame (34% portrait), azimuth to 90
+  deg (+x side, looking along -x; ahead = -z on the right), elevation 21 -> 6 deg late in the move so the camera stays
+  high while it swings; the line's middle at NDC (-0.42, 0.02) (portrait (-0.18, 0.08)).
+- Ground: raycast from the skids down on `TerrainTiles` every 4 frames, damped (no mountain lift under the corridor,
+  so the CPU mesh is what is drawn). Opening tiles (rows -1..-3, col 2) shown again for the ground ahead. Clay fog
+  16-58 -> 26-62; extra lift 2.2 x the mountain part ahead of the drone (`uPayloadAheadLift`), eased with the fog.
+- Callout: yellow line ground -> skids (drawn on entry), white ground mark + "0 m", ticks at 1,000-4,000 m with mono
+  numbers, end square at the skids, "Operating altitude / 5,000 m / Raven flies at up to 5,000 m, high over the ridges
+  ahead." left of the line (portrait: centred under the ground mark). Payload box fades back to white over the start.
+- Checked (headless Chrome, dev): 1440×900 at 4861 / 5221 / 5581 / 5941 / 6301; 390×844 at 4221 / 5065 / 5909; real
+  wheel 0 -> 2701 -> 4501 -> 6301 -> 4501 -> 2701 -> 0; typecheck and build pass.
+- Known: the line is a scale drawing (the scene's drone flies ~2 units above its ground; the ticks divide that line);
+  the ridges ahead grow while the camera swings (shape change during the move); not checked on Safari or tablets.
+
 ## Payload page: hero -> clay terrain + vector drone + payload callout (user, 2026-11-03)
 
 - User direction: keep the hero (structure, look, copy); one or two scrolls in, the real terrain turns into the clay

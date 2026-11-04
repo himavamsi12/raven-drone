@@ -13,12 +13,27 @@ import { damp, lerp, remap } from "@/lib/math";
 import { SCENE, scenes, useMouse } from "@/lib/scenes";
 import { isScrollLocked } from "@/lib/scroll-lock";
 import { openingNow } from "@/lib/story-map";
-import { payloadLook, payloadScreen } from "@/lib/payload";
+import {
+  ALTITUDE_TIMELINE,
+  altitudeScreen,
+  payloadLook,
+  payloadScreen,
+  ROUTE_FLIGHT,
+  ROUTE_TIMELINE,
+  routeScreen,
+  SPEED_FIGURES,
+  SPEED_FLIGHT,
+  SPEED_TIMELINE,
+  speedScreen,
+} from "@/lib/payload";
+import { payloadClayUniforms } from "./materials/TerrainMaterial";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CAMERA_BINDINGS, ClipSeeker, DRONE1_BINDINGS, DRONE2_BINDINGS, DRONE3_BINDINGS } from "./ClipSeeker";
 import { Drone } from "./Drone";
 import { applyOpening } from "./opening";
-import { applyPayloadCamera } from "./payload-camera";
+import { applyPayloadCamera, applyRouteCamera } from "./payload-camera";
+import { NetTerrain } from "./net-terrain";
+import { useRenderScale } from "@/lib/render-scale";
 import { SpecsCallouts } from "./overlays/SpecsCallouts";
 import { applyCameraTilt, cameraTilt } from "./camera-tilt";
 import { applyLandscapeCamera } from "./clay-map";
@@ -106,6 +121,250 @@ const _boxPart = new THREE.Box3();
 const _inv = new THREE.Matrix4();
 const _anchor = new THREE.Vector3();
 const _onScreen = new THREE.Vector3();
+
+/** Altitude stage: drone top / skid points (Drone1Group space), ground under the drone (world), its raycast. */
+const _top = new THREE.Vector3();
+const _skid = new THREE.Vector3();
+const _ground = new THREE.Vector3();
+const _rayOrigin = new THREE.Vector3();
+const _down = new THREE.Vector3(0, -1, 0);
+const _ray = new THREE.Raycaster();
+/** Raycast every n frames (the ground moves slowly under the drone; the result is damped). */
+const GROUND_RAY_EVERY = 2;
+const _centre = new THREE.Vector3();
+
+/**
+ * Altitude line (user, 2026-11-03: the line must sit on the terrain, hide behind ridges, fade, draw from the drone):
+ * a camera-facing ribbon in the scene, depth-tested against the terrain (no depth write), from the skids (v = 0) to the
+ * ground (v = 1). Bright yellow core with a soft glow, fading toward the ground, drawn downward by uDraw.
+ */
+const ALTITUDE_LINE = { halfPx: 7, corePx: 0.9, drawS: 0.9, retractS: 0.35 };
+function createAltitudeLine() {
+  const material = new THREE.ShaderMaterial({
+    name: "RavenAltitudeLine",
+    uniforms: {
+      uTop: { value: new THREE.Vector3() },
+      uBottom: { value: new THREE.Vector3() },
+      uHalf: { value: 0.01 },
+      uCore: { value: 0.12 },
+      uDraw: { value: 0 },
+      uColor: { value: new THREE.Color("#ffcb47") },
+    },
+    vertexShader: /* glsl */ `
+uniform vec3 uTop;
+uniform vec3 uBottom;
+uniform float uHalf;
+varying vec2 vLine;
+void main() {
+  float v = position.y + 0.5;           // 0 at the skids, 1 at the ground
+  vec3 p = mix(uTop, uBottom, v);
+  vec3 dir = normalize(uBottom - uTop + vec3(0.0, -1e-5, 0.0));
+  vec3 side = normalize(cross(dir, normalize(cameraPosition - p)));
+  p += side * position.x * 2.0 * uHalf;
+  vLine = vec2(position.x * 2.0, v);
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+}`,
+    fragmentShader: /* glsl */ `
+uniform float uCore;
+uniform float uDraw;
+uniform vec3 uColor;
+varying vec2 vLine;
+void main() {
+  float v = vLine.y;
+  float u = abs(vLine.x);
+  float head = 1.0 - smoothstep(uDraw - 0.06, uDraw, v);       // drawn from the drone downward
+  float along = mix(1.0, 0.28, smoothstep(0.0, 1.0, v));        // fades toward the ground
+  float core = 1.0 - smoothstep(uCore * 0.5, uCore * 1.4, u);
+  float glow = exp(-u * u * 5.0) * 0.3;
+  float a = (core + glow) * along * head;
+  if (a < 0.003) discard;
+  gl_FragColor = vec4(uColor * (1.0 + core * 0.35), a);
+}`,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  mesh.renderOrder = 40;
+  return mesh as THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+}
+
+/**
+ * Route stage planned path (user, 2026-11-03: "it will draw a curvy line towards the destination. this path animation
+ * will start from drone"; then: the distance to the destination on top of the `net` section's terrain): a camera-facing
+ * ribbon along that section's route curve (net-terrain.ts), depth-tested against its terrain, drawn from the drone to
+ * the clinic over `drawS`. Yellow dashes flowing toward the destination
+ * over a faint continuous trace, a bright head while it draws, fading in out of the drone.
+ */
+const ROUTE_PATH = { halfPx: 6, corePx: 1.1, dashPx: 12, flowPx: 22, drawS: 2.6, retractS: 0.5 };
+const ROUTE_PATH_N = 140;
+const _pathPts = new Float32Array((ROUTE_PATH_N + 1) * 3);
+function createRoutePath(color = "#ffcb47", alpha = 1) {
+  const N = ROUTE_PATH_N;
+  const count = (N + 1) * 2;
+  const g = new THREE.BufferGeometry();
+  const attr = (n: number) => new THREE.BufferAttribute(new Float32Array(count * n), n).setUsage(THREE.DynamicDrawUsage);
+  g.setAttribute("position", attr(3));
+  g.setAttribute("aPrev", attr(3));
+  g.setAttribute("aNext", attr(3));
+  g.setAttribute("aLen", attr(1));
+  const side = new Float32Array(count);
+  const v = new Float32Array(count);
+  for (let i = 0; i <= N; i++) {
+    side[i * 2] = -1;
+    side[i * 2 + 1] = 1;
+    v[i * 2] = v[i * 2 + 1] = i / N;
+  }
+  g.setAttribute("aSide", new THREE.BufferAttribute(side, 1));
+  g.setAttribute("aV", new THREE.BufferAttribute(v, 1));
+  const index: number[] = [];
+  for (let i = 0; i < N; i++) {
+    const a = i * 2;
+    index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
+  g.setIndex(index);
+  const material = new THREE.ShaderMaterial({
+    name: "RavenRoutePath",
+    uniforms: {
+      uPx: { value: 0.001 },
+      uHalfPx: { value: ROUTE_PATH.halfPx },
+      uCore: { value: ROUTE_PATH.corePx / ROUTE_PATH.halfPx },
+      uDash: { value: 0.1 },
+      uFlow: { value: 0 },
+      uDraw: { value: 0 },
+      uColor: { value: new THREE.Color(color) },
+      uAlpha: { value: alpha },
+      /** Flown share: the ribbon is cut behind it (speed stage, only the path ahead shows). */
+      uFrom: { value: 0 },
+    },
+    vertexShader: /* glsl */ `
+attribute vec3 aPrev;
+attribute vec3 aNext;
+attribute float aSide;
+attribute float aV;
+attribute float aLen;
+uniform float uPx;
+uniform float uHalfPx;
+varying vec2 vLine;
+varying float vLen;
+void main() {
+  vec3 p = position;
+  vec3 t = normalize(aNext - aPrev + vec3(1e-6, 0.0, 0.0));
+  vec3 side = normalize(cross(t, normalize(cameraPosition - p)));
+  p += side * aSide * uHalfPx * uPx * distance(cameraPosition, p);
+  vLine = vec2(aSide, aV);
+  vLen = aLen;
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+}`,
+    fragmentShader: /* glsl */ `
+uniform float uCore;
+uniform float uDash;
+uniform float uFlow;
+uniform float uDraw;
+uniform vec3 uColor;
+uniform float uAlpha;
+uniform float uFrom;
+varying vec2 vLine;
+varying float vLen;
+void main() {
+  float u = abs(vLine.x);
+  float v = vLine.y;
+  float drawn = 1.0 - smoothstep(uDraw - 0.004, uDraw, v);
+  float emerge = smoothstep(0.0, 0.06, v) * smoothstep(uFrom, uFrom + 0.03, v); // out of the drone, not its body
+  float ph = fract((vLen - uFlow) / uDash);
+  float dash = smoothstep(0.0, 0.08, ph) * (1.0 - smoothstep(0.5, 0.58, ph));
+  float core = 1.0 - smoothstep(uCore * 0.5, uCore * 1.4, u);
+  float glow = exp(-u * u * 6.0) * 0.22;
+  float head = exp(-pow((v - uDraw) / 0.012, 2.0)) * step(uDraw, 0.999); // bright tip while drawing
+  float a = (core * mix(0.28, 1.0, dash) + glow) * drawn * emerge + head * (exp(-u * u * 3.0) * 0.9);
+  if (a < 0.003) discard;
+  gl_FragColor = vec4(uColor * (1.0 + core * dash * 0.35 + head * 0.6), min(a, 1.0) * uAlpha);
+}`,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(g, material);
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  mesh.renderOrder = 41;
+  return mesh as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+}
+
+/** Writes the sampled curve into the ribbon (two vertices per sample, prev/next for the facing, length along). */
+function updateRoutePath(mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>, pts: Float32Array) {
+  const N = ROUTE_PATH_N;
+  const g = mesh.geometry;
+  const pos = g.attributes.position.array as Float32Array;
+  const prev = g.attributes.aPrev.array as Float32Array;
+  const next = g.attributes.aNext.array as Float32Array;
+  const len = g.attributes.aLen.array as Float32Array;
+  let L = 0;
+  for (let i = 0; i <= N; i++) {
+    const ip = Math.max(i - 1, 0);
+    const iN = Math.min(i + 1, N);
+    if (i > 0) L += Math.hypot(pts[i * 3] - pts[ip * 3], pts[i * 3 + 1] - pts[ip * 3 + 1], pts[i * 3 + 2] - pts[ip * 3 + 2]);
+    for (let s = 0; s < 2; s++) {
+      const k = i * 2 + s;
+      for (let c = 0; c < 3; c++) {
+        pos[k * 3 + c] = pts[i * 3 + c];
+        prev[k * 3 + c] = pts[ip * 3 + c];
+        next[k * 3 + c] = pts[iN * 3 + c];
+      }
+      len[k] = L;
+    }
+  }
+  g.attributes.position.needsUpdate = true;
+  g.attributes.aPrev.needsUpdate = true;
+  g.attributes.aNext.needsUpdate = true;
+  g.attributes.aLen.needsUpdate = true;
+}
+
+const _dest = new THREE.Vector3();
+const _netEye = new THREE.Vector3();
+const _netQuat = new THREE.Quaternion();
+const _netPt = new THREE.Vector3();
+const _pathPts2 = new Float32Array((ROUTE_PATH_N + 1) * 3);
+const _dest2 = new THREE.Vector3();
+const _netDir = new THREE.Vector3();
+const _flyW = new THREE.Vector3();
+const _flyW0 = new THREE.Vector3();
+const _fwdDrone = new THREE.Vector3();
+const _qYaw = new THREE.Quaternion();
+const _qPitch = new THREE.Quaternion();
+const _X = new THREE.Vector3(1, 0, 0);
+/** Leg 2 colour (distance and speed), next to the altitude leg's yellow. */
+const ROUTE_GREEN = "#4ade80";
+/** Distance travelled (share of the leg) for a share of the flight time: speed ramps up and down at both ends. */
+function legShare(t: number, ramp: number) {
+  const r = Math.min(Math.max(ramp, 1e-3), 0.5);
+  const d = t < r ? (t * t) / (2 * r) : t > 1 - r ? 1 - r - ((1 - t) * (1 - t)) / (2 * r) : t - r / 2;
+  return d / (1 - r);
+}
+/** Speed share at a flight time share (trapezoid: ramp up, cruise, ramp down). */
+function speedShare(t: number, ramp: number) {
+  return Math.min(t / ramp, 1, (1 - t) / ramp, 1);
+}
+const _Y = new THREE.Vector3(0, 1, 0);
+/** Nose-down tilt while flying the route (rad), as a multirotor leans into forward flight. */
+const FLIGHT_PITCH = 0.14;
+const _payloadEnd = new THREE.Object3D();
+const _fwdEnd = new THREE.Vector3();
+
+/** Top and bottom centre of `drone`'s bounds in its local space (rotors, mast and skids included). */
+function measureDroneExtent(drone: THREE.Object3D) {
+  drone.updateWorldMatrix(true, true);
+  _boxW.setFromObject(drone);
+  if (_boxW.isEmpty()) return null;
+  const c = _boxW.getCenter(new THREE.Vector3());
+  _inv.copy(drone.matrixWorld).invert();
+  return {
+    top: new THREE.Vector3(c.x, _boxW.max.y, c.z).applyMatrix4(_inv),
+    skid: new THREE.Vector3(c.x, _boxW.min.y, c.z).applyMatrix4(_inv),
+  };
+}
 
 /** Centre of the medical box meshes in `drone`'s local space, or null before the model has mounted. */
 function measurePayloadBox(drone: THREE.Object3D) {
@@ -215,10 +474,46 @@ export function DroneRig() {
   const first = useRef(true);
   const poses = useRef([pose(), pose(), pose()]);
   const payloadBox = useRef<THREE.Vector3 | null>(null);
+  const droneExtent = useRef<{ top: THREE.Vector3; skid: THREE.Vector3 } | null>(null);
+  const groundY = useRef<number | null>(null);
+  const groundFrame = useRef(0);
+  const lineDraw = useRef(0);
+  const altitudeLine = useMemo(createAltitudeLine, []);
+  const routePath = useMemo(() => createRoutePath(), []);
+  // Leg 2 of the connected route (clinic -> summit station), drawn on from leg 1's end. Green (user: altitude reads
+  // yellow, distance and speed green).
+  const routePath2 = useMemo(() => createRoutePath(ROUTE_GREEN), []);
+  const draw2 = useRef(0);
+  /** Speed stage flight along leg 2 (0..1, time). */
+  const flight2 = useRef(0);
+  useEffect(() => () => {
+    routePath2.geometry.dispose();
+    routePath2.material.dispose();
+  }, [routePath2]);
+  /** Flight up the clinic route (0..1), the drone's offset from its start (world) and where it heads. */
+  const flight = useRef(0);
+  const routeOffset = useRef(new THREE.Vector3());
+  const heading = useRef({ dir: new THREE.Vector3(0, 0, -1), weight: 0, fly: 0 });
+  const pathDraw = useRef(0);
+  useEffect(() => () => {
+    routePath.geometry.dispose();
+    routePath.material.dispose();
+  }, [routePath]);
+  // Route stage terrain (the `net` section's, built in a worker on mount).
+  const net = useMemo(() => new NetTerrain(ROUTE_PATH_N), []);
+  useEffect(() => () => net.dispose(), [net]);
+  const sceneDpr = useRenderScale((s) => s.sceneDpr);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const netPlaced = useRef(false);
+  const tilesRef = useRef<THREE.Object3D | null>(null);
+  useEffect(() => () => {
+    altitudeLine.geometry.dispose();
+    altitudeLine.material.dispose();
+  }, [altitudeLine]);
   const payloadBoxOwner = useRef<THREE.Object3D | null>(null);
 
   // Clip seeking runs before the procedural pass, mirroring the shipped order 1..15.
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     const set = isMd ? seekers.desktop : seekers.mobile;
     if (mover1.current) set.d1?.apply(mover1.current);
     if (cameraMover.current) set.camera?.apply(cameraMover.current);
@@ -267,13 +562,43 @@ export function DroneRig() {
       const model = drone1.current.children[0]?.children[0] ?? null; // Drone > RavenModel primitive (remount check)
       if (!payloadBox.current || payloadBoxOwner.current !== model) {
         payloadBox.current = measurePayloadBox(drone1.current);
+        droneExtent.current = payloadBox.current ? measureDroneExtent(drone1.current) : null;
         payloadBoxOwner.current = payloadBox.current ? model : null;
       }
       if (payloadBox.current && look.zoom > 0) {
         mover1.current.updateWorldMatrix(true, false);
-        _anchor.copy(payloadBox.current).applyMatrix4(mover1.current.matrixWorld);
+        // Without the route flight's offset: the cameras and the section terrain stay put while the drone flies.
+        _anchor.copy(payloadBox.current).applyMatrix4(mover1.current.matrixWorld).sub(routeOffset.current);
+        // The payload frame's camera (zoom 1, from the same clip pose): the section terrain is turned to look its way.
+        _payloadEnd.position.copy(cameraMover.current.position);
+        _payloadEnd.quaternion.copy(cameraMover.current.quaternion);
+        applyPayloadCamera(_payloadEnd, _anchor, 1, camera.current.fov, camera.current.aspect);
         applyPayloadCamera(cameraMover.current, _anchor, look.zoom, camera.current.fov, camera.current.aspect);
+        // The section terrain is the ground from the payload stage on (pivot on the drone without its hover); the
+        // mountain stage pulls the camera back to the section's view.
+        const ext = droneExtent.current;
+        if (ext) {
+          _top.copy(ext.top).applyMatrix4(mover1.current.matrixWorld);
+          _skid.copy(ext.skid).applyMatrix4(mover1.current.matrixWorld);
+          _centre.lerpVectors(_top, _skid, 0.5).sub(routeOffset.current);
+          net.setYaw(_fwdEnd.set(0, 0, -1).applyQuaternion(_payloadEnd.quaternion));
+          net.place(_centre);
+          netPlaced.current = true;
+          if (look.r > 0 && net.ready) {
+            net.pose(HERO_FOV, camera.current.aspect, _netEye, _netQuat);
+            applyRouteCamera(cameraMover.current, _netEye, _netQuat, _centre, look.wide);
+          }
+        }
       }
+    }
+    if (camera.current) {
+      cameraMover.current?.updateMatrixWorld(true);
+      // Shown from the payload sweep on; the clay tiles give way to it at the clay front (TerrainMaterial uPayloadNet),
+      // and once the front has reached the drone they are hidden.
+      net.update(dt, look.clay > 0 && netPlaced.current, look.section, camera.current, sceneDpr, reducedMotion);
+      payloadClayUniforms.uPayloadNet.value = net.ready ? 1 : 0;
+      const tiles = (tilesRef.current ??= state.scene.getObjectByName("TerrainTiles") ?? null);
+      if (tiles && net.ready && look.clay >= 1) tiles.visible = false;
     }
     // Raven clay landscape: Care teams opens on a low view across the lifted relief, handing back to the shipped
     // track over early Review (clay-map.ts LANDSCAPE).
@@ -284,6 +609,170 @@ export function DroneRig() {
     // flank drones' clips still run (nothing else moves), but they are never shown.
     if (mover2.current && set.d2?.apply(mover2.current)) mover2.current.visible = false;
     if (mover3.current && set.d3?.apply(mover3.current)) mover3.current.visible = false;
+    // Altitude line (3D ribbon, depth-tested against the terrain) from the real skids (hover included) down to the
+    // ground under them: raycast on the terrain tiles every other frame, no damping, so the foot stays on the drawn
+    // ground (under the flight corridor the mountain shader adds no lift, so the CPU mesh is the drawn ground).
+    altitudeScreen.ok = false;
+    const ext = droneExtent.current;
+    const lineMat = altitudeLine.material;
+    const lineOn = look.a > 0 && !!ext && !!drone1.current && !!camera.current;
+    lineDraw.current = lineOn && look.a >= ALTITUDE_TIMELINE.callout
+      ? Math.min(1, lineDraw.current + dt / ALTITUDE_LINE.drawS)
+      : Math.max(0, lineDraw.current - dt / ALTITUDE_LINE.retractS);
+    altitudeLine.visible = lineOn && lineDraw.current > 0;
+    if (lineOn && ext && drone1.current && camera.current) {
+      drone1.current.updateWorldMatrix(true, false);
+      camera.current.updateWorldMatrix(true, false);
+      _skid.copy(ext.skid).applyMatrix4(drone1.current.matrixWorld);
+      if (groundY.current === null || groundFrame.current++ % GROUND_RAY_EVERY === 0) {
+        const tiles = state.scene.getObjectByName("TerrainTiles");
+        let hit: number | null = null;
+        if (tiles) {
+          _ray.set(_rayOrigin.copy(_skid), _down);
+          _ray.far = 40;
+          for (const h of _ray.intersectObject(tiles, true)) {
+            let shown = true;
+            for (let o: THREE.Object3D | null = h.object; o; o = o.parent) if (!o.visible) shown = false;
+            if (shown) {
+              hit = h.point.y;
+              break;
+            }
+          }
+        }
+        groundY.current = hit ?? _skid.y - 2;
+      }
+      _ground.set(_skid.x, groundY.current, _skid.z);
+      const u = lineMat.uniforms;
+      u.uTop.value.copy(_skid);
+      u.uBottom.value.copy(_ground);
+      u.uDraw.value = THREE.MathUtils.smootherstep(lineDraw.current, 0, 1);
+      // Ribbon width in world units for ALTITUDE_LINE.halfPx screen pixels at the line's distance.
+      const dist = camera.current.getWorldPosition(_zoomCam).distanceTo(_skid);
+      const pxWorld = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.current.fov / 2))) / Math.max(size.height, 1);
+      u.uHalf.value = ALTITUDE_LINE.halfPx * pxWorld;
+      u.uCore.value = ALTITUDE_LINE.corePx / ALTITUDE_LINE.halfPx;
+      // Ground ripples (terrain shader) once the line has reached the ground.
+      payloadClayUniforms.uPayloadRippleAt.value.copy(_ground);
+      payloadClayUniforms.uPayloadRipple.value = THREE.MathUtils.smoothstep(lineDraw.current, 0.92, 1);
+      payloadClayUniforms.uPayloadTime.value = state.clock.elapsedTime;
+      // Label and end square (DOM).
+      _onScreen.copy(_skid).project(camera.current);
+      const okD = _onScreen.z < 1;
+      altitudeScreen.dx = (_onScreen.x * 0.5 + 0.5) * size.width;
+      altitudeScreen.dy = (0.5 - _onScreen.y * 0.5) * size.height;
+      _onScreen.copy(_ground).project(camera.current);
+      altitudeScreen.gx = (_onScreen.x * 0.5 + 0.5) * size.width;
+      altitudeScreen.gy = (0.5 - _onScreen.y * 0.5) * size.height;
+      altitudeScreen.ok = okD && _onScreen.z < 1;
+    } else {
+      groundY.current = null;
+      payloadClayUniforms.uPayloadRipple.value = 0;
+    }
+    // Route stage: the section's route from the drone to the clinic (sway included), and the clay tiles fading into
+    // the black (their fog is measured from the camera) while the section terrain comes in.
+    routeScreen.ok = false;
+    routeScreen.ok2 = false;
+    const pathOn = look.r > 0 && net.ready && !!camera.current;
+    pathDraw.current = pathOn && look.r >= ROUTE_TIMELINE.path
+      ? Math.min(1, pathDraw.current + dt / ROUTE_FLIGHT.drawS)
+      : Math.max(0, pathDraw.current - dt / ROUTE_PATH.retractS);
+    // Then the drone flies the clinic route (user: "drone should start moving towards top of the terrain", the
+    // altitude counting up with it); it flies back quickly when the page scrolls back. In the speed stage leg 1 is
+    // done (also after a jump straight there).
+    const inSpeed = look.sp > 0;
+    if (inSpeed && pathOn) pathDraw.current = 1;
+    flight.current = inSpeed && pathOn
+      ? 1
+      : pathOn && look.r >= ROUTE_TIMELINE.path && pathDraw.current >= 1
+        ? Math.min(1, flight.current + dt / ROUTE_FLIGHT.flyS)
+        : Math.max(0, flight.current - dt / ROUTE_FLIGHT.returnS);
+    // Leg 2 draws on from the clinic once the drone is there (user: the checkpoints are connected).
+    draw2.current = pathOn && flight.current >= 1
+      ? Math.min(1, draw2.current + dt / ROUTE_FLIGHT.drawS)
+      : Math.max(0, draw2.current - dt / ROUTE_PATH.retractS);
+    // Speed stage: fly leg 2 once the chase view has settled.
+    flight2.current = pathOn && inSpeed && look.sp >= SPEED_TIMELINE.fly && draw2.current >= 1
+      ? Math.min(1, flight2.current + dt / SPEED_FLIGHT.flyS)
+      : Math.max(0, flight2.current - dt / SPEED_FLIGHT.returnS);
+    routePath.visible = pathOn && pathDraw.current > 0;
+    routePath2.visible = pathOn && draw2.current > 0;
+    speedScreen.ok = false;
+    heading.current.weight = 0;
+    if (pathOn && camera.current) {
+      camera.current.updateWorldMatrix(true, false);
+      const write = (pts: Float32Array, out: Float32Array) => {
+        for (let i = 0; i < pts.length; i += 3) {
+          net.toWorld(_netPt.set(pts[i], pts[i + 1], pts[i + 2]), _netPt);
+          out[i] = _netPt.x;
+          out[i + 1] = _netPt.y;
+          out[i + 2] = _netPt.z;
+        }
+      };
+      if (routePath.visible) {
+        write(net.route, _pathPts);
+        updateRoutePath(routePath, _pathPts);
+      }
+      if (routePath2.visible) {
+        write(net.route2, _pathPts2);
+        updateRoutePath(routePath2, _pathPts2);
+      }
+      net.toWorld(net.site, _dest);
+      net.toWorld(net.site2, _dest2);
+      const tanV = Math.tan(THREE.MathUtils.degToRad(camera.current.fov / 2));
+      const pxK = (2 * tanV) / Math.max(size.height, 1); // world per pixel at distance 1
+      const atDest = camera.current.getWorldPosition(_zoomCam).distanceTo(_dest);
+      const dashAt = atDest;
+      [routePath, routePath2].forEach((path, i) => {
+        const u = path.material.uniforms;
+        u.uPx.value = pxK;
+        u.uDash.value = ROUTE_PATH.dashPx * pxK * dashAt;
+        u.uFlow.value = state.clock.elapsedTime * ROUTE_PATH.flowPx * pxK * dashAt;
+        u.uDraw.value = THREE.MathUtils.smootherstep(i === 0 ? pathDraw.current : draw2.current, 0, 1);
+
+      });
+      // Flight: the drone's offset along the route (applied to droneRoot next frame), its heading and the counter.
+      const sFly = THREE.MathUtils.smootherstep(flight.current, 0, 1);
+      routeScreen.alt = net.along(sFly, _netPt, _netDir);
+      if (inSpeed) {
+        // Leg 2: distance by the trapezoid speed profile (speeding up and slowing down at the ends).
+        const s2 = legShare(flight2.current, SPEED_FLIGHT.rampShare);
+        net.along2(s2, _netPt, _netDir);
+        const total = net.length2 * SPEED_FIGURES.metresPerUnit;
+        speedScreen.total = total;
+        speedScreen.left = total * (1 - s2);
+        speedScreen.kmh = flight2.current > 0 && flight2.current < 1 ? SPEED_FIGURES.kmh * speedShare(flight2.current, SPEED_FLIGHT.rampShare) : 0;
+        speedScreen.fly = flight2.current;
+      }
+      net.toWorld(_netPt, _flyW);
+      net.toWorld(net.start, _flyW0);
+      routeOffset.current.subVectors(_flyW, _flyW0);
+      net.dirToWorld(_netDir, heading.current.dir);
+      // Turn to face up the mountain while the view widens (user: the drone angle must change toward the terrain).
+      heading.current.weight = THREE.MathUtils.smootherstep(look.wide, 0, 0.7);
+      heading.current.fly = inSpeed
+        ? speedShare(flight2.current, SPEED_FLIGHT.rampShare) * (flight2.current > 0 && flight2.current < 1 ? 1 : 0)
+        : Math.sin(Math.PI * Math.min(flight.current * 1.15, 1)) * (flight.current < 1 ? 1 : 0);
+      // Pins (DOM): both sites.
+      _onScreen.copy(_dest).project(camera.current);
+      routeScreen.vx = (_onScreen.x * 0.5 + 0.5) * size.width;
+      routeScreen.vy = (0.5 - _onScreen.y * 0.5) * size.height;
+      routeScreen.draw = pathDraw.current;
+      routeScreen.ok = _onScreen.z < 1;
+      _onScreen.copy(_dest2).project(camera.current);
+      routeScreen.v2x = (_onScreen.x * 0.5 + 0.5) * size.width;
+      routeScreen.v2y = (0.5 - _onScreen.y * 0.5) * size.height;
+      // Narrow screens frame the drone and the clinic; the summit can fall outside, then its pin stays hidden.
+      routeScreen.ok2 = _onScreen.z < 1 && routeScreen.v2x > 24 && routeScreen.v2x < size.width - 24;
+      routeScreen.draw2 = draw2.current;
+      if (inSpeed) {
+        speedScreen.vx = routeScreen.v2x;
+        speedScreen.vy = routeScreen.v2y;
+        speedScreen.ok = _onScreen.z < 1;
+      }
+    } else {
+      routeOffset.current.set(0, 0, 0);
+      routeScreen.alt = 0;
+    }
     // Payload callout (overlays/PayloadCallout.tsx): the real box (hover included) on screen, CSS px.
     payloadScreen.ok = false;
     if (look.p > 0 && payloadBox.current && drone1.current && camera.current) {
@@ -323,7 +812,7 @@ export function DroneRig() {
     const mobileLift = remap(window.innerHeight, 390, 1080, 1, 2);
     const mobileSwarmZ = remap(swarm, 0, 1, 0, 0.5) * remap(mission, 0, 1, 0.5, 0);
     if (droneRoot.current) {
-      droneRoot.current.position.set(0, 0, isMd ? 0 : mobileSwarmZ * mobileLift);
+      droneRoot.current.position.set(0, 0, isMd ? 0 : mobileSwarmZ * mobileLift).add(routeOffset.current);
       droneRoot.current.scale.setScalar(isMd ? 1 : mobileScale);
     }
     swarmX.current = remap(swarm, 0, 1, 0, 24) * remap(mission, 0, 0.75, 1, 0);
@@ -381,6 +870,17 @@ export function DroneRig() {
       p1.rotation.y - (isMd ? 0.3 * thermal : 0),
       p1.rotation.z + mouseRoll.current + bank.current,
     );
+    // Mountain stage: face up the route (yaw about the parent's up), leaning into the flight (local pitch).
+    const hd = heading.current;
+    if (hd.weight > 0) {
+      drone1.current.updateWorldMatrix(true, false);
+      _fwdDrone.set(0, 0, -1).transformDirection(drone1.current.matrixWorld);
+      const a0 = Math.atan2(-_fwdDrone.x, -_fwdDrone.z);
+      const a1 = Math.atan2(-hd.dir.x, -hd.dir.z);
+      const d = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0));
+      drone1.current.quaternion.premultiply(_qYaw.setFromAxisAngle(_Y, d * hd.weight));
+      drone1.current.quaternion.multiply(_qPitch.setFromAxisAngle(_X, -FLIGHT_PITCH * hd.fly));
+    }
     drone2.current.rotation.set(p2.rotation.x, p2.rotation.y, p2.rotation.z);
     drone3.current.rotation.set(p3.rotation.x, p3.rotation.y, p3.rotation.z);
 
@@ -458,6 +958,10 @@ export function DroneRig() {
       </group>
       <SwarmTags mainRef={drone1} />
       <SpecsCallouts />
+      <primitive object={altitudeLine} />
+      <primitive object={routePath2} />
+      <primitive object={routePath} />
+      <primitive object={net.root} />
     </>
   );
 }
