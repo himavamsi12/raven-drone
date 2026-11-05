@@ -22,8 +22,9 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
   with a slow settle, card copy and tags slide toward the scroll direction, the left indicator grows into the active bar.
 - Section 04 (`components/sections/CapabilityVideos.tsx`, Figma 100:622): tabs Sensor / Crosswind / Auto pilot over one
   panel; the active clip plays once when the section is in view, then the next tab takes over (loops), the tab fills with
-  playback; out of view pauses; a click jumps; reduced motion does not autoplay. Clips from `assets/Section 04 videos`,
-  audio stripped (`public/assets/video/section04/`).
+  playback; out of view pauses; a click jumps; reduced motion does not autoplay. Clips (user 2026-11-05, replacing the `assets/Section 04 videos`
+  ones): the user's three 2562x1440 renders (Cloudinary links: sensor gimbal + terrain scan, crosswind, route), re-encoded
+  1920x1080 H.264 CRF 22, faststart, audio stripped, posters = first frame (`public/assets/video/section04/`, ~3 MB each); sensor starts 3 s in (5.0 s long), crosswind 2 s in (5.0 s long) (user: drop the openings).
 - Copy in `lib/features.ts`. The Figma repeats one placeholder card ("Sealed motor pods", Propulsion / Status LED) on all
   three frames; cards 1-2 are titled after their images (Carbon-fibre arms, Sensor gimbal). Body copy is the Figma line
   (typo "fornext-generation" fixed). Type: Inter Tight + DM Mono (next/font/google). Desktop sizes are the frames' own
@@ -177,7 +178,7 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
 
 - User direction: after the payload, the next scroll zooms out to a side view of the drone, a line from the ground
   with "5000m", same clay environment, and the upcoming terrain taller than the ground below.
-- Scroll: `#altitude-band` (200dvh) right after the payload band, one gesture at the payload pace (4.2 s); snap stops
+- Scroll: `#altitude-band` (200dvh) right after the payload band, one gesture at the payload pace (2.0 s); snap stops
   2701 / 4501 / 6301 at 1440×900.
 - Camera (`payload-camera.ts` `applyAltitudeCamera`, from the finished payload pose): orbit centre payload box ->
   middle of the altitude line, radius until drone top -> ground fills 56% of the frame (34% portrait), azimuth to 90
@@ -201,7 +202,7 @@ Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HU
   toward the drone, which turns into a vector form (reference recordings in `assets/videos/`, local: the far terrain
   changes first; the reference's flock drones are flat light facets with outlines), and the payload is highlighted with
   "we can carry up to 15 to 25 kg". Only these three things are on the page.
-- Scroll: opening (0 -> P) -> hero -> payload stage (one gesture, 4.2 s) -> end of page. `PAYLOAD_ONLY` in
+- Scroll: opening (0 -> P) -> hero -> payload stage (one gesture, 2.0 s) -> end of page. `PAYLOAD_ONLY` in
   `story-map.ts` holds the story on the hero frame; `lib/payload.ts` holds the timeline, copy and progress.
 - Terrain: same mountain tiles and houses, colour swept to clay from 46 to 0 world units from the camera (soft 4-unit
   band, faint scan line on the front); clay = CLAY low/high by height, lit from the upper left, round dot grid on
@@ -1022,7 +1023,7 @@ Draco decoder is served locally from `public/draco/`; nothing is hotlinked.
 | Concern | Where | Source module ported |
 |---|---|---|
 | Scene ids, spans, ordered ranges, progress store | `src/lib/scenes.ts` | 36745 |
-| Single scroll controller (Lenis, lerp .95) + per-scene progress writer + scene-end snapping | `src/components/SmoothScroll.tsx` | 82245 |
+| Single scroll controller (Lenis, lerp .1, eased snaps) + per-scene progress writer + scene-end snapping | `src/components/SmoothScroll.tsx` | 82245 |
 | Sticky stage inside the `calc(6600dvh + 1px + nav)` track | `src/components/scene/FixedContainer.tsx`, `src/app/page.tsx` | 7370 `np` |
 | Scene assembly, composer, flock FBO portal, hero audio | `scene/MainScene.tsx`, `scene/PostFX.tsx` | `t4`, 41480, 8743, 98894 |
 | Camera + 3 drones, GLB clip seeking, hover/steer, shake | `scene/DroneRig.tsx`, `scene/ClipSeeker.ts`, `scene/Drone.tsx` | `tU`, `tN`, `tC`, `tP`, `tr`, 31905 |

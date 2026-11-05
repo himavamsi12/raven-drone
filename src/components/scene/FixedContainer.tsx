@@ -3,9 +3,10 @@
 import { KeyboardControls, PerformanceMonitor, type KeyboardControlsEntry } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useLenis } from "lenis/react";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useLoading } from "@/lib/loading";
+import { payloadRange, speedRange } from "@/lib/payload";
 import { canvasDpr, initialSceneFactor, sceneDprFor, useRenderScale } from "@/lib/render-scale";
 import { remap } from "@/lib/math";
 import { SCENE, useMouse, useScenes } from "@/lib/scenes";
@@ -17,7 +18,9 @@ import { MainScene } from "./MainScene";
 const KEYS: KeyboardControlsEntry<string>[] = [
   { name: "left", keys: ["ArrowLeft", "KeyA"] },
   { name: "right", keys: ["ArrowRight", "KeyD"] },
-  { name: "shift", keys: ["ShiftLeft"] },
+  // Shipped "hold Shift to boost" (terrain travel x6) is off (user 2026-11-05: pressing Shift raced the background):
+  // the name stays so the scene's `getKeys().shift` reads keep compiling, it is just never pressed.
+  { name: "shift", keys: [] },
 ];
 
 /**
@@ -32,14 +35,46 @@ function useSceneResolution() {
   const [factor] = useState(() => initialSceneFactor(canvas));
   const setSceneDpr = useRenderScale((s) => s.setSceneDpr);
   const lastStep = useRef(0);
+  const declined = useRef(false);
+  const pending = useRef<number | null>(null);
+  // User 2026-11-05 ("the mountain is jumping"): a density change re-renders the whole scene sharper or softer, which
+  // reads as a jump. Changes wait while the mountain views are on screen (payload frame -> Summit Station) and apply
+  // on leaving them; after a first step down the density no longer climbs back up (no up/down pops).
+  const apply = useCallback(
+    (dpr: number) => {
+      const y = window.scrollY;
+      const a = payloadRange.Q + payloadRange.T;
+      const b = speedRange.Q + speedRange.T;
+      if (payloadRange.T > 0 && speedRange.T > 0 && y >= a - 2 && y <= b + 2) {
+        pending.current = dpr;
+        return;
+      }
+      pending.current = null;
+      setSceneDpr(dpr);
+    },
+    [setSceneDpr],
+  );
+  useEffect(() => {
+    const onScroll = () => {
+      if (pending.current !== null) apply(pending.current);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [apply]);
+  const set = (dpr: number) => {
+    const cur = useRenderScale.getState().sceneDpr;
+    if (dpr < cur) declined.current = true;
+    else if (dpr > cur && declined.current) return;
+    apply(dpr);
+  };
   return {
     canvas,
     factor,
     onIncline: () => void (lastStep.current = 1),
     onDecline: () => void (lastStep.current = -1),
-    onChange: ({ factor: f }: { factor: number }) => setSceneDpr(sceneDprFor(f, canvas)),
+    onChange: ({ factor: f }: { factor: number }) => set(sceneDprFor(f, canvas)),
     // A flip-flop ending on a climb leaves the level that just failed: step back down to the one that held.
-    onFallback: ({ factor: f }: { factor: number }) => setSceneDpr(sceneDprFor(lastStep.current > 0 ? f - 0.1 : f, canvas)),
+    onFallback: ({ factor: f }: { factor: number }) => set(sceneDprFor(lastStep.current > 0 ? f - 0.1 : f, canvas)),
   };
 }
 

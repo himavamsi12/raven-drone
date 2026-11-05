@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import { CapabilityVideos } from "@/components/sections/CapabilityVideos";
 import { FeatureSection } from "@/components/sections/FeatureSection";
+import { UseCases } from "@/components/sections/UseCases";
+import { ClosingCta } from "@/components/sections/ClosingCta";
 
 const Loader = dynamic(() => import("@/components/loading/Loader").then((m) => m.Loader), { ssr: false });
 const FixedContainer = dynamic(() => import("@/components/scene/FixedContainer").then((m) => m.FixedContainer), { ssr: false });
@@ -23,8 +25,9 @@ export default function Home() {
       <div id="payload-band" className="pointer-events-none relative w-full" style={{ height: "calc(200dvh + 1px)" }}>
         <div id="payload" className="absolute left-0 h-0 w-full" style={{ top: "calc(200dvh + 1px)" }} />
       </div>
-      {/* Mountain stage (ROUTE_VH): pull-back to the section terrain, route line, altitude; `#route` marks its end frame. */}
-      <div id="route-band" className="pointer-events-none relative w-full" style={{ height: "200dvh" }}>
+      {/* Mountain stage (ROUTE_VH): pull-back to the section terrain, route line; `#route` marks its end frame. Then the
+          climb (CLIMB_VH, two scroll stops up to Ridge Clinic, altitude counting with it). */}
+      <div id="route-band" className="pointer-events-none relative w-full" style={{ height: "400dvh" }}>
         <div id="route" className="absolute left-0 h-0 w-full" style={{ top: "200dvh" }} />
       </div>
       {/* Speed stage (SPEED_VH): drone POV along the valley leg, speed / distance / time; `#speed` marks its end frame. */}
@@ -37,6 +40,10 @@ export default function Home() {
       <FeatureSection />
       {/* Section 04 (Figma 100:622): capability videos, played one after another. */}
       <CapabilityVideos />
+      {/* Section 05 (user mockup 2026-11-05): use cases, three photo cards. */}
+      <UseCases />
+      {/* Closing CTA (user mockup 2026-11-05): the landing drone from tundra-terrain behind the contact call. */}
+      <ClosingCta />
     </main>
   );
 }

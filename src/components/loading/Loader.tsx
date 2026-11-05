@@ -1,75 +1,89 @@
 "use client";
 
-import { PerspectiveCamera } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import clsx from "clsx";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
 import { useLoading } from "@/lib/loading";
-import { remap } from "@/lib/math";
+import { bootPose } from "@/lib/boot-pose";
 import { useGLB } from "@/components/scene/types";
-import { BOOT_LENGTH, BOOT_SHAPE, BOOT_VIEWBOX } from "./boot-shape";
 
-const [BOOT_W, BOOT_H] = BOOT_VIEWBOX;
-const PERIMETER = Math.round(BOOT_LENGTH);
-const DASH = Math.round(BOOT_LENGTH * 0.1);
+/** Silhouette tone on the loader background (the earlier boot silhouette's #2d302e). */
+const SILHOUETTE = "#2b2e31";
 
-/** Boot silhouette with traveling highlight (shipped `a` in module 60745; Raven drone outline). */
-function BootShape({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${BOOT_W} ${BOOT_H}`} className={className} aria-hidden="true">
-      <defs>
-        <path id="ds-shape" d={BOOT_SHAPE} fillRule="evenodd" clipRule="evenodd" />
-        <clipPath id="ds-clip">
-          <use href="#ds-shape" clipRule="evenodd" />
-        </clipPath>
-        <filter id="ds-grain" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.28" numOctaves="1" stitchTiles="stitch" result="noise" />
-          <feColorMatrix in="noise" type="saturate" values="0" />
-        </filter>
-      </defs>
-      <g clipPath="url(#ds-clip)">
-        <rect width={BOOT_W} height={BOOT_H} fill="currentColor" />
-        <rect width={BOOT_W} height={BOOT_H} filter="url(#ds-grain)" opacity="0.04" />
-      </g>
-      <use href="#ds-shape" fill="none" stroke="#ffffff" strokeOpacity="0.16" strokeWidth="2" />
-      <use href="#ds-shape" fill="none" stroke="#eaf2ff" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" strokeDasharray={`${DASH} ${PERIMETER - DASH}`}>
-        <animate attributeName="stroke-dashoffset" values={`${PERIMETER};0`} dur="4s" repeatCount="indefinite" calcMode="linear" />
-      </use>
-    </svg>
-  );
-}
-
-/** Loader silhouette (Raven hexacopter; same placement/material as the shipped delta). */
-function LoadingDrone({ width }: { width: number }) {
-  const { scene } = useGLB(ASSETS.loadingDrone);
+/** The live Raven model as a flat silhouette, placed and seen exactly like the main scene's hero drone (bootPose). */
+function MatchCutDrone() {
+  const { scene } = useGLB(ASSETS.raven);
+  const camera = useThree((s) => s.camera);
   const object = useMemo(() => {
     const c = scene.clone(true);
+    const material = new THREE.MeshBasicMaterial({ color: SILHOUETTE });
     c.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = new THREE.MeshBasicMaterial({ color: "#2d302e" });
+      if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = material;
     });
+    c.matrixAutoUpdate = false;
     return c;
   }, [scene]);
-  const scale = 0.75 * (width >= 768 ? 1 : remap(width, 390, 768, 1, 1.35));
-  return <primitive object={object} position={[-0.005623, 0.00259, 0.022765]} rotation={[-3.141362, 2e-6, -3.130472]} scale={scale} />;
+  // Still, like an image (user 2026-11-05: "currently it is shaking"): the pose is taken once, from the first frame
+  // the main scene publishes, and again only after a resize; the live hover and camera shake are not followed.
+  const frozen = useRef(false);
+  useEffect(() => {
+    const onResize = () => void (frozen.current = false);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  useFrame(() => {
+    if (!bootPose.ready || frozen.current) return;
+    frozen.current = true;
+    object.matrix.copy(bootPose.model);
+    object.matrixWorldNeedsUpdate = true;
+    camera.matrixAutoUpdate = false;
+    camera.matrix.copy(bootPose.camera);
+    camera.matrixWorld.copy(bootPose.camera);
+    camera.matrixWorldInverse.copy(bootPose.camera).invert();
+    camera.projectionMatrix.copy(bootPose.projection);
+    camera.projectionMatrixInverse.copy(bootPose.projection).invert();
+  });
+  return <primitive object={object} dispose={null} />;
 }
 
-/** Mobile boot visual: the drone silhouette in a demand-driven canvas. */
-function LoadingCanvas({ width, className }: { width: number; className?: string }) {
-  const md = width >= 768;
+/**
+ * Loader match cut (lib/boot-pose.ts; user 2026-11-05): a canvas laid exactly over the main canvas, drawing the Raven
+ * silhouette through the main camera, so when the loader fades the silhouette becomes the lit drone in place. Shows
+ * once the main scene publishes its first hero frame (fades in).
+ */
+function MatchCutCanvas() {
+  const box = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const el = box.current;
+      if (el && bootPose.ready) {
+        const { x, y, w, h } = bootPose.rect;
+        el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        el.style.width = `${w}px`;
+        el.style.height = `${h}px`;
+        if (!ready) setReady(true);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [ready]);
   return (
-    <Canvas className={className} gl={{ alpha: true, antialias: true, powerPreference: "low-power" }} dpr={[1, 2]} frameloop="demand">
-      <PerspectiveCamera
-        makeDefault
-        fov={20}
-        position={md ? [-3.152446, 3.910685, 5.033364] : [-6.075572, 7.260972, 9.217436]}
-        rotation={md ? [-0.660528, -0.459299, -0.311193] : [-0.70083, -0.454, -0.328852]}
-      />
-      <Suspense fallback={null}>
-        <LoadingDrone width={width} />
-      </Suspense>
-    </Canvas>
+    <div
+      ref={box}
+      className={clsx("absolute top-0 left-0 transition-opacity duration-700 ease-out", ready ? "opacity-100" : "opacity-0")}
+      style={{ width: 0, height: 0 }}
+    >
+      <Canvas className="h-full w-full" gl={{ alpha: true, antialias: true, powerPreference: "low-power" }} dpr={[1, 2]}>
+        <Suspense fallback={null}>
+          <MatchCutDrone />
+        </Suspense>
+      </Canvas>
+    </div>
   );
 }
 
@@ -138,15 +152,6 @@ export function Loader() {
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
   const main = useLoading((s) => s.mainAppLoaded);
   const terrain = useLoading((s) => s.terrainReady);
-  const [width, setWidth] = useState(1280);
-
-  useEffect(() => {
-    const on = () => setWidth(window.innerWidth);
-    on();
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, []);
-
   // Boot splash first, then the loading canvas takes over (12s fallback in the reference).
   useEffect(() => {
     const id = setTimeout(() => useLoading.setState({ loadingCanvasLoaded: true }), 600);
@@ -178,13 +183,10 @@ export function Loader() {
       {!hidden && loaded && (
         <div
           aria-hidden="true"
-          className={clsx(
-            "pointer-events-none fixed inset-0 z-[890] transition-opacity duration-700 ease-out",
-            hiding ? "opacity-0" : "opacity-100",
-          )}
+          className={clsx("pointer-events-none fixed inset-0 z-[890] transition-opacity duration-700 ease-out", hiding ? "opacity-0" : "opacity-100")}
           style={{ background: "radial-gradient(120% 120% at 50% 45%, #0d1014 0%, #06070a 45%, #000 80%)" }}
         >
-          <LoadingCanvas width={width} className="h-full w-full opacity-40" />
+          <MatchCutCanvas />
         </div>
       )}
       {!hidden && (
@@ -195,14 +197,7 @@ export function Loader() {
             loaded ? "opacity-0" : "opacity-100",
           )}
           style={{ background: "radial-gradient(120% 120% at 50% 45%, #0d1014 0%, #06070a 45%, #000 80%)" }}
-        >
-          <BootShape className="relative h-[40.19vh] w-auto translate-x-[0.77vh] -translate-y-[1.1vh] animate-[pulse_4s_ease-in-out_infinite] text-[#2d302e]/40 max-md:hidden" />
-          {width < 768 && (
-            <div className="absolute inset-0 animate-[pulse_4s_ease-in-out_infinite]">
-              <LoadingCanvas width={width} className="h-full w-full opacity-40" />
-            </div>
-          )}
-        </div>
+        />
       )}
       <LoadingStatus />
     </>

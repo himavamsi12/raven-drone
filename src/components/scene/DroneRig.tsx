@@ -22,8 +22,7 @@ import {
   ROUTE_TIMELINE,
   routeScreen,
   SPEED_FIGURES,
-  SPEED_FLIGHT,
-  SPEED_TIMELINE,
+  LEG2_MS,
   speedScreen,
 } from "@/lib/payload";
 import { payloadClayUniforms } from "./materials/TerrainMaterial";
@@ -39,6 +38,7 @@ import { applyCameraTilt, cameraTilt } from "./camera-tilt";
 import { applyLandscapeCamera } from "./clay-map";
 import { SwarmTags } from "./overlays/SwarmTags";
 import { useGLB } from "./types";
+import { bootPose } from "@/lib/boot-pose";
 
 /** Camera shake intensity per scene (shipped `tM`). */
 const SHAKE = {
@@ -66,7 +66,11 @@ function CameraShake({ children }: { children: ReactNode }) {
         : thermal.isActive
           ? SHAKE[SCENE.THERMAL_IRREGULARITY] * thermal.progress
           : 0;
-    amount.current = lerp(amount.current, target, 0.05);
+    // Off from the payload stage on (user 2026-11-05: "the mountain is jumping like a bob shake"): the story is held on
+    // the intro scene for the whole payload page, so its hero shake kept running in the payload, mountain and speed
+    // views, where the 20 deg lens turned it into a visible wobble of the whole massif.
+    const stageCalm = 1 - THREE.MathUtils.smoothstep(payloadLook().p, 0, 0.3);
+    amount.current = lerp(amount.current, target * stageCalm, 0.05);
     const u = amount.current;
     const t = clock.getElapsedTime();
     const x = Math.sin(3 * t * 8) * u + Math.sin(2.2 * t * 8 + 1) * u * 0.5;
@@ -337,20 +341,16 @@ const _qPitch = new THREE.Quaternion();
 const _X = new THREE.Vector3(1, 0, 0);
 /** Leg 2 colour (distance and speed), next to the altitude leg's yellow. */
 const ROUTE_GREEN = "#4ade80";
-/** Distance travelled (share of the leg) for a share of the flight time: speed ramps up and down at both ends. */
-function legShare(t: number, ramp: number) {
-  const r = Math.min(Math.max(ramp, 1e-3), 0.5);
-  const d = t < r ? (t * t) / (2 * r) : t > 1 - r ? 1 - r - ((1 - t) * (1 - t)) / (2 * r) : t - r / 2;
-  return d / (1 - r);
-}
-/** Speed share at a flight time share (trapezoid: ramp up, cruise, ramp down). */
-function speedShare(t: number, ramp: number) {
-  return Math.min(t / ramp, 1, (1 - t) / ramp, 1);
-}
 const _Y = new THREE.Vector3(0, 1, 0);
 /** Nose-down tilt while flying the route (rad), as a multirotor leans into forward flight. */
 const FLIGHT_PITCH = 0.14;
 const _payloadEnd = new THREE.Object3D();
+const _anchorFly = new THREE.Vector3();
+/** Share of the screen width the mountain views slide left by (desktop/landscape only). */
+/** Zoom of the mountain views (view window W / zoom), and where in the frame it zooms toward (0..1, 0.5 = centre). */
+const MOUNTAIN_ZOOM = 1.12;
+const MOUNTAIN_ZOOM_CENTER = { x: 0.5, y: 0.62 };
+const MOUNTAIN_SHIFT = 0.045; // was .13, then .08; less with MOUNTAIN_ZOOM so the route start stays clear of the left edge
 const _fwdEnd = new THREE.Vector3();
 
 /** Top and bottom centre of `drone`'s bounds in its local space (rotors, mast and skids included). */
@@ -486,12 +486,16 @@ export function DroneRig() {
   const draw2 = useRef(0);
   /** Speed stage flight along leg 2 (0..1, time). */
   const flight2 = useRef(0);
+  /** Smoothed leg 2 speed (share of the leg per second): the HUD's km/h and the forward lean. */
+  const flight2Vel = useRef(0);
   useEffect(() => () => {
     routePath2.geometry.dispose();
     routePath2.material.dispose();
   }, [routePath2]);
   /** Flight up the clinic route (0..1), the drone's offset from its start (world) and where it heads. */
   const flight = useRef(0);
+  /** Smoothed climb speed (share of the route per second), for the forward lean while it climbs. */
+  const climbVel = useRef(0);
   const routeOffset = useRef(new THREE.Vector3());
   const heading = useRef({ dir: new THREE.Vector3(0, 0, -1), weight: 0, fly: 0 });
   const pathDraw = useRef(0);
@@ -513,6 +517,26 @@ export function DroneRig() {
   const payloadBoxOwner = useRef<THREE.Object3D | null>(null);
 
   // Clip seeking runs before the procedural pass, mirroring the shipped order 1..15.
+  // Loader match cut (lib/boot-pose.ts): publish the hero drone, camera and canvas while the loader is up. Runs after
+  // the rig's own frame hooks (priority 99) and before the composer renders (100), so it matches the frame on screen.
+  useFrame((state) => {
+    if (useLoading.getState().loadingCanvasHidden) return;
+    const model = drone1.current?.children[0]?.children[0];
+    const cam = camera.current;
+    if (!model || !cam) return;
+    model.updateWorldMatrix(true, false);
+    cam.updateWorldMatrix(true, false);
+    bootPose.model.copy(model.matrixWorld);
+    bootPose.camera.copy(cam.matrixWorld);
+    bootPose.projection.copy(cam.projectionMatrix);
+    const r = state.gl.domElement.getBoundingClientRect();
+    bootPose.rect.x = r.left;
+    bootPose.rect.y = r.top;
+    bootPose.rect.w = r.width;
+    bootPose.rect.h = r.height;
+    bootPose.ready = true;
+  }, 99);
+
   useFrame((state, dt) => {
     const set = isMd ? seekers.desktop : seekers.mobile;
     if (mover1.current) set.d1?.apply(mover1.current);
@@ -573,7 +597,10 @@ export function DroneRig() {
         _payloadEnd.position.copy(cameraMover.current.position);
         _payloadEnd.quaternion.copy(cameraMover.current.quaternion);
         applyPayloadCamera(_payloadEnd, _anchor, 1, camera.current.fov, camera.current.aspect);
-        applyPayloadCamera(cameraMover.current, _anchor, look.zoom, camera.current.fov, camera.current.aspect);
+        // The live camera follows the drone up the route (user 2026-11-05: same camera angle while it climbs) and
+        // the mountain stage's pull-back blends from that following pose to the section view.
+        _anchorFly.copy(_anchor).add(routeOffset.current);
+        applyPayloadCamera(cameraMover.current, _anchorFly, look.zoom, camera.current.fov, camera.current.aspect);
         // The section terrain is the ground from the payload stage on (pivot on the drone without its hover); the
         // mountain stage pulls the camera back to the section's view.
         const ext = droneExtent.current;
@@ -673,27 +700,40 @@ export function DroneRig() {
     routeScreen.ok = false;
     routeScreen.ok2 = false;
     const pathOn = look.r > 0 && net.ready && !!camera.current;
-    pathDraw.current = pathOn && look.r >= ROUTE_TIMELINE.path
-      ? Math.min(1, pathDraw.current + dt / ROUTE_FLIGHT.drawS)
-      : Math.max(0, pathDraw.current - dt / ROUTE_PATH.retractS);
+    // The route line draws ahead of the drone over the first half of the pull-back (was time-driven after it),
+    // so the climb that follows in the same gesture starts on a finished line.
+    pathDraw.current = pathOn ? THREE.MathUtils.smoothstep(look.r, 0.02, 0.55) : Math.max(0, pathDraw.current - dt / ROUTE_PATH.retractS);
     // Then the drone flies the clinic route (user: "drone should start moving towards top of the terrain", the
     // altitude counting up with it); it flies back quickly when the page scrolls back. In the speed stage leg 1 is
     // done (also after a jump straight there).
+    // Climb stage (user 2026-11-05: "on 2 scroll it should go up there"): the flight follows the scroll (lib/payload
+    // `climbProgress`, two snap stops), lightly damped so the drone glides into each stop instead of locking to it.
     const inSpeed = look.sp > 0;
-    if (inSpeed && pathOn) pathDraw.current = 1;
-    flight.current = inSpeed && pathOn
-      ? 1
-      : pathOn && look.r >= ROUTE_TIMELINE.path && pathDraw.current >= 1
-        ? Math.min(1, flight.current + dt / ROUTE_FLIGHT.flyS)
-        : Math.max(0, flight.current - dt / ROUTE_FLIGHT.returnS);
+    if ((inSpeed || look.c > 0) && pathOn) pathDraw.current = 1; // (also when a jump lands past the pull-back)
+    const flyTarget = !pathOn ? 0 : inSpeed ? 1 : look.fly;
+    const prevFlight = flight.current;
+    // Same smoothing as the camera (the page scroll is already eased by Lenis): with its own extra lag the drone fell
+    // behind the camera on a fast scroll, the view arrived while the drone was still on the way (user 2026-11-05).
+    flight.current += (flyTarget - flight.current) * (1 - Math.exp(-dt * 30));
+    if (Math.abs(flyTarget - flight.current) < 1e-4) flight.current = flyTarget;
+    climbVel.current += ((dt > 0 ? (flight.current - prevFlight) / dt : 0) - climbVel.current) * (1 - Math.exp(-dt * 5));
     // Leg 2 draws on from the clinic once the drone is there (user: the checkpoints are connected).
-    draw2.current = pathOn && flight.current >= 1
+    draw2.current = pathOn && flight.current >= 0.999
       ? Math.min(1, draw2.current + dt / ROUTE_FLIGHT.drawS)
       : Math.max(0, draw2.current - dt / ROUTE_PATH.retractS);
     // Speed stage: fly leg 2 once the chase view has settled.
-    flight2.current = pathOn && inSpeed && look.sp >= SPEED_TIMELINE.fly && draw2.current >= 1
-      ? Math.min(1, flight2.current + dt / SPEED_FLIGHT.flyS)
-      : Math.max(0, flight2.current - dt / SPEED_FLIGHT.returnS);
+    // Speed stage: leg 2 follows the scroll (two stops, like the climb), lightly damped.
+    if (inSpeed && pathOn) draw2.current = 1;
+    const fly2Target = pathOn && inSpeed ? look.sp : 0;
+    const prevFlight2 = flight2.current;
+    flight2.current += (fly2Target - flight2.current) * (1 - Math.exp(-dt * 7));
+    if (Math.abs(fly2Target - flight2.current) < 1e-4) flight2.current = fly2Target;
+    flight2Vel.current += ((dt > 0 ? (flight2.current - prevFlight2) / dt : 0) - flight2Vel.current) * (1 - Math.exp(-dt * 5));
+    // Cruise = the snap's leg pace (LEG2_MS for the whole leg); the HUD reads km/h against it.
+    const cruise2 = Math.min(1, Math.abs(flight2Vel.current) / (1 / (LEG2_MS / 1000)));
+    // On leg 2 until the drone is back at the clinic: on the way back the scroll reaches the clinic before the eased
+    // flight does, and switching to leg 1 there snapped the drone the last stretch (user 2026-11-05).
+    const onLeg2 = inSpeed || (pathOn && flight2.current > 1e-4);
     routePath.visible = pathOn && pathDraw.current > 0;
     routePath2.visible = pathOn && draw2.current > 0;
     speedScreen.ok = false;
@@ -731,32 +771,37 @@ export function DroneRig() {
 
       });
       // Flight: the drone's offset along the route (applied to droneRoot next frame), its heading and the counter.
-      const sFly = THREE.MathUtils.smootherstep(flight.current, 0, 1);
+      const sFly = flight.current; // the scroll snap already eases each stop
       routeScreen.alt = net.along(sFly, _netPt, _netDir);
-      if (inSpeed) {
+      if (onLeg2) {
         // Leg 2: distance by the trapezoid speed profile (speeding up and slowing down at the ends).
-        const s2 = legShare(flight2.current, SPEED_FLIGHT.rampShare);
+        const s2 = flight2.current; // the scroll snap eases each stop
         net.along2(s2, _netPt, _netDir);
         const total = net.length2 * SPEED_FIGURES.metresPerUnit;
         speedScreen.total = total;
         speedScreen.left = total * (1 - s2);
-        speedScreen.kmh = flight2.current > 0 && flight2.current < 1 ? SPEED_FIGURES.kmh * speedShare(flight2.current, SPEED_FLIGHT.rampShare) : 0;
+        speedScreen.kmh = SPEED_FIGURES.kmh * cruise2;
         speedScreen.fly = flight2.current;
+      } else {
+        // Back on leg 1 (or at the clinic): no stale leg 2 progress (it folded the clinic card shut on the way back).
+        speedScreen.fly = 0;
+        speedScreen.kmh = 0;
       }
       net.toWorld(_netPt, _flyW);
       net.toWorld(net.start, _flyW0);
       routeOffset.current.subVectors(_flyW, _flyW0);
       net.dirToWorld(_netDir, heading.current.dir);
       // Turn to face up the mountain while the view widens (user: the drone angle must change toward the terrain).
-      heading.current.weight = THREE.MathUtils.smootherstep(look.wide, 0, 0.7);
-      heading.current.fly = inSpeed
-        ? speedShare(flight2.current, SPEED_FLIGHT.rampShare) * (flight2.current > 0 && flight2.current < 1 ? 1 : 0)
-        : Math.sin(Math.PI * Math.min(flight.current * 1.15, 1)) * (flight.current < 1 ? 1 : 0);
+      heading.current.weight = THREE.MathUtils.smootherstep(look.wide, 0, 0.3); // turned up the route as it sets off
+      heading.current.fly = onLeg2
+        ? cruise2
+        : Math.min(1, Math.abs(climbVel.current) * 2.6); // lean while climbing (a stop takes ~1.7 s for half the route)
       // Pins (DOM): both sites.
       _onScreen.copy(_dest).project(camera.current);
       routeScreen.vx = (_onScreen.x * 0.5 + 0.5) * size.width;
       routeScreen.vy = (0.5 - _onScreen.y * 0.5) * size.height;
       routeScreen.draw = pathDraw.current;
+      routeScreen.fly = flight.current; // the clinic pin opens into its card on arrival (overlays/RouteCallout.tsx)
       routeScreen.ok = _onScreen.z < 1;
       _onScreen.copy(_dest2).project(camera.current);
       routeScreen.v2x = (_onScreen.x * 0.5 + 0.5) * size.width;
@@ -772,6 +817,29 @@ export function DroneRig() {
     } else {
       routeOffset.current.set(0, 0, 0);
       routeScreen.alt = 0;
+      routeScreen.fly = 0;
+    }
+    // Mountain views sit left of the right-hand callout block (user 2026-11-05: "push the scene a little to the left,
+    // the text on the right overlaps"): the projection window slides right by MOUNTAIN_SHIFT of the screen width, eased
+    // in with the pull-back. A view offset keeps the camera angle and keeps every projected pin and line aligned.
+    if (camera.current) {
+      const W = size.width;
+      const H = size.height;
+      const k = THREE.MathUtils.smootherstep(look.wide, 0, 1);
+      const shift = W > H && W >= 768 ? MOUNTAIN_SHIFT * k : 0;
+      // Zoom (user 2026-11-05: "make the scene bigger, a little zoom in"): a smaller view window, centred a little below
+      // the middle where the massif sits, scaled up to the screen. Every size, eased in with the pull-back.
+      const zoom = 1 + (MOUNTAIN_ZOOM - 1) * k;
+      const w = W / zoom;
+      const h = H / zoom;
+      const ox = Math.round(((W - w) * MOUNTAIN_ZOOM_CENTER.x + shift * W) * 10) / 10;
+      const oy = Math.round((H - h) * MOUNTAIN_ZOOM_CENTER.y * 10) / 10;
+      const cam = camera.current;
+      if (ox > 0.05 || zoom > 1.0005) {
+        const v = cam.view;
+        if (!v || !v.enabled || v.offsetX !== ox || v.offsetY !== oy || Math.abs(v.width - w) > 0.01 || v.fullWidth !== W || v.fullHeight !== H)
+          cam.setViewOffset(W, H, ox, oy, w, h);
+      } else if (cam.view?.enabled) cam.clearViewOffset();
     }
     // Payload callout (overlays/PayloadCallout.tsx): the real box (hover included) on screen, CSS px.
     payloadScreen.ok = false;

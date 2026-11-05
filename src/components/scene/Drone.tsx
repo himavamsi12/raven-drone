@@ -47,6 +47,8 @@ const DRONE_ANISOTROPY = 8;
 
 /** Model size across its widest axis, in tracker units. */
 const SPAN = 200;
+/** No vector form, no payload highlight. */
+const REAL_LOOK = { vector: 0, highlight: 0 };
 
 /**
  * Raven payload stage (lib/payload.ts, user 2026-11-03: "change the drone into vectorise", after the reference's flock
@@ -162,7 +164,8 @@ void main() {
   });
 }
 
-export function RavenModel({ envMap }: { envMap?: THREE.Texture }) {
+/** `realLook`: ignore the payload stage's vector sweep (drones outside the stage, e.g. the closing CTA). */
+export function RavenModel({ envMap, realLook = false }: { envMap?: THREE.Texture; realLook?: boolean }) {
   const { scene } = useGLB(ASSETS.raven);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const spin = !reducedMotion;
@@ -234,7 +237,7 @@ export function RavenModel({ envMap }: { envMap?: THREE.Texture }) {
   useEffect(() => setRotorBlur(blur, spin), [blur, spin]);
   useFrame(({ camera, clock }, dt) => {
     // Payload stage: vector sweep over this instance's world height (airframe top -> bottom), payload highlight.
-    const look = payloadLook();
+    const look = realLook ? REAL_LOOK : payloadLook();
     vector.uVector.value = look.vector;
     vector.uHighlight.value = look.highlight;
     rotorBlurVector.value = look.vector;

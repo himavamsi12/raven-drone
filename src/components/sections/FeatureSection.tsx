@@ -1,8 +1,8 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
+import { motion, useInView, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { FEATURES, SECTION_BODY, SECTION_HEADING } from "@/lib/features";
+import { FEATURE_BODY, FEATURE_HEADING, FEATURES } from "@/lib/features";
 
 /** Hexa mark from the card's bottom-right corner (Figma 128:820 "Union"). */
 function HexaMark({ className }: { className?: string }) {
@@ -18,21 +18,43 @@ function HexaMark({ className }: { className?: string }) {
   );
 }
 
-const EASE = [0.22, 1, 0.36, 1] as const;
+const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+/** Card copy swap: the active entry settles in place, the others sit `px` above (passed) or below (next), hidden. */
+function swap(d: number, px: number, delay = 0): React.CSSProperties {
+  const on = d === 0;
+  return {
+    opacity: on ? 1 : 0,
+    transform: `translateY(calc(var(--u) * ${on ? 0 : d > 0 ? px : -px}))`,
+    transition: on
+      ? `opacity 0.45s ${0.15 + delay}s ease-out, transform 0.6s ${0.15 + delay}s ${EASE}`
+      : `opacity 0.25s ease-in, transform 0.4s ${EASE}`,
+    pointerEvents: on ? undefined : "none",
+  };
+}
 
 /**
- * Section 03 (Figma 128:804 / 128:830 / 128:857, 1920 x 1207): a pinned screen that slides up over the 3D stage,
- * then one feature per scroll stop (the stops are chapter snaps in story-map.ts `pageBands`, one gesture each).
- * `#features-band` is (n) screens tall: the pinned screen stays while the page moves (n - 1) screens, and the active
- * feature is the nearest stop. Image: cross-fade with a slow settle; card: copy leaves toward the scroll direction and
- * the next one comes in from the other side; the left indicator grows into the active bar.
- * Desktop sizes are the frame's own, in `--u` = one frame pixel (fits the frame to the viewport width or height).
+ * Section 03 (user mockups 2026-11-05, "Feature 7/8"; first built from Figma 128:804/830/857): a pinned screen that
+ * slides up over the 3D stage, then one feature per scroll stop (the stops are chapter snaps in story-map.ts
+ * `pageBands`, one gesture each). `#features-band` is (n) screens tall: the pinned screen stays while the page moves
+ * (n - 1) screens, and the active feature is the nearest stop. Full-bleed render (cross-fade with a slow settle), heading
+ * top left, a compact card bottom right whose copy leaves toward the scroll direction, and a right-hand indicator
+ * (BUILT / SENSOR / MOTOR) that slides so the active label sits on the centre line with its neighbours beside it.
+ * Desktop sizes in `--u` = one 1920-wide frame pixel (fits the frame to the viewport width or height).
  */
 export function FeatureSection() {
   const band = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-  const [dir, setDir] = useState(1);
   const activeRef = useRef(0);
+  // Heading fade-in (user 2026-11-05): plays as the section slides up into view, again on every re-entry.
+  const stage = useRef<HTMLElement>(null);
+  const headingIn = useInView(stage, { amount: 0.35 });
+  const reduced = useReducedMotion();
+  const reveal = (i: number) => ({
+    initial: false as const,
+    animate: headingIn ? { opacity: 1, y: 0, filter: "blur(0px)" } : { opacity: 0, y: reduced ? 0 : 28, filter: reduced ? "blur(0px)" : "blur(6px)" },
+    transition: headingIn ? { duration: 0.9, delay: 0.1 + i * 0.12, ease: [0.22, 1, 0.36, 1] as const } : { duration: 0.2 },
+  });
 
   useEffect(() => {
     const update = () => {
@@ -41,7 +63,6 @@ export function FeatureSection() {
       const vh = window.innerHeight;
       const k = Math.min(Math.max(Math.round(-el.getBoundingClientRect().top / vh), 0), FEATURES.length - 1);
       if (k !== activeRef.current) {
-        setDir(k > activeRef.current ? 1 : -1);
         activeRef.current = k;
         setActive(k);
       }
@@ -55,8 +76,6 @@ export function FeatureSection() {
     };
   }, []);
 
-  const feature = FEATURES[active];
-
   return (
     <div
       ref={band}
@@ -65,88 +84,112 @@ export function FeatureSection() {
       style={{ height: `${FEATURES.length * 100}dvh` }}
     >
       <section
+        ref={stage}
         id="features"
         aria-label="Raven features"
         className="feature-stage font-tight sticky top-0 h-dvh w-full overflow-hidden bg-[#060606] text-white"
       >
-        {/* Images (each with its frame's radial vignette baked in), stacked and cross-faded. */}
+        {/* Images, stacked and cross-faded. Each sits in a frame that recentres the render on desktop (lib/features.ts). */}
         {FEATURES.map((f, i) => (
-          <img
+          <div
             key={f.id}
-            src={f.image}
-            alt={i === active ? f.alt : ""}
-            aria-hidden={i !== active}
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover object-[72%_50%] md:object-center"
-            style={{
-              opacity: i === active ? 1 : 0,
-              transform: `scale(${i === active ? 1 : 1.06})`,
-              transition: `opacity 0.9s ${i === active ? "0.1s" : "0s"} ease-in-out, transform 1.6s cubic-bezier(0.22, 1, 0.36, 1)`,
-            }}
-          />
+            className="feature-frame absolute inset-0"
+            style={{ "--fx": `${f.frame.x}%`, "--fy": `${f.frame.y}%`, "--fs": f.frame.s } as React.CSSProperties}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={f.image}
+              alt={i === active ? f.alt : ""}
+              aria-hidden={i !== active}
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover object-[72%_50%] md:object-center"
+              style={{
+                // User 2026-11-05: a quick swap. The outgoing render is gone in 0.2 s so it never shows behind the
+                // incoming one (the renders are smaller than the screen now, so a held old image showed round the
+                // new one's edges); the new one fades in over 0.4 s with a short settle.
+                // Black gradient over a hard cut on the render's left edge (user 2026-11-05).
+                ...(f.fadeLeft !== undefined && {
+                  maskImage: `linear-gradient(90deg, transparent ${f.fadeLeft}%, #000 ${f.fadeLeft + 22}%)`,
+                }),
+                zIndex: i === active ? 1 : 0,
+                opacity: i === active ? 1 : 0,
+                transform: `scale(${i === active ? 1 : 1.02})`,
+                transition:
+                  i === active
+                    ? "opacity 0.4s 0.05s ease-out, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1)"
+                    : "opacity 0.2s ease-in, transform 0s 0.2s",
+              }}
+            />
+          </div>
         ))}
+        {/* Left shade so the heading reads over bright parts of the render. */}
+        <div aria-hidden="true" className="feature-shade pointer-events-none absolute inset-0" />
 
         <div className="feature-layout absolute inset-0">
           <div className="feature-heading">
-            <h2 className="feature-h">{SECTION_HEADING}</h2>
-            <p className="feature-p">{SECTION_BODY}</p>
+            <h2 className="feature-h">
+              <motion.span className="block" {...reveal(0)}>
+                {FEATURE_HEADING[0]}
+              </motion.span>
+              <motion.span className="block" {...reveal(1)}>
+                {FEATURE_HEADING[1]}
+              </motion.span>
+            </h2>
+            <motion.p className="feature-p" {...reveal(2)}>
+              {FEATURE_BODY}
+            </motion.p>
           </div>
 
           <div className="feature-card bg-[#242424]">
-            <div className="relative">
-              <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-                <motion.div
-                  key={feature.id}
-                  custom={dir}
-                  variants={{
-                    enter: (d: number) => ({ opacity: 0, y: 24 * d }),
-                    center: { opacity: 1, y: 0 },
-                    exit: (d: number) => ({ opacity: 0, y: -24 * d }),
-                  }}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.55, ease: EASE }}
-                  className="feature-copy"
-                >
-                  <h3 className="feature-title">{feature.title}</h3>
-                  <p className="feature-body">{feature.body}</p>
-                </motion.div>
-              </AnimatePresence>
+            {/* User 2026-11-05 ("glitch while changing"): every feature's copy sits in the same grid cell, so the card
+                keeps one height and the old and new text cross over in place (was AnimatePresence popLayout, whose
+                height jump showed one frame of overlapping text). */}
+            <div className="feature-stack">
+              {FEATURES.map((f, i) => (
+                <div key={f.id} className="feature-copy" style={swap(i - active, 20)} aria-hidden={i !== active}>
+                  <h3 className="feature-title font-dm uppercase">{f.title}</h3>
+                  <p className="feature-body">{f.body}</p>
+                </div>
+              ))}
             </div>
 
             <div className="feature-foot">
-              <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-                <motion.ul
-                  key={feature.id}
-                  custom={dir}
-                  variants={{
-                    enter: (d: number) => ({ opacity: 0, y: 12 * d }),
-                    center: { opacity: 1, y: 0 },
-                    exit: (d: number) => ({ opacity: 0, y: -12 * d }),
-                  }}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.5, ease: EASE, delay: 0.05 }}
-                  className="feature-tags"
-                >
-                  {feature.tags.map((t) => (
-                    <li key={t} className="feature-tag font-dm bg-white/30 uppercase">
-                      {t}
-                    </li>
-                  ))}
-                </motion.ul>
-              </AnimatePresence>
+              <div className="feature-stack">
+                {FEATURES.map((f, i) => (
+                  <ul key={f.id} className="feature-tags" style={swap(i - active, 10, 0.06)} aria-hidden={i !== active}>
+                    {f.tags.map((t) => (
+                      <li key={t} className="feature-tag font-dm bg-white/30 uppercase">
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+              </div>
               <HexaMark className="feature-mark" />
             </div>
           </div>
 
-          {/* Indicator (Figma "Frame 27"): 6px squares, the active one a 45px yellow bar. */}
-          <ol className="feature-dots" aria-label={`Feature ${active + 1} of ${FEATURES.length}`}>
-            {FEATURES.map((f, i) => (
-              <li key={f.id} className="feature-dot" data-active={i === active ? "" : undefined} />
-            ))}
+          {/* Indicator (mockup): labels with a small square; the list slides so the active one is on the centre line,
+              only its neighbours stay visible. */}
+          <ol className="feature-nav font-dm uppercase" aria-label={`Feature ${active + 1} of ${FEATURES.length}`}>
+            {FEATURES.map((f, i) => {
+              const d = i - active;
+              return (
+                <li
+                  key={f.id}
+                  className="feature-nav-item"
+                  data-active={d === 0 ? "" : undefined}
+                  aria-current={d === 0 ? "step" : undefined}
+                  style={{
+                    transform: `translateY(calc(${d} * var(--nav-step) - 50%))`,
+                    opacity: d === 0 ? 1 : Math.abs(d) === 1 ? 0.7 : 0,
+                  }}
+                >
+                  {f.nav}
+                  <span className="feature-nav-sq" aria-hidden="true" />
+                </li>
+              );
+            })}
           </ol>
         </div>
       </section>

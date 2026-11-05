@@ -8,7 +8,21 @@ import { linear } from "@/lib/math";
 import { useLoading } from "@/lib/loading";
 import { isScrollLocked, LOCK_EVENT } from "@/lib/scroll-lock";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { altitudeProgress, altitudeRange, PAYLOAD_MS, payloadProgress, payloadRange, routeProgress, routeRange, speedProgress, speedRange, usePayload } from "@/lib/payload";
+import {
+  CLIMB_STOP_MS,
+  LEG2_MS,
+  climbRange,
+  altitudeProgress,
+  altitudeRange,
+  PAYLOAD_MS,
+  payloadProgress,
+  payloadRange,
+  routeProgress,
+  routeRange,
+  speedProgress,
+  speedRange,
+  usePayload,
+} from "@/lib/payload";
 
 /** Returns a callback that scrolls to the end of `id` over 3s (shipped `w`). */
 export function useScrollToScene(id: SceneId) {
@@ -24,7 +38,116 @@ export function useScrollToScene(id: SceneId) {
 }
 
 /** Snap duration for the whole opening move (page 0 → hero frame). */
-const OPENING_MS = 5000;
+const OPENING_MS = 2500; // was 5000, 3800, 3300, 2900 (user 2026-11-05: "a little faster")
+/** Snap motion eases in and out (user 2026-11-05: "smooth scroll, seamless"): time to reach / leave full speed (ms). */
+const SNAP_RAMP_MS = 260;
+/** Share of a snap's cruise time spent easing in (and again out); capped at 1.1 s. */
+const SNAP_EASE_SHARE = 0.28;
+/** Time to reach cruise speed at the start of any move (ms): short, so a scroll answers at once. */
+const SNAP_START_MS = 180;
+/** Free scroll smoothing outside the snap bands (Lenis lerp per 60 Hz frame; was .95 = almost none). */
+const FREE_LERP = 0.11; // free zone (payload frame -> Ridge Clinic): eased a little more (was .14)
+const WHEEL_MULTIPLIER = 1.1;
+/**
+ * Share of the wheel/touch distance the climb (free zone) scrolls by, by where it is (user 2026-11-05: "respond
+ * immediately but not too fast", then "too many scrolls ... a little fast here"): the pull-back from the payload
+ * frame goes quicker, the last stretch up to Ridge Clinic stays calm.
+ */
+const CLIMB_SCROLL_SCALE = { pullBack: 1.1, climb: 0.75 }; // tuned with FREE_MAX_LEAD (user 2026-11-05)
+/**
+ * Speed cap for the climb (user 2026-11-05: "it should be fast, but not this fast"): the wheel may run at most this far
+ * (px) ahead of the eased scroll, so a hard flick moves the climb at ~lerp x lead x 60 px/s (~1,300) instead of
+ * leaping, while ordinary scrolls are untouched.
+ */
+const FREE_MAX_LEAD = 280;
+/** The root Lenis, for the climb's speed cap in the virtualScroll hook (set by SceneController). */
+const lenisRef: { current: { targetScroll: number; animatedScroll: number } | null } = { current: null };
+const climbScale = (scroll: number) => (scroll < climbRange.Q ? CLIMB_SCROLL_SCALE.pullBack : CLIMB_SCROLL_SCALE.climb);
+/** Wheel events closer than this belong to one swipe (trackpad momentum included). */
+const GESTURE_GAP_MS = 120; // was 220: quick repeated scrolls were merged into one (momentum events come every ~16 ms)
+/** A new swipe during a snap queues the next stop only after this share of the current one has played. */
+const CHAIN_AFTER = 0.35; // was 0.6: a scroll during a move queues the next stop sooner
+
+/**
+ * Set by SceneController: true when a wheel step in `dir` is taken over by the snap controller. Lenis then ignores
+ * that wheel event (virtualScroll), so its smoothing never fights the snap; outside the bands it smooths freely.
+ */
+const snapClaim: { current: ((dir: number, deltaY: number, event: WheelEvent) => boolean) | null } = {
+  current: null,
+};
+
+/**
+ * Hold stops (user 2026-11-05: "once it comes here [Ridge Clinic] there should be some pause, and again when I scroll
+ * it should move"): the two checkpoints. A move never carries on past them (no chaining, no queued scroll), and
+ * scrolling is ignored for HOLD_MS after landing so momentum cannot push on.
+ */
+const HOLD_MS = 350; // was 800 (user: "pausing too much")
+const isHoldStop = (y: number) => {
+  const clinic = climbRange.Q + climbRange.T;
+  const summit = speedRange.Q + speedRange.T;
+  return (climbRange.T > 0 && Math.abs(y - clinic) < 1) || (speedRange.T > 0 && Math.abs(y - summit) < 1);
+};
+
+/**
+ * Free zone (user 2026-11-05: "the scroll should follow the gesture immediately ... if I stop scrolling anywhere it
+ * should stop there" for the climb; the hero part went back to its snaps, user: "make the scroll same like the previous
+ * one"): from the payload frame to Ridge Clinic there are no snap stops, Lenis follows the wheel/touch directly. Both
+ * ends are soft walls (the swipe that reaches them ends there; the next new swipe snaps on as before).
+ */
+const freeStart = () => (payloadRange.T > 0 ? payloadRange.Q + payloadRange.T : 0);
+const freeEnd = () => (climbRange.T > 0 ? climbRange.Q + climbRange.T : 0);
+const isFree = (scroll: number, dir: number) => {
+  const a = freeStart();
+  const b = freeEnd();
+  if (!(b > a && a > 0)) return false;
+  if (scroll > a + 0.5 && scroll < b - 0.5) return true;
+  return (Math.abs(scroll - a) <= 0.5 && dir > 0) || (Math.abs(scroll - b) <= 0.5 && dir < 0);
+};
+/** When the free scroll last ran into one of its walls (performance.now) and in which direction. */
+const freeWall = { at: -1e9, dir: 0 };
+
+/**
+ * Wheel gesture tracker, shared by Lenis' virtualScroll hook (which sees each wheel event first) and the snap
+ * controller. A momentum tail only decays; a new swipe = a long gap, a gap where the delta stops decaying, deltas
+ * growing again from the low point the previous swipe decayed to, or the other way round.
+ *
+ * User 2026-11-05 ("sometimes ... I have to do many scrolls"): a new swipe started while the last one's momentum was
+ * still above 30% of its peak was taken for that tail and swallowed (and in the free zone and at the walls a
+ * swallowed swipe moves nothing). Now a rise from the tail's low point counts wherever the tail is (`low`, two rising
+ * events, a dip of up to 15% does not reset the count), and a mouse wheel spun without a pause (events >= 40 ms apart,
+ * not decaying) starts a new gesture every RESWIPE_MS instead of being one endless gesture.
+ */
+const RESWIPE_MS = 1200;
+const G = { lastTs: -1e9, lastAbs: 0, peak: 0, low: 0, rising: 0, lastFreshAt: -1e9, spent: 0, ev: null as WheelEvent | null, fresh: false };
+function classifyWheel(e: WheelEvent) {
+  if (G.ev === e) return G.fresh; // same event seen by both listeners
+  const dir = e.deltaY > 0 ? 1 : -1;
+  const abs = Math.abs(e.deltaY);
+  const gap = e.timeStamp - G.lastTs;
+  G.low = Math.min(G.low, abs);
+  const risingFromLow = abs > G.lastAbs * 1.15 && abs >= 6 && G.low < G.peak * 0.6 && abs >= G.low * 1.8;
+  G.rising = risingFromLow ? G.rising + 1 : abs < G.lastAbs * 0.85 ? 0 : G.rising;
+  const sustained = gap >= 40 && e.timeStamp - G.lastFreshAt > RESWIPE_MS && abs >= 8 && abs >= G.peak * 0.5 && abs >= G.lastAbs * 0.9;
+  const fresh =
+    gap > 700 ||
+    (gap > GESTURE_GAP_MS && abs >= 10 && abs >= G.lastAbs * 0.9) ||
+    G.rising >= 2 ||
+    sustained ||
+    (G.spent !== 0 && dir !== G.spent);
+  G.peak = fresh ? abs : Math.max(G.peak, abs);
+  if (abs >= G.peak) G.low = abs; // the low point is measured after the peak
+  G.lastTs = e.timeStamp;
+  G.lastAbs = abs;
+  if (fresh) {
+    G.spent = 0;
+    G.rising = 0;
+    G.low = abs;
+    G.lastFreshAt = e.timeStamp;
+  }
+  G.ev = e;
+  G.fresh = fresh;
+  return fresh;
+}
 
 const findRangeIndex = (scroll: number, ranges: SceneRange[]) => {
   for (let i = 0; i < ranges.length; i++) if (scroll < ranges[i].end) return i;
@@ -129,6 +252,18 @@ function SceneController() {
   const navTouch = useRef(false);
   const pendingDir = useRef<number | null>(null);
   const raf = useRef<number | null>(null);
+  /** Signed snap speed (px/ms): eased up from rest and down into the target. */
+  const snapVel = useRef(0);
+  /** Target and length of the current snap leg (for the length-scaled ease). */
+  const legTarget = useRef<number | null>(null);
+  const legLen = useRef(0);
+  const legRate = useRef(0);
+  /** Start of the current stop-to-stop move, and a scroll made early in it that waits to queue the next stop. */
+  const moveStart = useRef(0);
+  const queuedDir = useRef(0);
+  /** When the last move landed, and whether on a hold stop (checkpoint). */
+  const arrivedAt = useRef(0);
+  const arrivedHold = useRef(false);
 
   const measure = useCallback(() => {
     bands.current = pageBands(measureStoryMap());
@@ -137,35 +272,62 @@ function SceneController() {
   useStoryMeasure(measure);
 
   // Snapping works inside the story band (page space, opening → end of the story); after it the page scrolls freely.
+  const computeTarget = useCallback((scroll: number, dir: number): number | null => {
+    if (isFree(scroll, dir)) return null; // the free zone scrolls with the gesture, no stops
+    const hit = findBand(scroll, bands.current);
+    if (!hit) return null;
+    const { b, list, i } = hit;
+    const { start, height, end } = list[i];
+    const p = (scroll - start) / height;
+    const last = i === list.length - 1;
+    // Reverse snapping ends on the band's opening frame (top of page / Care teams frame), then scrolls freely above it.
+    const bandStart = b === 0 ? 0 : Math.abs(scroll - list[0].start) < 1 ? null : list[0].start;
+    if (dir > 0) return p < 0.99 ? end : last ? null : list[i + 1].end;
+    const prev = i - 1;
+    if (prev < 0) return bandStart;
+    const prevEnd = list[prev].end;
+    if (Math.abs(prevEnd - scroll) < 1) return prev > 0 ? list[prev - 1].end : bandStart;
+    return prevEnd;
+  }, []);
+
   const pickTarget = useCallback(
     (dir: number) => {
       if (!lenis) return;
-      const scroll = lenis.scroll;
-      const hit = findBand(scroll, bands.current);
-      if (!hit) {
-        target.current = null;
-        return;
-      }
-      const { b, list, i } = hit;
-      const { start, height, end } = list[i];
-      const p = (scroll - start) / height;
-      const last = i === list.length - 1;
-      // Reverse snapping ends on the band's opening frame (top of page / Care teams frame), then scrolls freely above it.
-      const bandStart = b === 0 ? 0 : Math.abs(scroll - list[0].start) < 1 ? null : list[0].start;
-      if (dir > 0) {
-        target.current = p < 0.99 ? end : last ? null : list[i + 1].end;
-      } else {
-        const prev = i - 1;
-        if (prev >= 0) {
-          const prevEnd = list[prev].end;
-          if (Math.abs(prevEnd - scroll) < 1 && prev > 0) target.current = list[prev - 1].end;
-          else if (Math.abs(prevEnd - scroll) < 1) target.current = bandStart;
-          else target.current = prevEnd;
-        } else target.current = bandStart;
-      }
+      target.current = computeTarget(lenis.scroll, dir);
     },
-    [lenis],
+    [lenis, computeTarget],
   );
+
+  // Wheel steps the snap will play are not also smoothed by Lenis (see snapClaim).
+  useEffect(() => {
+    if (!lenis) return;
+    lenisRef.current = lenis;
+    snapClaim.current = (dir, deltaY, event) => {
+      if (!useLoading.getState().loadingCanvasHidden || isScrollLocked()) return false;
+      const fresh = classifyWheel(event);
+      if (target.current !== null) return true;
+      // Free zone: Lenis takes the wheel, except where it would run past one of its ends (payload frame, Ridge Clinic).
+      if (isFree(lenis.scroll, dir)) {
+        // The swipe that just landed a stop (e.g. Summit Station -> Ridge Clinic) must not run on into the free climb
+        // with its momentum (user 2026-11-05: coming back, the drone jumped straight down the route); nor anything in
+        // the short pause after landing on a checkpoint. A new swipe goes through at once.
+        if (!fresh && arrivedAt.current >= G.lastFreshAt) return true;
+        if (arrivedHold.current && performance.now() - arrivedAt.current < HOLD_MS) return true;
+        const next = lenis.targetScroll + deltaY * WHEEL_MULTIPLIER * climbScale(lenis.targetScroll);
+        const wall = dir > 0 ? (next >= freeEnd() ? freeEnd() : null) : next <= freeStart() ? freeStart() : null;
+        if (wall !== null) {
+          lenis.scrollTo(wall); // eased by Lenis' lerp, lands on the frame
+          freeWall.at = performance.now();
+          freeWall.dir = dir;
+          return true; // claimed: no native/Lenis step past the wall
+        }
+      }
+      return computeTarget(lenis.scroll, dir) !== null;
+    };
+    return () => {
+      snapClaim.current = null;
+    };
+  }, [lenis, computeTarget]);
 
   const request = useCallback(
     (dir: number) => {
@@ -182,6 +344,7 @@ function SceneController() {
         touching.current = false;
         raf.current = null;
         lastTs.current = null;
+        snapVel.current = 0;
         return;
       }
       const dt = Math.min(lastTs.current ? ts - lastTs.current : 16, 100);
@@ -191,12 +354,30 @@ function SceneController() {
         pickTarget(pendingDir.current);
         pendingDir.current = null;
       }
-      const t = target.current;
+      let t = target.current;
       const scroll = lenis.scroll;
+      if (t !== null && queuedDir.current !== 0) {
+        const leg = Math.abs(t - moveStart.current);
+        const done = leg > 0 ? Math.abs(scroll - moveStart.current) / leg : 1;
+        if (Math.sign(t - scroll) !== queuedDir.current) queuedDir.current = 0;
+        else if (done >= CHAIN_AFTER) {
+          const next = isHoldStop(t) ? null : computeTarget(t, queuedDir.current);
+          if (next !== null) {
+            moveStart.current = t;
+            target.current = t = next;
+          }
+          queuedDir.current = 0;
+        }
+      }
       if (t !== null) {
         const delta = t - scroll;
-        if (Math.abs(delta) <= 0.05) target.current = null;
-        else if (vel < 2 * dt && !scrollbarDrag.current && (!isTouchPhone || !touching.current)) {
+        if (Math.abs(delta) <= 0.05) {
+          target.current = null;
+          snapVel.current = 0;
+          arrivedAt.current = performance.now();
+          arrivedHold.current = isHoldStop(t);
+          queuedDir.current = 0;
+        } else if (vel < 2 * dt && !scrollbarDrag.current && (!isTouchPhone || !touching.current)) {
           const sign = delta > 0 ? 1 : -1;
           // Raven: the opening move plays over OPENING_MS whatever the viewport height; the story keeps 2px/ms.
           // The clay landscape climb (Care teams → village, storyMap.C0..C1) moves at half speed so the climb reads.
@@ -213,15 +394,48 @@ function SceneController() {
                   ? altitudeRange.Q + altitudeRange.T
                   : Q + T;
           const inPayload = T > 0 && Math.min(scroll, t) >= Q - 1 && Math.max(scroll, t) <= stagesEnd + 1;
+          // The climb to Ridge Clinic (two stops) plays slower than the stage moves, so the climb reads.
+          const C = climbRange;
+          // Leg 2 (speed stage, two stops) at the same pace: climb start -> end of the speed stage.
+          const legsEnd = speedRange.T > 0 ? speedRange.Q + speedRange.T : C.Q + C.T;
+          const inMountClimb = C.T > 0 && Math.min(scroll, t) >= C.Q - 1 && Math.max(scroll, t) <= legsEnd + 1;
           const rate =
             scroll < storyMap.P + 1 && t <= storyMap.P + 1
               ? Math.max(storyMap.P / OPENING_MS, 0.2)
-              : inPayload
-                ? Math.max(T / PAYLOAD_MS, 0.2)
-                : inClimb
-                  ? 1
-                  : 2;
-          const stepPx = rate * sign * dt;
+              : inMountClimb
+                ? speedRange.T > 0 && Math.min(scroll, t) >= speedRange.Q - 1
+                  ? Math.max(speedRange.T / LEG2_MS, 0.2) // leg 2 in one move
+                  : Math.max(C.T / 2 / CLIMB_STOP_MS, 0.2)
+                : inPayload
+                  ? Math.max(T / PAYLOAD_MS, 0.2)
+                  : inClimb
+                    ? 1
+                    : 2.4; // was 2 (shipped); user 2026-11-05: a little faster
+          // Eased: accelerate to `rate` over SNAP_RAMP_MS, brake so speed reaches 0 at the target (v = sqrt(2 a d)).
+          // Long moves (the climb, the stages) ease in and out over a share of their own duration, so they glide like a
+          // camera move instead of starting and stopping at full speed (user 2026-11-05: "very smooth"); short moves
+          // keep the short ramp.
+          // One pace per move: a move that crosses from one stage's pace into another's (payload frame -> halfway up
+          // the climb) keeps the pace it started with instead of slowing down mid-climb.
+          if (legTarget.current !== t) {
+            const fromRest = snapVel.current === 0;
+            legTarget.current = t;
+            legLen.current = Math.max(Math.abs(delta), fromRest ? 0 : legLen.current);
+            legRate.current = fromRest ? rate : legRate.current || rate;
+          }
+          const pace = legRate.current || rate;
+          // Responsive start, gentle landing (user 2026-11-05: "there is delay on scroll"): the move reaches cruise
+          // speed in SNAP_START_MS whatever its length; only the braking into the stop scales with the move.
+          const rampOutMs = Math.min(Math.max(SNAP_RAMP_MS, (legLen.current / pace) * SNAP_EASE_SHARE), 1100);
+          const accelOut = pace / rampOutMs;
+          const accel = pace / SNAP_START_MS;
+          const want = sign * Math.min(pace, Math.sqrt(2 * accelOut * Math.abs(delta)));
+          const dv = want - snapVel.current;
+          const maxDv = (Math.sign(dv) === sign ? accel : Math.max(accel, accelOut) * 2) * dt;
+          snapVel.current += Math.max(-maxDv, Math.min(maxDv, dv));
+          // Never stall a hair short of the target.
+          if (snapVel.current * sign < 0.02) snapVel.current = sign * 0.02;
+          const stepPx = snapVel.current * dt;
           const next = sign > 0 ? Math.min(scroll + stepPx, t) : Math.max(scroll + stepPx, t);
           lenis.scrollTo(next, { immediate: true });
         }
@@ -230,6 +444,7 @@ function SceneController() {
       else {
         raf.current = null;
         lastTs.current = null;
+        snapVel.current = 0;
       }
     };
     raf.current = requestAnimationFrame(step);
@@ -238,9 +453,65 @@ function SceneController() {
   useEffect(() => {
     if (!lenis) return;
     const ready = () => useLoading.getState().loadingCanvasHidden && !isScrollLocked();
+    // A trackpad swipe is a burst of events with a momentum tail that can last over a second. One swipe plays ONE
+    // stop (user 2026-11-05: the payload stage ran straight on into the mountain stage): events less than
+    // GESTURE_GAP_MS after the previous one belong to the same swipe and never start or extend a snap. A new swipe in
+    // the snap's direction queues the next stop only once the current one is mostly played (CHAIN_AFTER).
+    let holdTimer = 0;
     const onWheel = (e: WheelEvent) => {
-      if (!ready()) return;
-      request(e.deltaY > 0 ? 1 : -1);
+      if (!ready() || e.deltaY === 0) return;
+      const dir = e.deltaY > 0 ? 1 : -1;
+      const fresh = classifyWheel(e);
+      // The swipe that ran into a free-zone wall ends there; only a new one goes on.
+      if (dir === freeWall.dir && freeWall.at >= G.lastFreshAt) return;
+      if (isTouchPhone) {
+        request(dir);
+        run();
+        return;
+      }
+      const t = target.current;
+      if (t !== null && Math.sign(t - lenis.scroll) === dir) {
+        const leg = Math.abs(t - moveStart.current);
+        const done = leg > 0 ? Math.abs(lenis.scroll - moveStart.current) / leg : 1;
+        if (fresh && done >= CHAIN_AFTER) {
+          const next = isHoldStop(t) ? null : computeTarget(t, dir); // never carried past a hold stop
+          if (next !== null) {
+            moveStart.current = t;
+            target.current = next;
+          }
+          G.spent = dir;
+        } else if (fresh) {
+          // Too early to chain: remember it, the run loop queues the next stop once the move is far enough along
+          // (user 2026-11-05: scrolls during a move were lost, "I have to scroll many times").
+          queuedDir.current = dir;
+          G.spent = dir;
+        }
+        run();
+        return;
+      }
+      if (G.spent === dir) return; // momentum tail of a swipe that already played its stop
+      // A pause on the checkpoints: nothing moves on for HOLD_MS after landing there.
+      const holdLeft = arrivedHold.current ? HOLD_MS - (performance.now() - arrivedAt.current) : 0;
+      if (holdLeft > 0) {
+        G.spent = dir;
+        // A new scroll during the pause is kept and plays the moment the pause ends (the arriving swipe's own
+        // momentum is not fresh, so it is still swallowed).
+        if (fresh && holdTimer === 0) {
+          holdTimer = window.setTimeout(() => {
+            holdTimer = 0;
+            if (target.current !== null || !ready()) return;
+            moveStart.current = lenis.scroll;
+            queuedDir.current = 0;
+            pickTarget(dir);
+            run();
+          }, holdLeft);
+        }
+        return;
+      }
+      moveStart.current = lenis.scroll;
+      queuedDir.current = 0;
+      pickTarget(dir);
+      G.spent = target.current !== null ? dir : 0;
       run();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -292,6 +563,7 @@ function SceneController() {
     window.addEventListener("mouseup", onMouseUp);
     return () => {
       window.removeEventListener("wheel", onWheel);
+      if (holdTimer) window.clearTimeout(holdTimer);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
@@ -300,7 +572,7 @@ function SceneController() {
       if (raf.current !== null) cancelAnimationFrame(raf.current);
       raf.current = null;
     };
-  }, [lenis, request, run]);
+  }, [lenis, request, run, computeTarget, isTouchPhone]);
 
   useEffect(() => {
     const prev = window.history.scrollRestoration;
@@ -343,7 +615,31 @@ function SceneController() {
 
 export function SmoothScroll({ children }: { children: ReactNode }) {
   return (
-    <ReactLenis root options={{ lerp: 0.95, syncTouch: true }}>
+    <ReactLenis
+      root
+      options={{
+        lerp: FREE_LERP,
+        syncTouch: true,
+        wheelMultiplier: WHEEL_MULTIPLIER,
+        // Wheel steps inside the story bands belong to the snap controller (eased steps); elsewhere Lenis smooths.
+        // Returning false alone lets the browser scroll natively by the raw delta (a visible jump), so cancel it here.
+        virtualScroll: (data) => {
+          const { event, deltaY } = data;
+          // The climb (free zone) follows the gesture at a calmer rate (user 2026-11-05: "respond immediately but not
+          // too fast"); Lenis reads the delta after this hook.
+          if (deltaY !== 0 && isFree(window.scrollY, deltaY > 0 ? 1 : -1)) {
+            const dir = deltaY > 0 ? 1 : -1;
+            let d = Math.abs(deltaY) * climbScale(window.scrollY);
+            const L = lenisRef.current;
+            if (L && event.type === "wheel") d = Math.min(d, Math.max(0, FREE_MAX_LEAD - (L.targetScroll - L.animatedScroll) * dir));
+            data.deltaY = dir * d;
+          }
+          if (event.type !== "wheel" || deltaY === 0 || !snapClaim.current?.(deltaY > 0 ? 1 : -1, deltaY, event as WheelEvent)) return true;
+          if (event.cancelable) event.preventDefault();
+          return false;
+        },
+      }}
+    >
       <SceneController />
       {children}
     </ReactLenis>

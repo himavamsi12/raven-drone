@@ -35,10 +35,14 @@ const _eye = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 
-/** C2-smooth 0..1 ease (smootherstep): the move starts and lands at rest, matching the scene-end snap. */
+/**
+ * 0..1 ease-out (user 2026-11-05: "while scrolling down there is still delay"): the camera moves with the first scroll
+ * and lands at rest. Was smootherstep, which moved it ~1% over the first tenth of the scroll (~0.4 s of the 2.5 s snap)
+ * on top of the snap's own ramp; the snap already eases its start (SNAP_START_MS) and brakes into the hero frame.
+ */
 export const openingEase = (p: number) => {
   const t = Math.min(Math.max(p, 0), 1);
-  return t * t * t * (t * (6 * t - 15) + 10);
+  return 1 - (1 - t) ** 2.2;
 };
 
 /** Barrel strength for an opening progress. */

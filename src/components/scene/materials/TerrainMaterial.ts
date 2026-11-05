@@ -49,7 +49,9 @@ export const payloadClayUniforms = {
 };
 
 /** Clay sweep: front distance from the camera at progress 0 / 1, and the soft band either side of it (world units). */
-export const CLAY_FRONT = { far: 46, near: 0, band: 4 }; // the hero/payload views see ground from ~5 to ~40 units
+// far was 46: most ground on screen in the hero/payload views is within ~5-28 units, so the sweep spent its first
+// third off screen and then crossed the view in a rush (user 2026-11-05). band 4 -> 7 for a softer edge.
+export const CLAY_FRONT = { far: 30, near: 0, band: 7 };
 /** Ground ripples (world units / s): ring reach, line width, one ring's life. */
 const RIPPLE = { radius: 1.3, width: 0.04, period: 2.6, gain: 1.6 };
 /** Dot grid: 3 dots per map unit (CLAY.dotDensity) in tile-local units (TERRAIN_SCALE .04: 25 local per map unit). */

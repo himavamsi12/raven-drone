@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { easeInOutCubic } from "./math";
 import { FEATURES } from "./features";
-import { altitudeRange, PAYLOAD_VH, payloadRange, ROUTE_VH, routeRange, SPEED_VH, speedRange } from "./payload";
+import { altitudeRange, CLIMB_VH, climbRange, PAYLOAD_VH, payloadRange, ROUTE_VH, routeRange, SPEED_VH, speedRange } from "./payload";
 import { computeSceneRanges, SCENE, SCENE_ORDER, type SceneId, type SceneRange } from "./scenes";
 
 /**
@@ -112,7 +112,9 @@ export function measureStoryMap() {
     altitudeRange.T = 0;
     routeRange.Q = payloadRange.Q + payloadRange.T; // `#route-band` follows the payload band directly
     routeRange.T = (ROUTE_VH / 100) * vh;
-    speedRange.Q = routeRange.Q + routeRange.T; // `#speed-band` follows the mountain band directly
+    climbRange.Q = routeRange.Q + routeRange.T; // the climb is the second half of `#route-band` (ROUTE_VH + CLIMB_VH)
+    climbRange.T = (CLIMB_VH / 100) * vh;
+    speedRange.Q = climbRange.Q + climbRange.T; // `#speed-band` follows the climb directly
     speedRange.T = (SPEED_VH / 100) * vh;
     // Section 03 (`#features-band`, user 2026-11-04) slides up over the stage; FT = its top = where it covers the screen.
     const features = document.getElementById("features-band");
@@ -173,8 +175,13 @@ export function pageBands(ranges: SceneRange[]) {
       [
         opening,
         { ...intro, start: Q, height: T, end: Q + T },
-        { ...intro, start: R.Q, height: R.T, end: R.Q + R.T },
-        { ...intro, start: speedRange.Q, height: speedRange.T, end: speedRange.Q + speedRange.T }, // and the speed stage
+        // The pull-back flows straight into the climb (user 2026-11-05: no stop on the wide view with the drone still at
+        // the foot): one gesture from the payload frame pulls back, draws the route and flies halfway up; the next one
+        // reaches Ridge Clinic.
+        { ...intro, start: R.Q, height: R.T + climbRange.T / 2, end: climbRange.Q + climbRange.T / 2 },
+        { ...intro, start: climbRange.Q + climbRange.T / 2, height: climbRange.T / 2, end: climbRange.Q + climbRange.T },
+        // The speed stage: leg 2 to Summit Station in two stops (halfway, the station), like the climb.
+        { ...intro, start: speedRange.Q, height: speedRange.T, end: speedRange.Q + speedRange.T }, // leg 2: one gesture
         ...featureStops(intro),
       ],
     ];

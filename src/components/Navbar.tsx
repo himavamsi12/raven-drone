@@ -33,13 +33,6 @@ const MENU_LINKS: { label: string; target: string | null }[] = [
   { label: "Speed", target: "#speed" },
 ];
 
-/** Homepage bar links (asset/html/raven_homepage.html `.links`): in-page destinations. */
-const BAR_LINKS: { label: string; target: string | null }[] = [
-  { label: "Story", target: null },
-  { label: "Payload", target: "#payload" },
-  { label: "Altitude", target: "#route" },
-  { label: "Speed", target: "#speed" },
-];
 /** Chapter ticks (Airframe ... Care teams) are off: those chapters are no longer on the page. */
 const SHOW_CHAPTER_TICKS = false;
 
@@ -248,7 +241,7 @@ function Menu() {
     <>
       <button
         type="button"
-        className="grid h-full w-[var(--nav-height)] cursor-pointer place-items-center bg-[#0b0c0b] focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white"
+        className="grid h-full w-[var(--nav-height)] cursor-pointer place-items-center border-l border-[var(--bar-line)] bg-[#0b0c0b] focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white"
         aria-label="Open menu"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -345,7 +338,7 @@ function Logo({ collapsed }: { collapsed?: boolean }) {
 const barText = "text-[clamp(0.6875rem,0.78vw,0.78125rem)] leading-none font-medium tracking-[0.02em] uppercase opacity-90 transition-opacity hover:opacity-100 hover:underline hover:underline-offset-[5px] focus-visible:opacity-100";
 
 /**
- * Homepage bar (asset/html/raven_homepage.html `.bar`): brand + links | boxed Contact cell | black menu square, one
+ * Homepage bar (asset/html/raven_homepage.html `.bar`): brand | boxed Contact cell | black menu square, one
  * hairline under it. The story's chapter ticks stay centred in the bar (shipped fade/scroll/restore navigation).
  */
 export function Navbar() {
@@ -357,7 +350,6 @@ export function Navbar() {
   const cover = useStage((s) => s.cover);
   const bg = Math.max(multi, 1 - cover); // solid bar over the page sections, clear over the story stage
   const hiding = useLoading((s) => s.loadingCanvasIsHiding);
-  const go = (target: string | null) => lenis?.scrollTo(target ?? 1, { duration: 1.2 });
   return (
     <nav
       aria-label="Primary"
@@ -369,6 +361,7 @@ export function Navbar() {
       )}
       style={{ "--bg-opacity": bg } as React.CSSProperties}
     >
+      {/* Bar links (Story, Payload, Altitude, Speed) removed (user, 2026-11-05); the menu keeps its links. */}
       <div className="flex min-w-0 items-center gap-[clamp(1.25rem,2.6vw,2.5rem)] pl-[clamp(1.125rem,2.2vw,2.25rem)]">
         <button
           type="button"
@@ -382,15 +375,6 @@ export function Navbar() {
         >
           <Logo collapsed={collapsed} />
         </button>
-        <ul className="m-0 hidden list-none gap-[clamp(1.125rem,2.4vw,2.5rem)] p-0 pl-[clamp(0.5rem,2vw,2.125rem)] min-[1080px]:flex">
-          {BAR_LINKS.map((l) => (
-            <li key={l.label}>
-              <button type="button" className={clsx(barText, "cursor-pointer")} onClick={() => go(l.target)}>
-                {l.label}
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
       {SHOW_CHAPTER_TICKS && <ChapterNav />}
       <ContactButton

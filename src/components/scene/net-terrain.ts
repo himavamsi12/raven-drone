@@ -86,6 +86,13 @@ async function field(): Promise<NetField> {
   return computeNetField();
 }
 
+/**
+ * Contour flow timing (seconds, contour units of height): the front rises over `rise`, the cycle repeats every
+ * `cycle` (the gap is a rest with every line at its base brightness); `tail` = how far behind the front a lit line
+ * fades (height units; 4 = one contour).
+ */
+const CONTOUR_FLOW = { rise: 4.2, cycle: 5.4, tail: 10 };
+
 export class NetTerrain {
   /** Pivot on the drone: sway/tilt rotation and the scale. */
   readonly root = new THREE.Group();
@@ -228,7 +235,16 @@ void main(){
  float f5 = h/20.0; float fw5 = max(fwidth(f5), 1e-4);
  float major = 1.0 - min(abs(fract(f5 - 0.5) - 0.5)/(fw5*1.6), 1.0);
  float md = distance(vL.xz, uMouse.xz); float glow = exp(-md*md/1400.0)*uMouseOn;
- col += uIce*(line*(0.035 + 0.6*glow) + major*(0.09 + 0.6*glow));
+ // Contour flow (user 2026-11-05: "each line should start at the bottom and go up one by one"): a front climbs the
+ // massif from below the valley floor (-12) to above the summit (~84) in CONTOUR_FLOW_S, then rests; each contour
+ // lights up as the front reaches its height and fades behind it, so the lines come on one after another, bottom to
+ // top. Frozen at the start of a cycle (nothing lit) when uTime stops (reduced motion).
+ float lineH = floor(f + 0.5)*4.0;
+ float cyc = mod(uTime, ${CONTOUR_FLOW.cycle.toFixed(2)})/${CONTOUR_FLOW.rise.toFixed(2)};
+ float wave = mix(-12.0, 92.0, cyc);
+ float dw = wave - lineH;
+ float flow = smoothstep(-1.5, 0.5, dw)*exp(-max(dw, 0.0)/${CONTOUR_FLOW.tail.toFixed(1)});
+ col += uIce*(line*(0.035 + 0.6*glow + 0.55*flow) + major*(0.09 + 0.6*glow + 0.35*flow));
  col += uIce*glow*0.035;
  float dist = camDist/uDistScale;
  col = mix(col, uFog, netFog(camDist, dist));
@@ -338,11 +354,14 @@ void main(){ vec2 c = gl_PointCoord - 0.5; float r = dot(c,c); if (r > 0.25) dis
     if (!reducedMotion) this.elapsed += step;
     this.shared.uTime.value = this.elapsed;
     // Sway and tilt belong to the section view: none under the close payload camera (the ground would swim).
-    const idle = reducedMotion ? 0 : Math.sin(this.elapsed * 0.12) * 0.12 * section;
+    // User 2026-11-05 ("this mountain is jumping"): the pointer tilt is off and the idle sway is a third of the
+    // section's (.12 rad), so the massif holds still while the drone climbs and the user scrolls.
+    const idle = reducedMotion ? 0 : Math.sin(this.elapsed * 0.12) * 0.04 * section;
     const k = 1 - Math.pow(1 - 0.06, step * 60); // the section's per-frame 0.06 at 60 fps
     this.yaw += (idle - this.yaw) * k;
     this.tilt += (this.tiltTarget - this.tilt) * k;
-    this.hoverOn += (this.hoverTarget - this.hoverOn) * (1 - Math.pow(1 - 0.12, step * 60));
+    // Hover glow eases in slower (was .12 per frame) and peaks lower, so the contours do not flash under the cursor.
+    this.hoverOn += (this.hoverTarget * 0.5 - this.hoverOn) * (1 - Math.pow(1 - 0.05, step * 60));
     this.shared.uMouseOn.value = this.hoverOn;
     // Section: world.rotation (tilt about the screen's horizontal axis, yaw). Here the screen's horizontal axis is
     // world z (the side view looks along +x), so the tilt is a z rotation applied after the yaw.
@@ -356,7 +375,7 @@ void main(){ vec2 c = gl_PointCoord - 0.5; float r = dot(c,c); if (r > 0.25) dis
       this.moved = false;
       if (this.pointer && section > 0.5) {
         _ndc.set((this.pointer.x / window.innerWidth) * 2 - 1, -(this.pointer.y / window.innerHeight) * 2 + 1);
-        this.tiltTarget = _ndc.y * 0.05;
+        this.tiltTarget = 0; // was _ndc.y * 0.05 (section pointer tilt): the mountain lurched with every mouse move
         this.ray.setFromCamera(_ndc, camera);
         const hit = this.ray.intersectObject(this.proxy)[0];
         if (hit) {

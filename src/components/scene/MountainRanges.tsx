@@ -63,9 +63,10 @@ void main() {
   vec3 snow = mix(uSnowShade, uSnow, smoothstep(0.0, 0.55, sun));
   vec3 alb = mix(rock, snow, vSnow);
   // Same raking light as the near terrain: warm sun, low cool fill.
-  vec3 sky = vec3(0.48, 0.56, 0.74) * (0.24 + 0.2 * clamp(n.y, 0.0, 1.0));
-  vec3 col = alb * (vec3(1.0, 0.9, 0.74) * sun * 2.2 + sky);
-  col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, 0.8);
+  vec3 sky = vec3(0.44, 0.55, 0.78) * (0.24 + 0.22 * clamp(n.y, 0.0, 1.0));
+  vec3 col = alb * (vec3(1.0, 0.91, 0.76) * sun * 2.35 + sky);
+  // Realism pass (2026-11-03): near-full colour like the near terrain (MountainMaterial).
+  col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, 0.94);
   // Aerial perspective toward the horizon colour, plus valley haze low in the band.
   float d = length(vWorld - cameraPosition);
   float haze = 0.12 + 0.88 * (1.0 - exp(-d / 230.0));
@@ -163,10 +164,10 @@ export function MountainRanges() {
       uniforms: {
         uSun: { value: TERRAIN_SUN.clone() },
         uHaze: { value: SKY_COLOR },
-        uRockDark: { value: new THREE.Color("#4a4846") },
-        uRockLight: { value: new THREE.Color("#8e8982") },
-        uSnow: { value: new THREE.Color("#f1f4f8") },
-        uSnowShade: { value: new THREE.Color("#8d9db3") },
+        uRockDark: { value: new THREE.Color("#433d37") },
+        uRockLight: { value: new THREE.Color("#9c8c79") },
+        uSnow: { value: new THREE.Color("#f6f4ef") },
+        uSnowShade: { value: new THREE.Color("#7f97ba") },
         uBaseY: { value: BASE_Y },
       },
       vertexShader: vertex,

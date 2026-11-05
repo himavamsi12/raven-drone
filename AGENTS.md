@@ -74,7 +74,7 @@ src/lib/
   scroll-lock.ts            ref-counted Lenis lock + "lenis-lock-change" event
   render-scale.ts           canvas / scene / drone-layer densities (no drone pixelation)
 src/components/
-  SmoothScroll.tsx          ONE Lenis instance (lerp .95, syncTouch) + scene progress writer + scene-end snapping
+  SmoothScroll.tsx          ONE Lenis instance (lerp .1 free scroll, syncTouch; wheel inside the snap bands is cancelled and played as eased snaps; a new gesture mid-snap queues the next stop) + scene progress writer + scene-end snapping
   Navbar.tsx                logo, chapter ticks (150ms fade → .75s scroll → restore), Contact, menu <dialog>
   ui/ Modal (native <dialog>), Button (exact CTA classes), Badge, icons
   ContactForm / ContactButton
@@ -105,21 +105,21 @@ scripts/asset-manifest.mjs  manifest generator
   hero -> payload stage, nothing after (`story-map.ts` `PAYLOAD_ONLY`; spacers `#opening` 300dvh, `#payload-band`
   `calc(200dvh + 1px)` with the `#payload` anchor at its end, one closing screen). The story is held on the hero frame
   (`toStory` <= 1), so Airframe ... Care teams, the diagonal wipe and the map capture are never reached (code kept);
-  nav chapter ticks are off (`SHOW_CHAPTER_TICKS`). One gesture plays the payload stage over `PAYLOAD_MS` (4.2 s),
+  nav chapter ticks are off (`SHOW_CHAPTER_TICKS`). One gesture plays the payload stage over `PAYLOAD_MS` (2.0 s),
   everything a pure function of `payloadProgress` (`lib/payload.ts` `PAYLOAD_TIMELINE`): hero copy out at .02, sky and
   clouds to black, the terrain shader's clay sweep far -> near (`TerrainMaterial` `payloadClay`, shared
   `payloadClayUniforms`; clay colours, dot grid and black from `clay-map.ts` CLAY), terrain travel slowed to 0.4x and
   the lens travel streak off, the camera eased toward the medical box (`scene/payload-camera.ts`, from the live hero
   pose), the drone's own materials switched to the vector form top -> bottom (`Drone.tsx` `vectorise`, outline
   `EdgesGeometry` on `DRONE_LAYER`, rotor discs drawn as rings), the box turned yellow, then the DOM callout
-  (`overlays/PayloadCallout.tsx`, box screen point from DroneRig `payloadScreen`). From the payload sweep on, the
+  (`overlays/PayloadCallout.tsx`; since 2026-11-05 payload, altitude and speed callouts share one right-aligned block, `overlays/callout-layout.ts`, user mockup; the payload marker/leader line was dropped, `payloadScreen` is still written but unused). From the payload sweep on, the
   ground is the terrain of the `net` section of `assets/html/raven_homepage (3).html` ("Mapped to the last ridge"),
   ported exactly (`scene/net-terrain-field.ts` + worker, `scene/net-terrain.ts`: height field, contours, dot grid, hover
   glow, idle sway): the clay front cuts the tiles (`uPayloadNet`) and draws it beyond, pivoted on the drone over its
   depot. Then the **mountain stage** (`#route-band` 200dvh, `#route` anchor; same pace): the camera pulls back to the
   section's view (its fog takes over, the massif comes out of the haze) while the drone turns to face up its route; the
-  yellow route ribbon draws to Ridge Clinic (a faint white one to Summit Station, the second checkpoint), then the
-  drone flies the route and "Operating altitude" counts 0 -> 5,000 m with its climb (`ROUTE_FLIGHT`,
+  yellow route ribbon draws to Ridge Clinic (a faint white one to Summit Station, the second checkpoint), then two
+  scroll stops fly the drone up the route (halfway, then the clinic) and "Operating altitude" counts from a random 80-90 m (small random upticks while waiting) -> 5,000 m with its climb (`climbRange`,
   `overlays/RouteCallout.tsx`); leg 2 of the connected route then draws on in green from the clinic to Summit Station
   (`netArcRoute`: climb, cruise, descend). Then the **speed stage** (`#speed-band`, `#speed`): same view, the drone
   flies leg 2 while `overlays/SpeedCallout.tsx` shows speed (~79 km/h from the user's own `net` section figures,
@@ -131,10 +131,10 @@ scripts/asset-manifest.mjs  manifest generator
 - Opening (user, 2026-11-01; replaced the pad takeoff film): page [0, P] (`#opening`, `OPENING_VH` 300) flies the
   live camera from a low wide shot under the hovering drone (procedural sky dome + ridge rings + Blender land layer,
   `scene/OpeningSky.tsx`, source `glb/raven-sky/`; terrain fog fades into the land layer via `uPanoMix`) into the
-  Camera01 hero pose in one move (`scene/opening.ts`: dolly zoom fov 75 → 20, barrel pass in PostFX, extra ground
+  Camera01 hero pose in one move (`scene/opening.ts`: dolly zoom fov 75 → 20 on an ease-out `openingEase` since 2026-11-05, was smootherstep, which felt like a delay before the camera moved, barrel pass in PostFX, extra ground
   tiles + fog in Terrain), story held at 0. At P everything opening-only is off and the hero frame is unchanged. The hero
   copy shows from the first opening frame and leaves at delta .075, as before (user). Band 1 opens with an opening range (page 0 → P+1): one
-  gesture plays it over `OPENING_MS` (5 s), reverse returns to the low shot; no auto-advance on reveal.
+  gesture plays it over `OPENING_MS` (2.5 s), reverse returns to the low shot; no auto-advance on reveal.
 - Journey (FLOCK_SCENE) removed (user, 2026-11-02): no network map (flock mix and portal render off), no copy or nav
   tick; its story range plays on 30% of its page length (`JOURNEY_PAGE_SHARE`, `band1Page`/`band1Story` in
   story-map.ts) inside the Route snap range, so one gesture flies Prepare -> Route. Band 1 spacer `calc(2150dvh + 1px)`.
@@ -208,8 +208,12 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 ## Verification tips
 
 - Payload page at vh=900 (1440 wide): opening low shot 0, hero frame 2701, payload stage 2701 -> 4501 (callout from
-  ~4321), mountain stage 4501 -> 6301 (route line and altitude from ~6121), speed stage 6301 -> 8101 (flight and HUD
-  from ~7921), page height 9001; 390×844: hero 2533, payload 4221, mountain 5909, speed 7597. The positions below are for the old story bands.
+  ~4033, threshold .74), mountain stage 4501 -> 6301 flowing without a stop into the climb 6301 -> 8101: the drone sets off with the first
+  gesture after the payload frame while the camera follows it and pulls back (`routeFlight` in lib/payload.ts; one
+  gesture 4501 -> 7201 = halfway up, user 2026-11-05) -> 8101 (Ridge Clinic, 5,000 m;
+  scroll-driven since 2026-11-05, `#route-band` 400dvh, `climbRange`/`CLIMB_STOP_MS` in lib/payload.ts), speed stage
+  8101 -> 9901 in one gesture (`LEG2_MS` 2600; the halfway stop was removed 2026-11-05) -> Summit Station card ( big figure = distance flown 0 -> 5.5 km; scroll-driven since 2026-11-05, HUD from the start
+  of the stage, km/h from the drone's actual pace), then Section 03 from 9901 on the next gesture; 390×844 positions shift the same way. The positions below are for the old story bands.
 - Jump to a state: `window.scrollTo(0, Y)`. At vh=900 (1440 wide, page scroll): opening low shot 0, hero frame 2701,
   delta end 7201, swarm 11701, mission 16201, (Journey, compressed: 16201 → 17551), Route 22051 (= band 2 start, wipe
   22051 → 24301), Care teams frame 26551, Hill clinic stop 27676, Ridge village stop (story end) 28801, stage gone
@@ -230,7 +234,49 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Open work (see RECONSTRUCTION.md for full list)
 
-- Sections 03/04 (2026-11-04, user Figma): feature cards 1-2 use titles/tags chosen from their images (Figma has a placeholder card); confirm copy with the user. Not checked on Safari/iOS touch.
+- Sections 03/04 (2026-11-04, user Figma): Section 03 redesigned 2026-11-05 to the user's "Feature 7/8" mockups (heading "Engineered for Performance. Built for Reliability.", compact card bottom right with the user's copy, BUILT/SENSOR/MOTOR indicator on the right; `lib/features.ts` FEATURE_*). The heading lines and line below fade up (blur 6px -> 0, staggered .12 s) once 35% of the stage is in view, and again on each re-entry. Renders are the user's `raven-drone-site/src/hardware` images (flattened on black, WebP); Renders are shown at 0.74x, a little below centre, with a radial edge fade (globals.css `.feature-frame`); `frame` in FEATURES nudges the motor up/left. Switching: the old render fades out in 0.2 s while the new one fades in over 0.4 s (user: fast, no old image behind) and the card copy for every feature sits in one grid cell (`.feature-stack`), so the card height never jumps (was AnimatePresence popLayout, which glitched). Not checked on Safari/iOS touch.
+- Section 05 + closing CTA (2026-11-05, user mockups): `sections/UseCases.tsx` (three photo cards, the user's
+  1088x1120 originals from raven-drone-site/src/usecases as JPEG q86; NDRF India uniforms and Red Cross emblems:
+  confirm rights) and `sections/ClosingCta.tsx` ("Want your product explained this clearly?", Talk to us -> contact modal) over
+  the tundra-terrain footer landing drone (`sections/drone-flight.ts` restored from 98b052b; `RavenModel realLook`
+  skips the payload vector sweep; descent is one eased curve over 3.4 s, starting nearer, triggered at 5% visible with the canvas rendering a screen ahead, not the old ease-out drop). Framing checked at 1440x900 only (reduced-motion pose); glide-in not seen at 60 fps.
+- Site cards (2026-11-05, user mockup): a site pin opens into a small photo + name card (300x92, was 236x72) when the drone
+  arrives (`ClinicPin`/`placeClinicPin` in `overlays/RouteCallout.tsx`): Ridge Clinic at the end of the climb (folds
+  back as the speed flight leaves), Summit Station at the end of the speed flight. Photos are the user's
+  (`public/assets/route/ridge-clinic.png`, `summit-station.png`, 128 px, from `raven-drone-site/src/img1.png`/`img-2.png`).
+  The Summit Station photo shows the Red Cross emblem; confirm use rights before a public deploy.
+- Mountain views slide left by `MOUNTAIN_ZOOM` 1.12 toward (0.5, 0.62) and `MOUNTAIN_SHIFT` (4.5% of the width, was 13% then 8%, DroneRig, camera view offset eased in with the
+  pull-back; landscape >= 768px only) so the right-hand callout block does not cover the massif (user 2026-11-05).
+- Free zone (2026-11-05, user: scroll follows the gesture and stops where it stops; the hero part was reverted to
+  snaps the same day): payload frame -> Ridge Clinic has no snap stops (`isFree`/`freeStart`/`freeEnd` in
+  SmoothScroll; Lenis lerp .11; wheel/touch distance x`CLIMB_SCROLL_SCALE` 1.1 in the pull-back, .75 on the climb, speed capped by `FREE_MAX_LEAD` 280 px of wheel lead). Both ends are soft walls (`freeWall`: the swipe that hits one ends there). Opening,
+  hero -> payload, the Summit Station leg and Section 03 still snap.
+- Scene density (2026-11-05, user: "the mountain is jumping"): PerformanceMonitor changes wait while the page is
+  between the payload frame and Summit Station and apply on leaving; after a first step down the density never climbs
+  back (FixedContainer `useSceneResolution`). The route flight follows the scroll with the camera's smoothing
+  (DroneRig damping 30/s, was 4.5: the drone lagged the camera on fast scrolls).
+- Wheel gestures are classified once per event in a shared tracker (`classifyWheel`/`G` in SmoothScroll), used by both
+  Lenis' virtualScroll hook and the snap controller: the momentum of a swipe that landed a stop is blocked from the
+  free climb too (it used to fling the drone back down the route after Summit Station -> Ridge Clinic).
+- Loader match cut (2026-11-05, user): the loader no longer shows the traced boot SVG or `loading-drone.glb`; it draws
+  the real `raven_hexa.glb` as a flat silhouette through the main camera, on a canvas laid over the main canvas
+  (`lib/boot-pose.ts`, written by a priority-99 frame hook in DroneRig while the loader is up), so the reveal turns the
+  silhouette into the lit drone in place. The pose is taken once (and after a resize), so the silhouette stays still
+  (user: it shook with the live hover). `loader/boot-shape.ts` is unused now.
+- Camera shake (DroneRig `CameraShake`): the intro scene stays "active" for the whole payload page, so its hero
+  shake ran on in the payload, mountain and speed views (the 20 deg lens made it a visible bob of the massif, user
+  2026-11-05). It now fades out over payload progress 0 -> .3 (`stageCalm`); measured 0 deg per frame after it.
+- `routeFlight` (lib/payload.ts) maps the whole free climb evenly onto the route (it was still split at the removed
+  halfway stop: the last quarter of the scroll flew half the route, so the drone shot down from Ridge Clinic).
+- Hold stops (2026-11-05, user): Ridge Clinic (climb end) and Summit Station (speed end) are never chained past, and
+  wheel input pauses for `HOLD_MS` 350 after landing there; a new scroll in the pause plays when it ends (`isHoldStop`).
+- Snap feel (2026-11-05, SmoothScroll): moves reach cruise in `SNAP_START_MS` 180 ms (responsive), brake over a share
+  of their length (`SNAP_EASE_SHARE`, max 1.1 s), keep one pace per move; a scroll during a move queues the next stop
+  (played once the move is `CHAIN_AFTER` .35 done); `GESTURE_GAP_MS` 120. Swipe detection (`classifyWheel`, user 2026-11-05 "sometimes I have to do many scrolls"): a new swipe counts when deltas rise twice from the previous tail's low point (was: only once that tail fell under 30% of its peak), and a continuously spun mouse wheel starts a new gesture every `RESWIPE_MS` 1.2 s. Test swipes with in-page WheelEvents on a
+  fixed 16 ms clock: CDP wheel events arrive with >1 s gaps while a stage first loads and fake new gestures.
+- Contour flow (2026-11-05, user): a glow front climbs the `net` massif's contours bottom to top, one line after another (`CONTOUR_FLOW` in `scene/net-terrain.ts`: 4.2 s rise, 5.4 s cycle; still under reduced motion).
+- Mountain stage: the section's pointer tilt is off and its idle sway is .04 rad (was .12), hover glow halved (user:
+  the mountain jumped with mouse moves while scrolling).
 - Payload page (2026-11-03): the route stage has no speed/distance figures yet (waiting on the user). Not checked on Safari/iOS or low-end GPUs; the callout's leader line crosses a front
   rotor at 1440×900; the vector form is a shader switch on the real hexa (no separate low-poly model). Old story code
   (bands, wipe, clay landscape, chapters) is unreachable but not removed.

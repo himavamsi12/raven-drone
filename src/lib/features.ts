@@ -9,32 +9,61 @@
 export const SECTION_HEADING = "Send What’s Needed, Where It’s Needed";
 export const SECTION_BODY = "Heavy payload capacity and long flight distance overcome logistical limitations for next-generation delivery.";
 
-export type Feature = { id: string; title: string; body: string; tags: string[]; image: string; alt: string };
+/** Section 03 heading (user mockups 2026-11-05, "Feature 7/8" frames); Section 04 keeps SECTION_HEADING above. */
+export const FEATURE_HEADING = ["Engineered for Performance.", "Built for Reliability."] as const;
+export const FEATURE_BODY =
+  "Every component is designed for demanding flight conditions, combining robust construction, intelligent systems and reliable performance for mission-critical operations.";
 
+/**
+ * `nav`: the right-hand indicator label. `frame`: desktop nudge of the render (translate %, scale). Renders: the user's
+ * raven-drone-site/src/hardware/hardware-1..3.png (2026-11-05; transparent PNGs flattened on black, max 2560 wide,
+ * WebP q86; hardware-2's transparent left band, 428 px, trimmed).
+ */
+export type Feature = {
+  id: string;
+  nav: string;
+  title: string;
+  body: string;
+  tags: string[];
+  image: string;
+  alt: string;
+  frame: { x: number; y: number; s: number };
+  /** Left edge where the render's content starts (% of image width): faded to black from there, hides a hard cut. */
+  fadeLeft?: number;
+};
+
+/** Copy from the user's mockups (2026-11-05). */
 export const FEATURES: Feature[] = [
   {
     id: "arms",
-    title: "Carbon-fibre arms",
-    body: SECTION_BODY,
-    tags: ["Airframe", "Carbon fibre"],
+    nav: "Built",
+    title: "Carbon fibre arms",
+    body: "Lightweight, high-strength carbon fibre arms provide exceptional structural rigidity and durability while reducing overall weight for efficient, stable flight.",
+    tags: ["Structural strength", "Lightweight design"],
     image: "/assets/features/feature-arm.webp",
     alt: "Close-up of a woven carbon-fibre drone arm",
+    frame: { x: 0, y: 0, s: 1 },
   },
   {
-    id: "gimbal",
-    title: "Sensor gimbal",
-    body: SECTION_BODY,
-    tags: ["EO/IR", "Thermal"],
+    id: "sensor",
+    nav: "Sensor",
+    title: "Advanced optical sensor",
+    body: "High-precision optical sensors capture real-time visual data, enabling accurate environmental awareness, obstacle detection and intelligent navigation during flight.",
+    tags: ["Optical sensors", "Real-time vision"],
     image: "/assets/features/feature-gimbal.webp",
-    alt: "The drone's sensor gimbal above the medical box",
+    alt: "The drone's optical sensor gimbal above the medical box",
+    frame: { x: 5, y: 0, s: 1 }, // user 2026-11-05: a little right
   },
   {
     id: "motor",
+    nav: "Motor",
     title: "Sealed motor pods",
-    body: SECTION_BODY,
-    tags: ["Propulsion", "Status LED"],
+    body: "Weather-resistant motor housings protect critical propulsion components from dust, moisture and external elements, ensuring reliable performance in demanding flight conditions.",
+    tags: ["Propulsion", "Weather protection"],
     image: "/assets/features/feature-motor.webp",
     alt: "A sealed motor pod with its propeller",
+    frame: { x: -4, y: -4, s: 1 },
+    fadeLeft: 3.4, // hardware-3 ends in a hard vertical cut at ~3.3% (arm, rear prop); user 2026-11-05
   },
 ];
 

@@ -13,24 +13,24 @@ import { create } from "zustand";
  */
 export const PAYLOAD_VH = 200;
 /** Snap duration for the whole stage (hero -> payload frame), whatever the viewport height. */
-export const PAYLOAD_MS = 4200;
+export const PAYLOAD_MS = 2000; // was 4200, 3200, 2700, 2300 (user 2026-11-05: "a little faster")
 
 /** Stage timeline in payload progress (0 = hero frame, 1 = payload frame). */
 export const PAYLOAD_TIMELINE = {
   /** Hero copy leaves (it used to leave at DELTA_DRONE .075). */
   heroExit: 0.02,
   /** Sky, clouds and clear colour to black. */
-  sky: [0.04, 0.5],
+  sky: [0.02, 0.6],
   /** Clay sweep front, far ridges -> under the drone. */
-  clay: [0.04, 0.7],
+  clay: [0.03, 0.8],
   /** Camera move toward the payload. */
-  zoom: [0.04, 1],
+  zoom: [0, 1],
   /** Drone to vector form (sweep top -> bottom). */
-  vector: [0.3, 0.82],
+  vector: [0.22, 0.85],
   /** Payload box highlight. */
-  highlight: [0.72, 0.95],
-  /** Callout shown from here (enters with its own text motion). */
-  callout: 0.9,
+  highlight: [0.74, 0.96],
+  /** Callout shown from here (enters with its own text motion; was .9, user 2026-11-05: text came in too slow). */
+  callout: 0.74,
   /** Terrain travel speed in the clay view (x hero speed). */
   claySpeed: 0.4,
 } as const;
@@ -50,6 +50,16 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 export const easeRange = (p: number, [a, b]: readonly [number, number]) => {
   const t = clamp01((p - a) / (b - a));
   return t * t * t * (t * (6 * t - 15) + 10);
+};
+
+/**
+ * Early-peaking ease over [a, b]: smootherstep(t^0.6). It starts from rest (no kick: the plain ease-out jumped the
+ * camera from still to full speed in ~0.2 s, user 2026-11-05: "jerky"), is already ~10% along at t = .1 so the scroll
+ * answers at once, peaks early and lands softly.
+ */
+export const easeOutRange = (p: number, [a, b]: readonly [number, number]) => {
+  const u = Math.pow(clamp01((p - a) / (b - a)), 0.6);
+  return u * u * u * (u * (6 * u - 15) + 10);
 };
 
 /** Page range of the stage, set by story-map `measureStoryMap`. */
@@ -105,8 +115,11 @@ export const ROUTE_TIMELINE = {
   camera: [0.02, 1],
   /** Section look (its fog, idle sway, pointer tilt) takes over from the close payload view. */
   section: [0.05, 0.85],
-  /** Route line drawing starts here (time-driven, DroneRig ROUTE_PATH.drawS); callout and pin come in with it. */
-  path: 0.9,
+  /**
+   * Altitude callout in from here (user 2026-11-05: the climb starts with the first scroll after the payload frame, so
+   * the counter must be there from the start; was .9 when the line drew and the drone flew only after the pull-back).
+   */
+  path: 0.12,
 } as const;
 
 /**
@@ -114,6 +127,13 @@ export const ROUTE_TIMELINE = {
  * the drone flies to, and the summit station (user: "add another checkpoint ... how we have showed in the Html").
  */
 export const ROUTE_COPY = { destination: "Ridge Clinic", second: "Summit Station" } as const;
+/**
+ * Site cards (user 2026-11-05: when the drone arrives a pin opens into a card with a photo and the name). Photos are
+ * the user's own (`raven-drone-site/src/img1.png`, `img-2.png`, 128 px squares).
+ */
+export type SiteImage = { src: string; alt: string };
+export const ROUTE_CLINIC_IMAGE: SiteImage = { src: "/assets/route/ridge-clinic.png", alt: "Ridge Clinic, a small clinic in a mountain village" };
+export const ROUTE_SUMMIT_IMAGE: SiteImage = { src: "/assets/route/summit-station.png", alt: "Summit Station, a field medical tent" };
 /** Flight up the route once the line has drawn (s), and the altitude the counter reaches at the route's top. */
 export const ROUTE_FLIGHT = { drawS: 1.6, flyS: 6.5, returnS: 0.8, topM: 5000 } as const;
 
@@ -129,8 +149,11 @@ export const SPEED_TIMELINE = {
   routeExit: 0.02,
   /** Stage weight (the view itself does not change). */
   camera: [0.02, 1],
-  /** Flight starts (time-driven, SPEED_FLIGHT.flyS) and the HUD comes in. */
-  fly: 0.9,
+  /**
+   * HUD in from here. The flight itself follows the scroll since 2026-11-05 (user: "from here to here also it should
+   * go on scroll"): speed progress = share of leg 2, two snap stops (halfway, Summit Station); was time-driven from .9.
+   */
+  fly: 0.03,
 } as const;
 /**
  * Figures. Distance: the section's "scene units ~ 50 m". Speed: from the user's own `net` section, whose cards give
@@ -139,12 +162,42 @@ export const SPEED_TIMELINE = {
  */
 export const SPEED_FIGURES = { metresPerUnit: 50, kmh: 79 } as const;
 export const SPEED_FLIGHT = { flyS: 11, returnS: 1, rampShare: 0.12 } as const;
-export const SPEED_COPY = { kicker: "Speed and distance", to: "To Summit Station" } as const;
+export const SPEED_COPY = { kicker: "Distance flown", to: "To Summit Station" } as const; // kicker was "Speed and distance" (user 2026-11-05: big figure = distance from 0)
 /** Page range of the speed stage (directly after the mountain stage), set by story-map `measureStoryMap`. */
 export const speedRange = { Q: 0, T: 0 };
 export const speedProgress = (page: number) => (speedRange.T > 0 ? clamp01((page - speedRange.Q) / speedRange.T) : 0);
 /** Speed stage on screen, written by DroneRig: leg 2 metres left, current speed (km/h), flight progress, summit pin. */
 export const speedScreen = { left: 0, total: 0, kmh: 0, fly: 0, vx: 0, vy: 0, ok: false };
+
+/**
+ * Climb stage (user 2026-11-05: "it should climb the mount like on 2 scroll it should go up there"): right after the
+ * mountain stage's pull-back (same `#route-band`, its second 200dvh). The flight up the route to Ridge Clinic follows
+ * the scroll instead of a timer: two stops, halfway up, then the clinic. The altitude counter follows the drone.
+ */
+export const CLIMB_VH = 200;
+/** Snap time per climb stop (ms): slower than the stage moves so the climb reads. */
+export const CLIMB_STOP_MS = 2000; // was 1400 (user 2026-11-05: the Summit Station leg "too fast")
+/** Leg 2 (Ridge Clinic -> Summit Station) in one gesture (user 2026-11-05: two stops were "too many scrolls"). */
+export const LEG2_MS = 2600;
+export const climbRange = { Q: 0, T: 0 };
+/** Climb progress for a page scroll (0 = foot of the route, 1 = at Ridge Clinic). */
+export const climbProgress = (page: number) => (climbRange.T > 0 ? clamp01((page - climbRange.Q) / climbRange.T) : 0);
+/**
+ * Share of the route to Ridge Clinic flown at a page scroll (user 2026-11-05: "after that section on scroll show the
+ * drone climbing the mountain with the same camera angle and while climbing zoom out"). The climb runs over the
+ * pull-back AND the climb band: the first gesture (payload frame -> halfway stop, story-map `pageBands`) flies the
+ * first half while the camera zooms out, the second gesture the rest.
+ */
+export function routeFlight(page: number) {
+  const span = routeRange.T + climbRange.T;
+  if (span <= 0) return 0;
+  const u = clamp01((page - routeRange.Q) / span);
+  const start = 0.04; // a beat on the payload frame before the drone moves off
+  // Even along the whole scroll (user 2026-11-05: back from Ridge Clinic the drone shot down the route). It used to be
+  // split at the old halfway stop: the first half of the route over 3/4 of the scroll, the second half over the last
+  // 1/4, so near the clinic each scrolled pixel moved the drone three times as far. The free climb has no stops now.
+  return clamp01((u - start) / (1 - start));
+}
 
 /** Page range of the mountain stage (directly after the payload stage), set by story-map `measureStoryMap`. */
 export const routeRange = { Q: 0, T: 0 };
@@ -163,14 +216,22 @@ export function payloadLook(page = typeof window === "undefined" ? 0 : window.sc
   const a = altitudeProgress(page);
   const r = routeProgress(page);
   const sp = speedProgress(page);
+  const c = climbProgress(page);
   const rt = ROUTE_TIMELINE;
   return {
     p,
     a,
     r,
+    /** Climb stage progress, and the share of the route flown (pull-back + climb, `routeFlight`). */
+    c,
+    fly: routeFlight(page),
     sky: easeRange(p, t.sky),
-    clay: easeRange(p, t.clay),
-    zoom: easeRange(p, t.zoom),
+    // Linear (user 2026-11-05: the sweep jumped): the front then crosses the visible ground at an even pace instead of
+    // racing through it mid-curve. Was easeRange (smootherstep), which packed the visible sweep into ~10% of the stage.
+    clay: clamp01((p - t.clay[0]) / (t.clay[1] - t.clay[0])),
+    // Ease-out (user 2026-11-05: the hero did not answer the scroll at once): the camera starts moving with the
+    // scroll and settles softly. The S-curve it had (smootherstep) moved it <4% over the first fifth of the stage.
+    zoom: easeOutRange(p, t.zoom),
     vector: clamp01((p - t.vector[0]) / (t.vector[1] - t.vector[0])), // the sweep shader eases its own front
     highlight: easeRange(p, t.highlight) * (1 - easeRange(r, ROUTE_TIMELINE.highlightOut)),
     /** Altitude stage camera weight (raw progress in its range; the camera eases its parts). */
@@ -206,4 +267,4 @@ export const altitudeScreen = { gx: 0, gy: 0, dx: 0, dy: 0, ok: false };
  * Mountain stage on screen (CSS px), written by DroneRig: the two sites (clinic, summit), how far the route lines have
  * drawn (0..1) and the altitude fraction the flying drone has reached (0..1, counter).
  */
-export const routeScreen = { vx: 0, vy: 0, v2x: 0, v2y: 0, ok2: false, draw: 0, draw2: 0, alt: 0, ok: false };
+export const routeScreen = { vx: 0, vy: 0, v2x: 0, v2y: 0, ok2: false, draw: 0, draw2: 0, alt: 0, fly: 0, ok: false };

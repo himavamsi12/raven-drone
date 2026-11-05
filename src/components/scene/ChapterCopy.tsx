@@ -125,7 +125,7 @@ function Hero() {
     <Frame innerClassName="!flex flex-col justify-end">
       <div className="flex flex-col items-start justify-between gap-5 px-1 sm:flex-row sm:items-end sm:gap-8 md:px-[clamp(0rem,1.1vw,1.375rem)]">
         <div>
-          <p className="text-m-mono md:text-d-mono mb-3 font-mono text-white/70 uppercase text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)] md:mb-4">
+          <p className="text-m-mono md:text-d-mono mb-3 font-mono text-yellow uppercase text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)] md:mb-4">
             Illustrative medical delivery
           </p>
           <Heading variant="hero" className="sm:whitespace-nowrap">
@@ -278,7 +278,10 @@ export function ChapterCopy() {
   return (
     // Always shown (was opacity-0 without an active chapter, which cut the hero copy's exit when the stage starts).
     <div className="z-navbar absolute inset-0 h-dvh w-full justify-center md:flex">
-      <AnimatePresence mode="wait">{hidden && Active && <Active key={key} />}</AnimatePresence>
+      {/* "sync" (was "wait"): the next callout mounts at once and the two cross-fade. With "wait" a quick back-and-forth
+          around a stage boundary (Summit Station leg <-> Ridge Clinic) could leave the incoming callout waiting on an
+          exit, its pins and card missing (user 2026-11-05). */}
+      <AnimatePresence mode="sync">{hidden && Active && <Active key={key} />}</AnimatePresence>
     </div>
   );
 }
