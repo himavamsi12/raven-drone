@@ -134,7 +134,7 @@ scripts/asset-manifest.mjs  manifest generator
   Camera01 hero pose in one move (`scene/opening.ts`: dolly zoom fov 75 → 20 on an ease-out `openingEase` since 2026-11-05, was smootherstep, which felt like a delay before the camera moved, barrel pass in PostFX, extra ground
   tiles + fog in Terrain), story held at 0. At P everything opening-only is off and the hero frame is unchanged. The hero
   copy shows from the first opening frame and leaves at delta .075, as before (user). Band 1 opens with an opening range (page 0 → P+1): one
-  gesture plays it over `OPENING_MS` (2.5 s), reverse returns to the low shot; no auto-advance on reveal.
+  gesture plays it over `OPENING_MS` (2.5 s), reverse returns to the low shot; no auto-advance on reveal. Desktop: free scroll since 2026-11-06 (see Free zone); `OPENING_MS` only applies on touch phones.
 - Journey (FLOCK_SCENE) removed (user, 2026-11-02): no network map (flock mix and portal render off), no copy or nav
   tick; its story range plays on 30% of its page length (`JOURNEY_PAGE_SHARE`, `band1Page`/`band1Story` in
   story-map.ts) inside the Route snap range, so one gesture flies Prepare -> Route. Band 1 spacer `calc(2150dvh + 1px)`.
@@ -261,7 +261,10 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Mountain views slide left by `MOUNTAIN_ZOOM` 1.12 toward (0.5, 0.62) and `MOUNTAIN_SHIFT` (8% of the width since 2026-11-06, user: the massif still ran under the right-hand callout; was 13%, 8%, 4.5%, DroneRig, camera view offset eased in with the
   pull-back; landscape >= 768px only) so the right-hand callout block does not cover the massif (user 2026-11-05).
 - Free zone (2026-11-05, user: scroll follows the gesture and stops where it stops; the hero part was reverted to
-  snaps the same day): payload frame -> Ridge Clinic has no snap stops (`isFree`/`freeStart`/`freeEnd` in
+  snaps the same day; 2026-11-06, user: hero -> payload was "sticky", "should scroll immediately": then "still too sticky": the
+  free zone starts at the top of the page (`freeStart` 0: the opening is no longer a 2.5 s glide that swallowed scrolls),
+  wheel x`CLIMB_SCROLL_SCALE.payload` 1.8 and lead cap `PAYLOAD_MAX_LEAD` 460 up to the payload frame, `FREE_LERP` .18
+  (was .11); desktop only, touch phones keep snaps): top of the page -> Ridge Clinic has no snap stops (`isFree`/`freeStart`/`freeEnd` in
   SmoothScroll; Lenis lerp .11; wheel/touch distance x`CLIMB_SCROLL_SCALE` 1.1 in the pull-back, .75 on the climb, speed capped by `FREE_MAX_LEAD` 280 px of wheel lead). Both ends are soft walls (`freeWall`: the swipe that hits one ends there). Opening,
   hero -> payload, the Summit Station leg and Section 03 still snap.
 - Scene density (2026-11-05, user: "the mountain is jumping"): PerformanceMonitor changes wait while the page is

@@ -46,23 +46,31 @@ const SNAP_EASE_SHARE = 0.28;
 /** Time to reach cruise speed at the start of any move (ms): short, so a scroll answers at once. */
 const SNAP_START_MS = 180;
 /** Free scroll smoothing outside the snap bands (Lenis lerp per 60 Hz frame; was .95 = almost none). */
-const FREE_LERP = 0.11; // free zone (payload frame -> Ridge Clinic): eased a little more (was .14)
+const FREE_LERP = 0.18; // was .14, .11; user 2026-11-06: "too sticky and slow because of smoothness": less trailing
 const WHEEL_MULTIPLIER = 1.1;
 /**
  * Share of the wheel/touch distance the climb (free zone) scrolls by, by where it is (user 2026-11-05: "respond
  * immediately but not too fast", then "too many scrolls ... a little fast here"): the pull-back from the payload
  * frame goes quicker, the last stretch up to Ridge Clinic stays calm.
  */
-const CLIMB_SCROLL_SCALE = { pullBack: 1.1, climb: 0.75 }; // tuned with FREE_MAX_LEAD (user 2026-11-05)
+const CLIMB_SCROLL_SCALE = { payload: 1.8, pullBack: 1.1, climb: 0.75 }; // tuned with FREE_MAX_LEAD (user 2026-11-05; payload 2026-11-06)
 /**
  * Speed cap for the climb (user 2026-11-05: "it should be fast, but not this fast"): the wheel may run at most this far
  * (px) ahead of the eased scroll, so a hard flick moves the climb at ~lerp x lead x 60 px/s (~1,300) instead of
  * leaping, while ordinary scrolls are untouched.
  */
 const FREE_MAX_LEAD = 280;
+/** Hero -> payload frame (free since 2026-11-06, user: "too many scrolls"): a higher cap so a swipe crosses the stage. */
+const PAYLOAD_MAX_LEAD = 460;
+const maxLead = (scroll: number) => (payloadRange.T > 0 && scroll < payloadRange.Q + payloadRange.T ? PAYLOAD_MAX_LEAD : FREE_MAX_LEAD);
 /** The root Lenis, for the climb's speed cap in the virtualScroll hook (set by SceneController). */
 const lenisRef: { current: { targetScroll: number; animatedScroll: number } | null } = { current: null };
-const climbScale = (scroll: number) => (scroll < climbRange.Q ? CLIMB_SCROLL_SCALE.pullBack : CLIMB_SCROLL_SCALE.climb);
+const climbScale = (scroll: number) =>
+  payloadRange.T > 0 && scroll < payloadRange.Q + payloadRange.T
+    ? CLIMB_SCROLL_SCALE.payload
+    : scroll < climbRange.Q
+      ? CLIMB_SCROLL_SCALE.pullBack
+      : CLIMB_SCROLL_SCALE.climb;
 /** Wheel events closer than this belong to one swipe (trackpad momentum included). */
 const GESTURE_GAP_MS = 120; // was 220: quick repeated scrolls were merged into one (momentum events come every ~16 ms)
 /** A new swipe during a snap queues the next stop only after this share of the current one has played. */
@@ -103,7 +111,11 @@ const isHoldStop = (y: number) => {
  * one"): from the payload frame to Ridge Clinic there are no snap stops, Lenis follows the wheel/touch directly. Both
  * ends are soft walls (the swipe that reaches them ends there; the next new swipe snaps on as before).
  */
-const freeStart = () => (payloadRange.T > 0 ? payloadRange.Q + payloadRange.T : 0);
+// User 2026-11-06 ("from hero to the payload it is sticky ... it should scroll immediately, remove the sticky scroll";
+// then "still too sticky"): the free zone starts at the top of the page, so the opening (low shot -> hero) and the
+// payload stage follow the wheel too (both are pure functions of scroll: openingProgress, payloadProgress). The opening
+// used to be a 2.5 s glide that swallowed every scroll made during it. Touch phones keep snaps.
+const freeStart = () => 0;
 const freeEnd = () => (climbRange.T > 0 ? climbRange.Q + climbRange.T : 0);
 /**
  * Touch phones (user 2026-11-06: the 3D stage "is taking too many scrolls to go down only in mobile"): no free zone.
@@ -115,7 +127,7 @@ const isFree = (scroll: number, dir: number) => {
   if (touchPhone.current) return false;
   const a = freeStart();
   const b = freeEnd();
-  if (!(b > a && a > 0)) return false;
+  if (!(b > a)) return false;
   if (scroll > a + 0.5 && scroll < b - 0.5) return true;
   return (Math.abs(scroll - a) <= 0.5 && dir > 0) || (Math.abs(scroll - b) <= 0.5 && dir < 0);
 };
@@ -650,7 +662,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
             const dir = deltaY > 0 ? 1 : -1;
             let d = Math.abs(deltaY) * climbScale(window.scrollY);
             const L = lenisRef.current;
-            if (L && event.type === "wheel") d = Math.min(d, Math.max(0, FREE_MAX_LEAD - (L.targetScroll - L.animatedScroll) * dir));
+            if (L && event.type === "wheel") d = Math.min(d, Math.max(0, maxLead(window.scrollY) - (L.targetScroll - L.animatedScroll) * dir));
             data.deltaY = dir * d;
           }
           if (event.type !== "wheel" || deltaY === 0 || !snapClaim.current?.(deltaY > 0 ? 1 : -1, deltaY, event as WheelEvent)) return true;

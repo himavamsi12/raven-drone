@@ -466,9 +466,15 @@ dialog::backdrop {
 }
 
 /* Section 04 (Figma 100:622 "Section 4", 1920 x 1433): sizes in --u (one frame pixel of the page width). */
+/* User 2026-11-06 ("crop the video and make the section fit within the viewport"): one screen tall, clear of the nav
+   bar; heading and tabs keep their size and the video panel takes the rest, its clip cropped to fill (object-cover). */
 .caps {
   --u: min(100vw / 1920, 1px);
-  padding: calc(var(--u) * 120) 0;
+  height: 100dvh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--nav-height) + var(--u) * 40) 0 calc(var(--u) * 56);
 }
 .caps-heading {
   display: flex;
@@ -490,8 +496,10 @@ dialog::backdrop {
   line-height: 1.4;
 }
 .caps-body {
-  margin: calc(var(--u) * 80) auto 0;
+  margin: calc(var(--u) * 56) auto 0;
   width: calc(var(--u) * 1680);
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: calc(var(--u) * 4);
@@ -512,10 +520,14 @@ dialog::backdrop {
   outline-offset: -1px;
 }
 .caps-panel {
-  aspect-ratio: 1680 / 804;
+  flex: 1;
+  min-height: 0;
 }
 @media (max-width: 767px) {
+  /* Phones: natural height, a 16:9 panel (the whole section fits a phone screen as it is). */
   .caps {
+    height: auto;
+    min-height: 0;
     padding: 64px 0;
   }
   .caps-heading {
@@ -539,7 +551,11 @@ dialog::backdrop {
   .caps-tab {
     height: 40px;
   }
+  .caps-body {
+    flex: none;
+  }
   .caps-panel {
+    flex: none;
     aspect-ratio: 16 / 9;
   }
 }
