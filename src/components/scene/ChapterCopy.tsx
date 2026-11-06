@@ -134,7 +134,8 @@ function Hero() {
           </Heading>
         </div>
         <div className="flex max-w-90 min-w-0 flex-col items-start gap-[clamp(0.875rem,1.4vw,1.375rem)]">
-          <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90">
+          {/* Landscape phones (mobile pass 2026-11-06): no room for drone, headline and paragraph; keep headline + CTA. */}
+          <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90 [@media(min-width:48rem)_and_(max-height:37.5rem)]:hidden">
             When a hill clinic runs short of medicines, the journey matters. Raven explores a direct air link from a regional health centre to the
             village waiting for supplies.
           </Support>

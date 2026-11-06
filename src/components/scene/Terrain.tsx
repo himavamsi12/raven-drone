@@ -1,8 +1,8 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useKeyboardControls, useTexture } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
 import {
@@ -24,15 +24,21 @@ import { useRenderScale } from "@/lib/render-scale";
 import { MountainMaterial } from "./materials/MountainMaterial";
 import { CLAY_FOG_PAYLOAD, CLAY_FOG_SIDE, payloadClayUniforms, TerrainMaterial } from "./materials/TerrainMaterial";
 import { PAYLOAD_TIMELINE, payloadLook } from "@/lib/payload";
-import { buildMountainSlices, mountainSlice, mountainTerrainEnabled, type MountainSlices } from "./mountain-terrain";
+import { forgetMountainSlices, mountainSlice, sharedMountainSlices, mountainTerrainEnabled, type MountainSlices } from "./mountain-terrain";
 import { getNoiseTexture } from "./textures";
 import { openingEase } from "./opening";
 import { useOpeningPanorama } from "./OpeningSky";
 import { DetectionPoints } from "./DetectionPoints";
 import { RAVEN_DETECTION_Y, RAVEN_TILE_MAPS, ravenTileVariant, terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
+import { HD_PRIORITY, hdSettled, queueHd, whenQuiet } from "./hd-assets";
 import { clayOn, clayState } from "./clay-map";
 import { TerrainProbe, probeEnabled } from "./TerrainProbe";
+
+/** Longest the loader waits for the drone/terrain originals after the mountain build (then reveals on the previews). */
+const FULL_MAP_WAIT_MS = 800;
+/** Page time after which the reveal no longer waits for the 4K map (fast links are ready in ~3-5 s). */
+const SLOW_PAGE_MS = 8000;
 
 /** Distance between tile origins (shipped `X`). */
 export const TILE_STEP = 2 * TERRAIN_SCALE * 200 - 0.01;
@@ -197,13 +203,60 @@ function Tile({
   );
 }
 
-/** Endless terrain (shipped `J`). */
-export function Terrain() {
+/** Shipped natural tile (its map is the city tile's base) + city tile + its overlay. */
+type CityAssets = { land: THREE.Mesh; cityLand: THREE.Mesh; cityTex: THREE.Texture };
+
+function configureCityTexture(t: THREE.Texture | THREE.Texture[]) {
+  const tex = Array.isArray(t) ? t[0] : t;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.anisotropy = 4;
+}
+
+/** Suspends on the shipped tile, the city tile and its overlay; warms the buildings (drawn on the city tile). */
+function useCityAssets(): CityAssets {
   const terrain = useGLB(ASSETS.terrain);
   const city = useGLB(ASSETS.cityTerrain);
-  const raven = useGLB(ASSETS.ravenTerrain);
+  useGLB(ASSETS.building);
+  const cityTex = useTexture(ASSETS.cityTexture, configureCityTexture) as THREE.Texture;
+  return useMemo(
+    () => ({ land: terrain.nodes["Land-A"] as THREE.Mesh, cityLand: city.nodes["Land-A"] as THREE.Mesh, cityTex }),
+    [terrain, city, cityTex],
+  );
+}
+
+function CityAssetsLoader({ onLoad }: { onLoad: (a: CityAssets) => void }) {
+  const assets = useCityAssets();
+  useEffect(() => onLoad(assets), [assets, onLoad]);
+  return null;
+}
+
+/** `?terrain=original`: the shipped tile is the natural ground, so the city assets are part of the first frame. */
+function OriginalTerrain() {
+  const city = useCityAssets();
+  return <TerrainView city={city} />;
+}
+
+/**
+ * Endless terrain (shipped `J`). Raven (default): only the Raven tile is part of the first frame. The city tile (shown
+ * after thermal, never reached on this page; the side views draw it as a natural tile) and the shipped tile (its base
+ * map) load only when the story first approaches it (load time, 2026-11-06: 3 MB never downloaded on this page).
+ */
+export function Terrain() {
   // Canvas children render on the client only, so the query string is readable on first render.
   const [variant] = useState(terrainVariant);
+  return variant === "raven" ? <TerrainView /> : <OriginalTerrain />;
+}
+
+function TerrainView({ city: eagerCity }: { city?: CityAssets }) {
+  const raven = useGLB(ASSETS.ravenTerrain);
+  const gl = useThree((s) => s.gl);
+  const [variant] = useState(terrainVariant);
+  const [lateCity, setLateCity] = useState<CityAssets | null>(null);
+  const city = eagerCity ?? lateCity;
+  // The city tile shows as a city only past thermal / in multi-threat (never on the payload page; the side views draw
+  // it as a natural tile): its assets load the first time that happens (load time, 2026-11-06).
+  const [needCity, setNeedCity] = useState(false);
   const [probe] = useState(probeEnabled);
   const isRaven = variant === "raven";
   const [mountainOn] = useState(() => isRaven && mountainTerrainEnabled());
@@ -215,26 +268,20 @@ export function Terrain() {
   const appear = useRef(0);
   const wasThermal = useRef(false);
 
-  const land = terrain.nodes["Land-A"] as THREE.Mesh;
-  const cityLand = city.nodes["Land-A"] as THREE.Mesh;
   const ravenLand = raven.nodes["Land-A"] as THREE.Mesh;
   const ravenHouses = raven.nodes.Houses as THREE.Mesh;
-  const naturalLand = isRaven ? ravenLand : land;
+  // Original mode always has `eagerCity`.
+  const naturalLand = isRaven ? ravenLand : city!.land;
+  const cityLand = city?.cityLand;
   const geometries = useMemo(
-    () => [naturalLand.geometry, cityLand.geometry] as [THREE.BufferGeometry, THREE.BufferGeometry],
+    () => [naturalLand.geometry, (cityLand ?? naturalLand).geometry] as [THREE.BufferGeometry, THREE.BufferGeometry],
     [naturalLand, cityLand],
   );
   // The city tile keeps the shipped base map under its overlay; natural tiles take the Raven bake when active.
-  const baseMap = (land.material as THREE.MeshStandardMaterial).map;
+  const baseMap = city ? (city.land.material as THREE.MeshStandardMaterial).map : null;
   const naturalMap = (naturalLand.material as THREE.MeshStandardMaterial).map;
   const housesMap = (ravenHouses.material as THREE.MeshStandardMaterial).map;
-
-  const cityTex = useTexture(ASSETS.cityTexture, (t) => {
-    const tex = Array.isArray(t) ? t[0] : t;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.flipY = false;
-    tex.anisotropy = 4;
-  });
+  const cityTex = city?.cityTex ?? null;
 
   const panorama = useOpeningPanorama();
   const [natural] = useState(() => new TerrainMaterial(getNoiseTexture()));
@@ -270,22 +317,29 @@ export function Terrain() {
       m.uniforms.uBgColor.value.set(0x000000);
       m.uniforms.uPanorama.value = panorama;
     }
-    for (const m of naturalVariants) m.uniforms.uBaseTexture.value = naturalMap;
-    for (const m of mountainVariants) m.uniforms.uBaseTexture.value = naturalMap;
     urban.uniforms.uBaseTexture.value = baseMap;
     village.uniforms.uBaseTexture.value = housesMap;
-  }, [baseMap, naturalMap, housesMap, cityTex, materials, naturalVariants, mountainVariants, urban, village, panorama]);
+  }, [baseMap, naturalMap, housesMap, cityTex, materials, urban, village, panorama]);
 
-  // Mountain slices are built off the critical path (a few hundred ms of CPU, yielding between rows).
+  // Load time (2026-11-05/06): the GLB carries a 512 preview of the land map (scripts/split-raven-terrain.mjs). The 4K
+  // map (same bytes as before) and then the tree-variant maps load through the full-quality queue (hd-assets.ts:
+  // after the drone's own maps, one at a time so they never split the link); until then tiles show the best map in
+  // so far. Mountain slices are built off the critical path (worker; FixedContainer starts the build early).
   useEffect(() => {
     if (!mountainOn) return;
     let alive = true;
     let built: MountainSlices | null = null;
     // Hold the loader until the mountain ground has rendered (never reveal the old tiles first).
     useLoading.setState({ terrainReady: false });
-    const release = () => requestAnimationFrame(() => requestAnimationFrame(() => useLoading.setState({ terrainReady: true })));
-    const segments = window.innerWidth < 768 ? 96 : 160;
-    buildMountainSlices(ravenLand.geometry, ravenHouses.geometry, segments)
+    const frames = () => requestAnimationFrame(() => requestAnimationFrame(() => useLoading.setState({ terrainReady: true })));
+    // Fast links get up to FULL_MAP_WAIT_MS for the drone and terrain originals, so they never see a preview. A page
+    // that is already slow reveals on the previews at once: the originals could not arrive in time there anyway.
+    const release = () => {
+      const slow = performance.now() > SLOW_PAGE_MS;
+      const wait = new Promise((r) => setTimeout(r, slow ? 0 : FULL_MAP_WAIT_MS));
+      Promise.race([hdSettled(HD_PRIORITY.terrain), wait]).then(() => alive && frames());
+    };
+    sharedMountainSlices(ravenLand.geometry, ravenHouses.geometry)
       .then((s) => {
         built = s;
         if (alive) {
@@ -302,36 +356,78 @@ export function Terrain() {
     return () => {
       alive = false;
       useLoading.setState({ terrainReady: true });
+      forgetMountainSlices(ravenLand.geometry);
       if (built) for (const g of built.flat()) g.dispose();
     };
   }, [mountainOn, ravenLand, ravenHouses]);
 
-  // Variant maps load after the scene is up (not behind the loader); until then those tiles show the GLB map.
+  // Natural/mountain base maps are owned here (not in the uniform effect above, which re-runs when the city assets
+  // arrive and would put the preview back).
   useEffect(() => {
+    for (const m of [...naturalVariants, ...mountainVariants]) m.uniforms.uBaseTexture.value = naturalMap;
     if (!isRaven || !naturalMap) return;
-    const loader = new THREE.TextureLoader();
     const loaded: THREE.Texture[] = [];
     let alive = true;
-    RAVEN_TILE_MAPS.forEach((url, i) => {
-      loader.load(url, (tex) => {
-        if (!alive) return tex.dispose();
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.flipY = false; // glTF UV convention, like the GLB map
-        tex.wrapS = naturalMap.wrapS;
-        tex.wrapT = naturalMap.wrapT;
-        tex.anisotropy = 4;
-        loaded.push(tex);
-        naturalVariants[i + 1].uniforms.uBaseTexture.value = tex;
-        if (mountainVariants[i + 1]) mountainVariants[i + 1].uniforms.uBaseTexture.value = tex;
+    // Decoded off the main thread like the GLB's own preview (GLTFLoader's ImageBitmapLoader, same options, so the
+    // orientation matches); HTML image fallback where ImageBitmap is missing.
+    const bitmaps = typeof createImageBitmap !== "undefined";
+    const load = async (url: string) => {
+      const tex = bitmaps
+        ? new THREE.Texture(await new THREE.ImageBitmapLoader().setOptions({ premultiplyAlpha: "none" }).loadAsync(url))
+        : await new THREE.TextureLoader().loadAsync(url);
+      if (!alive) {
+        tex.dispose();
+        return null;
+      }
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.flipY = false; // glTF UV convention, like the GLB map
+      tex.wrapS = naturalMap.wrapS;
+      tex.wrapT = naturalMap.wrapT;
+      tex.minFilter = naturalMap.minFilter;
+      tex.magFilter = naturalMap.magFilter;
+      tex.anisotropy = 4;
+      tex.needsUpdate = true;
+      // Upload in a quiet frame (never mid-scroll), not on the first frame that samples it.
+      await whenQuiet();
+      if (!alive) {
+        tex.dispose();
+        return null;
+      }
+      gl.initTexture(tex);
+      loaded.push(tex);
+      return tex;
+    };
+    // Connection-adaptive final quality (user 2026-11-06: "drone full + ground 2K" on slow links). A page that took
+    // past SLOW_PAGE_MS to get its scene up is on a slow link: the ground stops at the 2K map (all tiles), so Slow 4G
+    // finishes downloading at ~25 s instead of ~75 s. Fast links skip the 2K step and get the 4K map and the
+    // tree-variant maps, exactly as before. The drone's originals load on every link (hd-assets.ts).
+    const slowLink = performance.now() > SLOW_PAGE_MS;
+    if (slowLink) {
+      queueHd(HD_PRIORITY.terrainStep, async () => {
+        const mid = await load(ASSETS.ravenLandMap2k);
+        if (mid) for (const m of [...naturalVariants, ...mountainVariants]) m.uniforms.uBaseTexture.value = mid;
       });
-    });
+    } else {
+      queueHd(HD_PRIORITY.terrain, async () => {
+        const full = await load(ASSETS.ravenLandMap);
+        // Tile 0 and every variant still waiting on its own map (the variant maps queue after this one).
+        if (full) for (const m of [...naturalVariants, ...mountainVariants]) m.uniforms.uBaseTexture.value = full;
+      });
+      RAVEN_TILE_MAPS.forEach((url, i) =>
+        queueHd(HD_PRIORITY.variants, async () => {
+          const tex = await load(url);
+          if (!tex) return;
+          naturalVariants[i + 1].uniforms.uBaseTexture.value = tex;
+          if (mountainVariants[i + 1]) mountainVariants[i + 1].uniforms.uBaseTexture.value = tex;
+        }),
+      );
+    }
     return () => {
       alive = false;
       for (const tex of loaded) tex.dispose();
-      for (const m of naturalVariants.slice(1)) m.uniforms.uBaseTexture.value = naturalMap;
-      for (const m of mountainVariants.slice(1)) m.uniforms.uBaseTexture.value = naturalMap;
+      for (const m of [...naturalVariants, ...mountainVariants]) m.uniforms.uBaseTexture.value = naturalMap;
     };
-  }, [isRaven, naturalMap, naturalVariants, mountainVariants]);
+  }, [isRaven, naturalMap, naturalVariants, mountainVariants, gl]);
 
   useEffect(() => {
     for (const m of materials) m.uniforms.uDpr.value = dpr;
@@ -400,6 +496,7 @@ export function Terrain() {
     const ignitionDone = state[SCENE.IGNITION_VERIFIED].progress > 0.9;
     const multi = state[SCENE.MULTI_THREAT_RESPONSE].progress;
     const approachingCity = tp > 0.5;
+    if (!needCity && !eagerCity && (tp > 0 || multi > 0.5)) setNeedCity(true);
     if (groupB.current) groupB.current.visible = !ignitionDone;
     if (groupA.current) groupA.current.visible = !(tp > 0.99);
     if (groupCity.current) groupCity.current.visible = approachingCity;
@@ -447,6 +544,11 @@ export function Terrain() {
 
   return (
     <group ref={tiles} name="TerrainTiles">
+      {!eagerCity && needCity && (
+        <Suspense fallback={null}>
+          <CityAssetsLoader onLoad={setLateCity} />
+        </Suspense>
+      )}
       {probe && <TerrainProbe />}
       <group ref={groupA}>
         {tile([-1, 0], { desktopOnly: true })}
@@ -463,13 +565,19 @@ export function Terrain() {
       </group>
       <group ref={groupCity}>
         {tile([-1, 3])}
-        {tile([0, 3], {
-          material: urban,
-          isCity: true,
-          variants: undefined,
-          slices: undefined,
-          sideNatural: slices && variants ? { variants, slices } : null,
-        })}
+        {/* Until the city assets arrive (after the full terrain maps) this is a natural tile. */}
+        {tile(
+          [0, 3],
+          city
+            ? {
+                material: urban,
+                isCity: true,
+                variants: undefined,
+                slices: undefined,
+                sideNatural: slices && variants ? { variants, slices } : null,
+              }
+            : {},
+        )}
         {tile([1, 3])}
       </group>
       <group ref={groupWide}>
@@ -494,7 +602,10 @@ export function Terrain() {
   );
 }
 
-useGLB.preload(ASSETS.terrain);
-useGLB.preload(ASSETS.cityTerrain);
 useGLB.preload(ASSETS.ravenTerrain);
-useGLB.preload(ASSETS.building);
+// The shipped/city tiles are first-frame assets only in `?terrain=original` (see Terrain).
+if (typeof window !== "undefined" && terrainVariant() !== "raven") {
+  useGLB.preload(ASSETS.terrain);
+  useGLB.preload(ASSETS.cityTerrain);
+  useGLB.preload(ASSETS.building);
+}

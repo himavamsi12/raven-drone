@@ -17,6 +17,23 @@ export function CapabilityVideos() {
   const activeRef = useRef(0);
   const visible = useRef(false);
   const reduced = useRef(false);
+  // Download the clips only once the section is near (it is far down the page; the active clip was fetching 1.3 MB
+  // during the loader). Until then the panel is empty and not even the posters load.
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = section.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e.isIntersecting) return;
+        setNear(true);
+        io.disconnect();
+      },
+      { rootMargin: "150% 0px 150% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const select = (i: number, play: boolean) => {
     activeRef.current = i;
@@ -113,10 +130,10 @@ export function CapabilityVideos() {
                 videos.current[i] = el;
               }}
               src={c.src}
-              poster={c.poster}
+              poster={near ? c.poster : undefined}
               muted
               playsInline
-              preload={i === active ? "auto" : "metadata"}
+              preload={!near ? "none" : i === active ? "auto" : "metadata"}
               onEnded={() => onEnded(i)}
               aria-hidden={i !== active}
               className="absolute inset-0 h-full w-full object-cover"

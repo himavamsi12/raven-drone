@@ -320,6 +320,9 @@ dialog::backdrop {
 .feature-tags {
   display: flex;
   flex-wrap: wrap;
+  /* Every feature's tags share one grid cell: keep the shorter sets from stretching to the tallest. */
+  align-content: flex-start;
+  align-items: flex-start;
   gap: calc(var(--u) * 12);
 }
 .feature-tag {
@@ -375,6 +378,10 @@ dialog::backdrop {
   .feature-stage {
     --nav-step: 30px;
   }
+  /* Phones: the render is full bleed under the heading, so the shade runs further down behind the copy. */
+  .feature-shade {
+    background: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.45) 30%, rgba(0, 0, 0, 0) 50%);
+  }
   .feature-heading {
     left: 20px;
     right: 20px;
@@ -426,6 +433,17 @@ dialog::backdrop {
     gap: 6px;
     padding: 4px 8px;
     font-size: 11px;
+  }
+}
+
+/* Landscape phones (mobile pass 2026-11-06): the --u layout shrinks the heading under the nav bar and the indicator
+   runs into the card; push the heading below the bar and drop the indicator (the card names the feature). */
+@media (min-width: 768px) and (max-height: 600px) {
+  .feature-heading {
+    top: calc(var(--nav-height) + 16px);
+  }
+  .feature-nav {
+    display: none;
   }
 }
 

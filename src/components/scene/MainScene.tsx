@@ -2,7 +2,7 @@
 
 import { useFBO, useKeyboardControls, useTexture } from "@react-three/drei";
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { ASSETS } from "@/lib/assets";
 import { resolution, SUN_POSITION, TERRAIN_SCALE, terrainOffset } from "@/lib/constants";
@@ -17,6 +17,7 @@ import { DroneRig } from "./DroneRig";
 import { Flock } from "./Flock";
 import { GridRow } from "./Grid";
 import { HeroPlate, heroPlateEnabled } from "./HeroPlate";
+import { startHd } from "./hd-assets";
 import { OpeningSky } from "./OpeningSky";
 import { usePostFX } from "./PostFX";
 import { DAYLIGHT, HERO_LIGHT, heroLight, updateHeroLight } from "./hero-light";
@@ -158,7 +159,9 @@ function FlockPortal({ target, enabled }: { target: THREE.WebGLRenderTarget; ena
     gl.setRenderTarget(prev);
     gl.autoClear = prevAuto;
   });
-  return <>{createPortal(<Flock camera={camera} />, portalScene)}</>;
+  // Journey is not on the page: the flock and its ground (the shipped 2 MB tile + grid) load only if it is ever
+  // rendered, behind their own boundary so they never suspend the scene (load time, 2026-11-06).
+  return <>{createPortal(<Suspense fallback={null}>{enabled && <Flock camera={camera} />}</Suspense>, portalScene)}</>;
 }
 
 /** Everything inside the sticky canvas (shipped `t4`). */
@@ -253,6 +256,7 @@ export function MainScene() {
     if (!announced.current) {
       announced.current = true;
       setTimeout(() => useLoading.getState().setMainAppLoaded(true), 25);
+      startHd(); // full-quality textures (hd-assets.ts) only once the first frame is up
       // Compile every material up front, hidden objects included (flank drones, tags appear later): the first time
       // they became visible in Connection the shader compile stalled one frame (user: "still a jitter").
       prewarm(gl, scene, cam);

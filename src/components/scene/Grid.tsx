@@ -10,6 +10,7 @@ import { useRenderScale } from "@/lib/render-scale";
 import { SCENE, scenes } from "@/lib/scenes";
 import { computeScreenUv, gridFunctions } from "./shaders/screen-uv";
 import { useGLB } from "./types";
+import { terrainVariant } from "./raven-terrain";
 
 const TILE = 2 * TERRAIN_SCALE * 200;
 
@@ -162,5 +163,8 @@ export function GridRow({ offset = 0, isCity = false }: { offset?: number; isCit
   );
 }
 
-useGLB.preload(ASSETS.grid);
-useGLB.preload(ASSETS.gridCity);
+// Raven mode draws the clay map's own dot grid (MainScene), so the flat grid is only a first-frame asset otherwise.
+if (typeof window !== "undefined" && terrainVariant() !== "raven") {
+  useGLB.preload(ASSETS.grid);
+  useGLB.preload(ASSETS.gridCity);
+}

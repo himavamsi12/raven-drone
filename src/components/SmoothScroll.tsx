@@ -69,6 +69,15 @@ const GESTURE_GAP_MS = 120; // was 220: quick repeated scrolls were merged into 
 const CHAIN_AFTER = 0.35; // was 0.6: a scroll during a move queues the next stop sooner
 
 /**
+ * Scrolling unlocks the moment the loader starts to fade, not once it has faded out (user 2026-11-06: "the scroll is
+ * not responding immediately"): the scene is rendered by then, and the ~0.9 s fade used to swallow the first scroll.
+ */
+const scrollUnlocked = () => {
+  const s = useLoading.getState();
+  return s.loadingCanvasIsHiding || s.loadingCanvasHidden;
+};
+
+/**
  * Set by SceneController: true when a wheel step in `dir` is taken over by the snap controller. Lenis then ignores
  * that wheel event (virtualScroll), so its smoothing never fights the snap; outside the bands it smooths freely.
  */
@@ -230,7 +239,7 @@ const findBand = (scroll: number, bands: SceneRange[][]) => {
  */
 function SceneController() {
   const lenis = useLenis();
-  const loadingHidden = useLoading((s) => s.loadingCanvasHidden);
+  const loadingHidden = useLoading((s) => s.loadingCanvasIsHiding || s.loadingCanvasHidden);
   const isTouchPhone = useMediaQuery("(max-width: 768px) and (pointer: coarse)");
 
   const scrollbarDrag = useRef(false);
@@ -303,7 +312,7 @@ function SceneController() {
     if (!lenis) return;
     lenisRef.current = lenis;
     snapClaim.current = (dir, deltaY, event) => {
-      if (!useLoading.getState().loadingCanvasHidden || isScrollLocked()) return false;
+      if (!scrollUnlocked() || isScrollLocked()) return false;
       const fresh = classifyWheel(event);
       if (target.current !== null) return true;
       // Free zone: Lenis takes the wheel, except where it would run past one of its ends (payload frame, Ridge Clinic).
@@ -452,7 +461,7 @@ function SceneController() {
 
   useEffect(() => {
     if (!lenis) return;
-    const ready = () => useLoading.getState().loadingCanvasHidden && !isScrollLocked();
+    const ready = () => scrollUnlocked() && !isScrollLocked();
     // A trackpad swipe is a burst of events with a momentum tail that can last over a second. One swipe plays ONE
     // stop (user 2026-11-05: the payload stage ran straight on into the mountain stage): events less than
     // GESTURE_GAP_MS after the previous one belong to the same swipe and never start or extend a snap. A new swipe in
@@ -543,7 +552,7 @@ function SceneController() {
         return;
       }
       touching.current = false;
-      if (useLoading.getState().loadingCanvasHidden) run();
+      if (scrollUnlocked()) run();
     };
     const onMouseUp = () => {
       if (!scrollbarDrag.current) return;
@@ -582,7 +591,7 @@ function SceneController() {
     };
   }, []);
 
-  // Lock scrolling until the loader is gone, always start at the top.
+  // Lock scrolling until the loader starts to fade (the scene is up then), always start at the top.
   useEffect(() => {
     if (!lenis) return;
     target.current = null;
@@ -599,7 +608,7 @@ function SceneController() {
   useEffect(() => {
     if (!lenis) return;
     const onLock = (e: Event) => {
-      if ((e as CustomEvent).detail?.locked || !useLoading.getState().loadingCanvasHidden || isScrollLocked()) return;
+      if ((e as CustomEvent).detail?.locked || !scrollUnlocked() || isScrollLocked()) return;
       const s = lenis.scroll;
       const hit = findBand(s, bands.current);
       if (!hit || s <= 1 || hit.list.some((r) => Math.abs(r.end - s) <= 1)) return;

@@ -110,6 +110,31 @@ export async function buildMountainSlices(
   return slices;
 }
 
+/** Slice resolution: the same for the early build and Terrain. */
+export const mountainSegments = () => (window.innerWidth < 768 ? 96 : 160);
+
+const builds = new WeakMap<THREE.BufferGeometry, Promise<MountainSlices>>();
+
+/**
+ * Load time (2026-11-05): one shared build per Raven tile. `MountainPrebuild` (FixedContainer) starts it as soon as
+ * the small terrain GLB is in, while the drone is still downloading; Terrain then takes the same promise instead of
+ * building after every first-frame asset has arrived (~2 s of the loader on slow links).
+ */
+export function sharedMountainSlices(land: THREE.BufferGeometry, houses: THREE.BufferGeometry) {
+  let build = builds.get(land);
+  if (!build) {
+    build = buildMountainSlices(land, houses, mountainSegments());
+    builds.set(land, build);
+    build.catch(() => builds.delete(land));
+  }
+  return build;
+}
+
+/** Terrain disposed the slices of this tile: a later mount builds new ones. */
+export function forgetMountainSlices(land: THREE.BufferGeometry) {
+  builds.delete(land);
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Detail texture (rock / heath / snow / macro), generated once, tileable, mipmapped
 

@@ -4,17 +4,29 @@ export const ASSETS = {
   cityTexture: "/assets/textures/terrain/city.webp",
   terrain: "/assets/models/terrain.glb",
   cityTerrain: "/assets/models/city-terrain.glb",
-  ravenTerrain: "/assets/models/raven-terrain.glb", // Raven natural tile Land-A + Houses (glb/raven-terrain/)
+  /**
+   * Raven natural tile Land-A + Houses (glb/raven-terrain/). Load time (2026-11-05): the GLB carries a 512 preview of
+   * the land map; the 4K map (same bytes as in the full GLB) is `ravenLandMap`, swapped in after the reveal
+   * (scripts/split-raven-terrain.mjs).
+   */
+  ravenTerrain: "/assets/models/raven-terrain-lite.glb",
+  ravenLandMap: "/assets/textures/terrain/raven-natural-a.webp",
+  /** 2048 step between the GLB preview and the 4K map, slow links only (2026-11-06). */
+  ravenLandMap2k: "/assets/textures/terrain/raven-natural-a-2k.webp",
   building: "/assets/models/building.glb",
   grid: "/assets/models/grid.glb",
   gridCity: "/assets/models/grid-city.glb",
-  raven: "/assets/models/raven_hexa.glb", // hexacopter medical drone (6 props); source glb/new-drone/
+  /**
+   * Hexacopter medical drone (6 props); source glb/new-drone/. Load time (2026-11-06): the lite GLB has the same
+   * geometry with 256 previews of its 11 maps; the originals (raven-hexa-maps/, byte-identical to raven_hexa.glb's)
+   * are swapped in after the reveal (scripts/split-raven-hexa.mjs, scene/hd-assets.ts).
+   */
+  raven: "/assets/models/raven_hexa-lite.glb",
   droneLowpoly: "/assets/models/drone-lowpoly.glb", // Raven silhouette, same node/axis convention as delta-lowpoly
   cameraAnimations: "/assets/models/camera-animations.glb",
   cameraAnimationsMobile: "/assets/models/camera-animations-mobile.glb",
   droneAnimations: "/assets/models/drone-animations.glb",
   droneAnimationsMobile: "/assets/models/drone-animations-mobile.glb",
-  loadingDrone: "/assets/models/loading-drone.glb", // Raven silhouette, replaces loading-delta
   noise: "/assets/textures/fx/noise.webp",
   openingLand: "/assets/textures/environment/raven-opening-land.webp", // glb/raven-sky/01_opening_panorama.py (land)
   env: "/assets/textures/environment/env.exr",

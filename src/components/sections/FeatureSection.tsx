@@ -93,7 +93,7 @@ export function FeatureSection() {
         {FEATURES.map((f, i) => (
           <div
             key={f.id}
-            className="feature-frame absolute inset-0"
+            className="feature-frame absolute inset-0 isolate"
             style={{ "--fx": `${f.frame.x}%`, "--fy": `${f.frame.y}%`, "--fs": f.frame.s } as React.CSSProperties}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -101,6 +101,8 @@ export function FeatureSection() {
               src={f.image}
               alt={i === active ? f.alt : ""}
               aria-hidden={i !== active}
+              // Far below the stage: no SSR preload during the loader (load time, 2026-11-05).
+              loading="lazy"
               decoding="async"
               className="absolute inset-0 h-full w-full object-cover object-[72%_50%] md:object-center"
               style={{

@@ -5,8 +5,9 @@ import { CapabilityVideos } from "@/components/sections/CapabilityVideos";
 import { FeatureSection } from "@/components/sections/FeatureSection";
 import { UseCases } from "@/components/sections/UseCases";
 import { ClosingCta } from "@/components/sections/ClosingCta";
+// Server-rendered (load time, 2026-11-06): the loader backdrop shows with the first paint, not after three.js.
+import { Loader } from "@/components/loading/Loader";
 
-const Loader = dynamic(() => import("@/components/loading/Loader").then((m) => m.Loader), { ssr: false });
 const FixedContainer = dynamic(() => import("@/components/scene/FixedContainer").then((m) => m.FixedContainer), { ssr: false });
 
 /**

@@ -12,6 +12,32 @@ User direction: Raven is a medical delivery drone concept for remote mountain vi
 
 Remaining adaptation: the loader, low-poly tactical/flock silhouettes, sensor/HUD details, fire/emergency simulations, mission card/demo imagery, reference legal/Notes content, and baked footer sequence/wordmarks still come from the source reconstruction. They need a separate medical-delivery art/content pass. The existing terrain has not been replaced with snow/tundra. This first pass is model integration and core copy, not a finished Raven site.
 
+## Mobile pass (user: "make it mobile responsive", 2026-11-06)
+
+Checked in headless Chrome (playwright-core, scratchpad only) at 390x844, 360x640 (portrait, touch) and 844x390
+(landscape), plus 1440x900 for regressions. Page width never overflows. Fixes:
+
+- Section 03 on phones: each `.feature-frame` is `isolate`. Below 768px the frame has no transform, so the active
+  image's inline `z-index: 1` escaped and painted over the heading and card. Phone shade runs further down behind the
+  copy. `.feature-tags` align to the top (the shared grid cell stretched one-row tag sets to the two-row height).
+- Stage callouts (payload, altitude, speed; `callout-layout.ts`) sit at the bottom on phones: under the nav bar they
+  covered the payload drone's rotors and the Summit Station card. Desktop placement unchanged.
+- Hero drone stays 1x on phones (`HERO_SCALE` only >= 768px): at 1.25x its right arms left a 390 px screen.
+- Landscape phones (>= 768 wide, <= 600 tall): hero paragraph hidden (headline + CTA stay), Section 03 heading below
+  the nav bar and its BUILT/SENSOR/MOTOR indicator hidden, site cards (`placeClinicPin`) slide down their stem to
+  clear the nav bar.
+
+Not done: real iOS Safari / Android devices (dynamic toolbar, touch snapping feel), tablets 768-1023 portrait, 60 fps
+check of the glide-in and video sections on phones.
+
+## Load time on slow links (2026-11-05/06)
+
+Slow 4G (DevTools preset, `next start`, cold cache, one tab): was ~2 min to usable and ~75 s "Finish" (~15 MB). Now
+"Ready" 13.0 s and Finish 25.4 s (3.9 MB): slow links end on the drone's original maps (pixel-identical) and a 2K
+ground (user choice); fast links (Fast 4G: ready 4.3 s, Finish 13.5 s) still end on the 4K ground and tree variants.
+Details: AGENTS.md "Open work", "Load time". Checked at 1440x900: hero before/after the swaps, payload, Ridge Clinic,
+Section 03, Section 04, closing CTA; no console or GL errors; `scripts/check-raven-rotors.mjs` passes.
+
 ## Sections 03 and 04 after the 3D stage (user's Figma "Drone Website", 2026-11-04)
 
 - Section 03 (`components/sections/FeatureSection.tsx`, Figma frames 128:804 / 128:830 / 128:857): `#features-band`

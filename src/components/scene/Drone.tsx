@@ -9,6 +9,8 @@ import { payloadLook } from "@/lib/payload";
 import { damp } from "@/lib/math";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useGLB } from "./types";
+import { upgradeGltfMaps } from "./hd-assets";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { collectRavenRotors, advanceRavenRotors } from "./raven-rotors";
 import { attachRotorBlur, rotorBlurVector, setRotorBlur, updateRotorBlur } from "./rotor-blur";
 import { plateLight } from "./plate-light";
@@ -166,7 +168,10 @@ void main() {
 
 /** `realLook`: ignore the payload stage's vector sweep (drones outside the stage, e.g. the closing CTA). */
 export function RavenModel({ envMap, realLook = false }: { envMap?: THREE.Texture; realLook?: boolean }) {
-  const { scene } = useGLB(ASSETS.raven);
+  const gltf = useGLB(ASSETS.raven);
+  const { scene } = gltf;
+  // Previews first, originals once the scene is up (hd-assets.ts); one upgrade per GLB, shared by every instance.
+  useEffect(() => void upgradeGltfMaps(gltf as unknown as GLTF), [gltf]);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const spin = !reducedMotion;
   const glint = useRef(0);

@@ -87,11 +87,13 @@ async function field(): Promise<NetField> {
 }
 
 /**
- * Contour flow timing (seconds, contour units of height): the front rises over `rise`, the cycle repeats every
- * `cycle` (the gap is a rest with every line at its base brightness); `tail` = how far behind the front a lit line
- * fades (height units; 4 = one contour).
+ * Contour flow timing: the front climbs the massif (its foot -> above the summit) over `rise` seconds, the cycle
+ * repeats every `cycle` (the gap is a rest with every line at its base brightness); `tail` = how far behind the front
+ * a lit line fades, as a share of the climb. `foot` / `top`: terrain heights (section units) where the climb starts
+ * and ends. The summit is ~84 (netHeight sampled 2026-11-06). User 2026-11-06: the lines below the h 40 contour (the
+ * bright one round the massif's foot in the hero view) read as ground, so the climb starts just under it (was 14).
  */
-const CONTOUR_FLOW = { rise: 4.2, cycle: 5.4, tail: 10 };
+const CONTOUR_FLOW = { rise: 4.2, cycle: 5.4, tail: 0.12, foot: 38.5, top: 86 };
 
 export class NetTerrain {
   /** Pivot on the drone: sway/tilt rotation and the scale. */
@@ -235,15 +237,18 @@ void main(){
  float f5 = h/20.0; float fw5 = max(fwidth(f5), 1e-4);
  float major = 1.0 - min(abs(fract(f5 - 0.5) - 0.5)/(fw5*1.6), 1.0);
  float md = distance(vL.xz, uMouse.xz); float glow = exp(-md*md/1400.0)*uMouseOn;
- // Contour flow (user 2026-11-05: "each line should start at the bottom and go up one by one"): a front climbs the
- // massif from below the valley floor (-12) to above the summit (~84) in CONTOUR_FLOW_S, then rests; each contour
- // lights up as the front reaches its height and fades behind it, so the lines come on one after another, bottom to
- // top. Frozen at the start of a cycle (nothing lit) when uTime stops (reduced motion).
- float lineH = floor(f + 0.5)*4.0;
+ // Contour flow (user 2026-11-05: "each line should start at the bottom and go up one by one"; 2026-11-06: "only from
+ // bottom of the mountain to top of the mountain", not from the ground): a front climbs the massif by terrain height
+ // from its foot (CONTOUR_FLOW.foot) to above the summit in CONTOUR_FLOW.rise, then rests; the contours light up where
+ // it passes and fade behind it, one after another up the mountain. The flat ground below the foot never lights (it
+ // did with the earlier screen-height front, and an all-height front lit it all at once). Frozen at the start of a
+ // cycle (nothing lit) when uTime stops (reduced motion).
  float cyc = mod(uTime, ${CONTOUR_FLOW.cycle.toFixed(2)})/${CONTOUR_FLOW.rise.toFixed(2)};
- float wave = mix(-12.0, 92.0, cyc);
- float dw = wave - lineH;
- float flow = smoothstep(-1.5, 0.5, dw)*exp(-max(dw, 0.0)/${CONTOUR_FLOW.tail.toFixed(1)});
+ float wave = mix(-0.04, 1.1, cyc);
+ float hn = (h - ${CONTOUR_FLOW.foot.toFixed(1)})/${(CONTOUR_FLOW.top - CONTOUR_FLOW.foot).toFixed(1)};
+ float dw = wave - hn;
+ float flow = smoothstep(-0.02, 0.01, dw)*exp(-max(dw, 0.0)/${CONTOUR_FLOW.tail.toFixed(2)})
+   *smoothstep(${(CONTOUR_FLOW.foot - 1).toFixed(1)}, ${(CONTOUR_FLOW.foot + 1).toFixed(1)}, h);
  col += uIce*(line*(0.035 + 0.6*glow + 0.55*flow) + major*(0.09 + 0.6*glow + 0.35*flow));
  col += uIce*glow*0.035;
  float dist = camDist/uDistScale;

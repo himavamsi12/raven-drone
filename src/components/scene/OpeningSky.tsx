@@ -225,14 +225,23 @@ function ridgeGeometry(radius: number, baseY: number, peak: number, seed: number
 }
 
 
-/** The land layer texture (suspends: part of the first frame). Shared with Terrain for the opening fog. */
-export function useOpeningPanorama() {
-  return useTexture(ASSETS.openingLand, (t) => {
-    const tex = Array.isArray(t) ? t[0] : t;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.anisotropy = 4;
-  }) as THREE.Texture;
+/** Mountain terrain draws MountainRanges instead of the land layer and fogs to the sky, so it never samples it. */
+const panoramaNeeded = () => !(terrainVariant() === "raven" && mountainTerrainEnabled());
+
+function configurePanorama(t: THREE.Texture | THREE.Texture[]) {
+  const tex = Array.isArray(t) ? t[0] : t;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+}
+
+/**
+ * The land layer texture (suspends: part of the first frame). Shared with Terrain for the opening fog. Null (never
+ * fetched) in mountain mode: load time, 2026-11-05. The mode is fixed for the page, so the hook order never changes.
+ */
+export function useOpeningPanorama(): THREE.Texture | null {
+  const [needed] = useState(panoramaNeeded);
+  return needed ? (useTexture(ASSETS.openingLand, configurePanorama) as THREE.Texture) : null;
 }
 
 export function OpeningSky() {
@@ -322,4 +331,4 @@ export function OpeningSky() {
   );
 }
 
-useTexture.preload(ASSETS.openingLand);
+if (typeof window !== "undefined" && panoramaNeeded()) useTexture.preload(ASSETS.openingLand);

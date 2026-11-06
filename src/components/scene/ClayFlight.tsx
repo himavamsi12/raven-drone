@@ -1,15 +1,22 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { easeInOutCubic } from "@/lib/math";
 import { SCENE, scenes } from "@/lib/scenes";
 import { CLIMB_STOPS } from "@/lib/story-map";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { CLAY, CLAY_CENTRE, clayHeight, clayState, type HeightField } from "./clay-map";
-import { AltitudeTag, Pin, type AltitudeState } from "./ClayMarkers";
+import type { AltitudeState } from "./ClayMarkers";
 import { LowPolyDrone } from "./LowPolyDrone";
+
+/**
+ * Load time (2026-11-05): the WebGL markers pull in troika text (~60 KB gzipped) and a 148 KB TTF. The clay landscape
+ * is not on the payload page, so they load in their own chunk the first time it shows.
+ */
+const Pin = lazy(() => import("./ClayMarkers").then((m) => ({ default: m.Pin })));
+const AltitudeTag = lazy(() => import("./ClayMarkers").then((m) => ({ default: m.AltitudeTag })));
 
 /**
  * One Raven over the clay landscape (user, 2026-11-02): it enters at the bottom left of the Care teams frame, climbs
@@ -139,6 +146,10 @@ export function ClayFlight({ field }: { field: HeightField }) {
     return { leg: 0, t: 0 };
   };
 
+  // The markers' chunk (troika + font) loads the first time the clay landscape shows (never on the payload page).
+  const [markers, setMarkers] = useState(false);
+  const markersWanted = useRef(false);
+
   useFrame(({ clock: c }, dt) => {
     const g = group.current;
     const b = body.current;
@@ -149,6 +160,10 @@ export function ClayFlight({ field }: { field: HeightField }) {
     const visible = clayState.on && w > 0.5;
     g.visible = visible;
     if (!visible) return;
+    if (!markersWanted.current) {
+      markersWanted.current = true;
+      setMarkers(true);
+    }
 
     // route: the whole flight path, re-sampled when the relief height changes
     if (Math.abs(routeW.current - w) > 1e-3) {
@@ -209,19 +224,28 @@ export function ClayFlight({ field }: { field: HeightField }) {
     }
   });
 
+
   return (
     <group ref={group} visible={false}>
       <primitive object={route} />
       {WAYPOINTS.map((wp, i) => (
         <group key={wp.name} ref={(el) => void (pins.current[i] = el)}>
-          <Pin name={wp.name} stem={wp.stem} />
+          {markers && (
+            <Suspense fallback={null}>
+              <Pin name={wp.name} stem={wp.stem} />
+            </Suspense>
+          )}
         </group>
       ))}
       <group ref={body}>
         <group scale={SCALE}>
           <LowPolyDrone />
         </group>
-        <AltitudeTag state={altitude} />
+        {markers && (
+          <Suspense fallback={null}>
+            <AltitudeTag state={altitude} />
+          </Suspense>
+        )}
       </group>
     </group>
   );

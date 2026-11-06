@@ -965,7 +965,8 @@ export function DroneRig() {
     if (mover1.current) {
       const sc = remap(swarm, 0, 0.5, 0.0075, 0.0085) - 0.001 * mission;
       const top = 1 + (TOP_VIEW_SCALE - 1) * topView.current;
-      const hero = 1 + (HERO_SCALE - 1) * (1 - THREE.MathUtils.smoothstep(delta, 0, 0.2));
+      // Phones keep 1x (mobile pass 2026-11-06): at 1.25x the hero frame cut the drone's right arms off a 390 px screen.
+      const hero = 1 + ((isMd ? HERO_SCALE : 1) - 1) * (1 - THREE.MathUtils.smoothstep(delta, 0, 0.2));
       let scale = (isMd ? sc : 0.0075) * DRONE_SCALE * top * hero;
       // Prepare -> Route (Journey range, desktop track): hold the drone's apparent size (scale / camera distance) on
       // an even path from the Prepare frame to the Route frame. Measured at 1440×900: the clip camera moves in

@@ -93,7 +93,7 @@ src/components/
     overlays/               SpecsCallouts, SwarmTags, GroundHtml
     materials/              TerrainMaterial
     shaders/screen-uv.ts    shared GLSL (diagonal scan wipe, grid AA)
-  sections/                 Sections (team / About; the footer and its landing sequence were removed 2026-11-03)
+  sections/                 FeatureSection, CapabilityVideos, UseCases, ClosingCta (About/`Sections.tsx` removed 2026-11-05)
 public/assets/              mirrored reference assets (same paths as live site); images/media = _next/static/media
 public/draco/               Draco decoder copied from three/examples (do not CDN)
 scripts/asset-manifest.mjs  manifest generator
@@ -234,6 +234,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Open work (see RECONSTRUCTION.md for full list)
 
+- Mobile pass (2026-11-06, see RECONSTRUCTION.md "Mobile pass"): 390x844, 360x640 and 844x390 checked headless; feature frames isolated, phone callouts at the bottom, hero drone 1x on phones, landscape-phone hero/Section 03/site-card fixes. Not checked on real iOS/Android devices or 768-1023 portrait tablets.
 - Sections 03/04 (2026-11-04, user Figma): Section 03 redesigned 2026-11-05 to the user's "Feature 7/8" mockups (heading "Engineered for Performance. Built for Reliability.", compact card bottom right with the user's copy, BUILT/SENSOR/MOTOR indicator on the right; `lib/features.ts` FEATURE_*). The heading lines and line below fade up (blur 6px -> 0, staggered .12 s) once 35% of the stage is in view, and again on each re-entry. Renders are the user's `raven-drone-site/src/hardware` images (flattened on black, WebP); Renders are shown at 0.74x, a little below centre, with a radial edge fade (globals.css `.feature-frame`); `frame` in FEATURES nudges the motor up/left. Switching: the old render fades out in 0.2 s while the new one fades in over 0.4 s (user: fast, no old image behind) and the card copy for every feature sits in one grid cell (`.feature-stack`), so the card height never jumps (was AnimatePresence popLayout, which glitched). Not checked on Safari/iOS touch.
 - Section 05 + closing CTA (2026-11-05, user mockups): `sections/UseCases.tsx` (three photo cards, the user's
   1088x1120 originals from raven-drone-site/src/usecases as JPEG q86; NDRF India uniforms and Red Cross emblems:
@@ -262,19 +263,52 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   the real `raven_hexa.glb` as a flat silhouette through the main camera, on a canvas laid over the main canvas
   (`lib/boot-pose.ts`, written by a priority-99 frame hook in DroneRig while the loader is up), so the reveal turns the
   silhouette into the lit drone in place. The pose is taken once (and after a resize), so the silhouette stays still
-  (user: it shook with the live hover). `loader/boot-shape.ts` is unused now.
+  (user: it shook with the live hover). (`loader/boot-shape.ts` and `loading-drone.glb` were removed 2026-11-05.)
 - Camera shake (DroneRig `CameraShake`): the intro scene stays "active" for the whole payload page, so its hero
   shake ran on in the payload, mountain and speed views (the 20 deg lens made it a visible bob of the massif, user
   2026-11-05). It now fades out over payload progress 0 -> .3 (`stageCalm`); measured 0 deg per frame after it.
 - `routeFlight` (lib/payload.ts) maps the whole free climb evenly onto the route (it was still split at the removed
   halfway stop: the last quarter of the scroll flew half the route, so the drone shot down from Ridge Clinic).
+- Load time (2026-11-05/06, user: Slow 4G took ~2 min, DevTools "Finish" must be ~20 s; low-res first, then full).
+  DevTools Slow 4G on `next start`, cold cache, ONE tab (other WebGL tabs skew it by ~6 s): "Ready" 13.0 s, Finish
+  25.4 s, 3.9 MB total (was Finish ~75 s / ~15 MB). Fast 4G: Ready 4.3 s, everything (4K + variants) by 13.5 s.
+  `npm run dev` ships ~10.7 MB of unminified JS: never judge load time on the dev server.
+  - Connection-adaptive final quality (user choice 2026-11-06, "drone full + ground 2K"): a page whose scene took
+    past `SLOW_PAGE_MS` (8 s) is a slow link: drone originals, then the ground's 2K map on every tile, then stop.
+    Fast links: drone originals, 4K land map, tree-variant maps b/c (unchanged final look). Terrain.tsx `slowLink`.
+  - Previews: `raven_hexa-lite.glb` (same geometry/JSON, 11 maps as 256 JPEG, `images[].extras.full`) and
+    `raven-terrain-lite.glb` (512 land map). Originals: `raven-hexa-maps/` = the GLB's JPEGs re-packed losslessly by
+    jpegtran (decoded pixels verified identical, ~15% smaller), `raven-natural-a.webp` (4K, byte-identical),
+    `raven-natural-a-2k.webp`. Scripts: `scripts/split-raven-hexa.mjs`, `scripts/split-raven-terrain.mjs` (re-run after
+    rebuilding `raven_hexa.glb` / `raven-terrain.glb`, which stay in `public/` as sources and are not fetched).
+  - `scene/hd-assets.ts`: one-at-a-time queue, paused until MainScene's first frame (`startHd`). `upgradeGltfMaps`
+    puts the original into the shared texture `Source` and calls `dispose()` + `needsUpdate` (three's immutable
+    texStorage otherwise keeps the preview size: GL_INVALID_VALUE). Decodes match GLTFLoader's ImageBitmapLoader
+    (`premultiplyAlpha` and `colorSpaceConversion` "none"). `performance` marks `raven-hd-<priority>` time each step.
+  - Never downloaded on this page (only when first shown): city tile + `terrain.glb` + buildings (Terrain `needCity`),
+    Journey flock + grid (MainScene `FlockPortal` `enabled`), clay-map markers (ClayFlight, troika + GeistMono TTF).
+  - Mountain build starts when the tile GLB is in (FixedContainer `MountainPrebuild`, `sharedMountainSlices`).
+  - JS: first-load 445 -> 159 KB. Loader DOM is server-rendered (three.js silhouette: `loading/MatchCutCanvas.tsx`,
+    dynamic). Closing CTA drone (`sections/ClosingCtaDrone.tsx`) loads within three screens of the section.
+  - Section by section: feature renders lazy, Section 04 clips/posters on `near`, use-case photos lazy, CTA drone on
+    `near`. Not fetched in mountain mode: opening panorama, flat grid. First-frame files hinted from the HTML
+    (`layout.tsx`); Inter Tight / DM Mono not preloaded. Removed as dead: `loading-drone.glb`, `boot-shape.ts`,
+    `sections/Sections.tsx`.
+- Scroll response (2026-11-06, user: opening -> hero "not responding immediately, delay, then scrolling"). Measured
+  with real (trusted) wheel input in Playwright on the M5 GPU and Slow 4G: the snap starts in 75-115 ms; the delays
+  were (1) input ignored for the ~0.9 s loader fade (scroll now unlocks at `loadingCanvasIsHiding`, SmoothScroll
+  `scrollUnlocked`), (2) one-off GPU work landing mid-move: full-quality texture uploads (up to 167 ms) and the loader
+  canvas teardown (~100 ms). Both now wait for `lib/quiet.ts` `whenQuiet` (300 ms without scroll input); the loader
+  canvas stays mounted, paused and invisible until then. Testing note: Playwright/CDP wheel calls arrive with 180-220 ms
+  gaps, which the gesture classifier rightly reads as a second swipe (one swipe then plays two stops); use in-page
+  WheelEvents on a 16 ms clock or a single notch to test chaining.
 - Hold stops (2026-11-05, user): Ridge Clinic (climb end) and Summit Station (speed end) are never chained past, and
   wheel input pauses for `HOLD_MS` 350 after landing there; a new scroll in the pause plays when it ends (`isHoldStop`).
 - Snap feel (2026-11-05, SmoothScroll): moves reach cruise in `SNAP_START_MS` 180 ms (responsive), brake over a share
   of their length (`SNAP_EASE_SHARE`, max 1.1 s), keep one pace per move; a scroll during a move queues the next stop
   (played once the move is `CHAIN_AFTER` .35 done); `GESTURE_GAP_MS` 120. Swipe detection (`classifyWheel`, user 2026-11-05 "sometimes I have to do many scrolls"): a new swipe counts when deltas rise twice from the previous tail's low point (was: only once that tail fell under 30% of its peak), and a continuously spun mouse wheel starts a new gesture every `RESWIPE_MS` 1.2 s. Test swipes with in-page WheelEvents on a
   fixed 16 ms clock: CDP wheel events arrive with >1 s gaps while a stage first loads and fake new gestures.
-- Contour flow (2026-11-05, user): a glow front climbs the `net` massif's contours bottom to top, one line after another (`CONTOUR_FLOW` in `scene/net-terrain.ts`: 4.2 s rise, 5.4 s cycle; still under reduced motion).
+- Contour flow (2026-11-05, user; 2026-11-06: "only from bottom of the mountain to top"): a glow front climbs the `net` massif by terrain height from the h 40 contour (`foot` 38.5; user: the lines below it read as ground, they never light; first try started at h 14) to above the summit (h 86), lighting the contours one after another (`CONTOUR_FLOW` in `scene/net-terrain.ts`: 4.2 s rise, 5.4 s cycle; frozen under reduced motion). Was a screen-height front from the bottom edge, which lit the foreground ground first.
 - Mountain stage: the section's pointer tilt is off and its idle sway is .04 rad (was .12), hover glow halved (user:
   the mountain jumped with mouse moves while scrolling).
 - Payload page (2026-11-03): the route stage has no speed/distance figures yet (waiting on the user). Not checked on Safari/iOS or low-end GPUs; the callout's leader line crosses a front

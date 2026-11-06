@@ -14,6 +14,10 @@ import { measureStoryMap, stageTop, storyMap, useStage, wipeClipPath, wipeProgre
 import { ChapterCopy } from "./ChapterCopy";
 import { HudLog } from "./HudLog";
 import { MainScene } from "./MainScene";
+import { sharedMountainSlices, mountainTerrainEnabled } from "./mountain-terrain";
+import { terrainVariant } from "./raven-terrain";
+import { useGLB } from "./types";
+import { ASSETS } from "@/lib/assets";
 
 const KEYS: KeyboardControlsEntry<string>[] = [
   { name: "left", keys: ["ArrowLeft", "KeyA"] },
@@ -78,6 +82,21 @@ function useSceneResolution() {
   };
 }
 
+/**
+ * Load time (2026-11-05): starts the mountain terrain build (worker) as soon as the small Raven tile GLB is in, in its
+ * own Suspense boundary, so it runs while the drone and the rest of the first frame are still downloading.
+ */
+function MountainPrebuild() {
+  const raven = useGLB(ASSETS.ravenTerrain);
+  useEffect(() => {
+    if (terrainVariant() !== "raven" || !mountainTerrainEnabled()) return;
+    const land = raven.nodes["Land-A"] as THREE.Mesh;
+    const houses = raven.nodes.Houses as THREE.Mesh;
+    sharedMountainSlices(land.geometry, houses.geometry).catch(() => {}); // Terrain reports failures
+  }, [raven]);
+  return null;
+}
+
 /** WebGL canvas shown once the loader has the boot splash up (shipped `t8`). */
 function SceneCanvas() {
   const loaded = useLoading((s) => s.loadingCanvasLoaded);
@@ -104,6 +123,9 @@ function SceneCanvas() {
           onFallback={scale.onFallback}
         />
         <KeyboardControls map={KEYS}>
+          <Suspense fallback={null}>
+            <MountainPrebuild />
+          </Suspense>
           <Suspense fallback={null}>
             <MainScene />
           </Suspense>
