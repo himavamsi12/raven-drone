@@ -263,8 +263,8 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Free zone (2026-11-05, user: scroll follows the gesture and stops where it stops; the hero part was reverted to
   snaps the same day; 2026-11-06, user: hero -> payload was "sticky", "should scroll immediately": then "still too sticky": the
   free zone starts at the top of the page (`freeStart` 0: the opening is no longer a 2.5 s glide that swallowed scrolls),
-  wheel x`CLIMB_SCROLL_SCALE.payload` 1.8 and lead cap `PAYLOAD_MAX_LEAD` 460 up to the payload frame, `FREE_LERP` .18
-  (was .11); desktop only, touch phones keep snaps): top of the page -> Ridge Clinic has no snap stops (`isFree`/`freeStart`/`freeEnd` in
+  wheel x`CLIMB_SCROLL_SCALE.payload` 1.4 (was 1.8; user: "too fast" after the lerp change) up to the payload frame, `FREE_LERP` .18
+  (was .11); then "smooth but some delay": up to the payload frame Lenis runs at `PAYLOAD_LERP` .24 (.3 was too fast) with lead cap `PAYLOAD_MAX_LEAD` 300 (was .18 / 460; set per wheel step in virtualScroll; measured headless 60 fps: one notch reaches 90% in ~150 ms, was ~200, drift after a swipe ~170 ms, was ~300; a swipe travels ~20% less); desktop only, touch phones keep snaps): top of the page -> Ridge Clinic has no snap stops (`isFree`/`freeStart`/`freeEnd` in
   SmoothScroll; Lenis lerp .11; wheel/touch distance x`CLIMB_SCROLL_SCALE` 1.1 in the pull-back, .75 on the climb, speed capped by `FREE_MAX_LEAD` 280 px of wheel lead). Both ends are soft walls (`freeWall`: the swipe that hits one ends there). Opening,
   hero -> payload, the Summit Station leg and Section 03 still snap.
 - Scene density (2026-11-05, user: "the mountain is jumping"): PerformanceMonitor changes wait while the page is

@@ -53,7 +53,7 @@ const WHEEL_MULTIPLIER = 1.1;
  * immediately but not too fast", then "too many scrolls ... a little fast here"): the pull-back from the payload
  * frame goes quicker, the last stretch up to Ridge Clinic stays calm.
  */
-const CLIMB_SCROLL_SCALE = { payload: 1.8, pullBack: 1.1, climb: 0.75 }; // tuned with FREE_MAX_LEAD (user 2026-11-05; payload 2026-11-06)
+const CLIMB_SCROLL_SCALE = { payload: 1.4, pullBack: 1.1, climb: 0.75 }; // tuned with FREE_MAX_LEAD (user 2026-11-05; payload 2026-11-06)
 /**
  * Speed cap for the climb (user 2026-11-05: "it should be fast, but not this fast"): the wheel may run at most this far
  * (px) ahead of the eased scroll, so a hard flick moves the climb at ~lerp x lead x 60 px/s (~1,300) instead of
@@ -61,12 +61,19 @@ const CLIMB_SCROLL_SCALE = { payload: 1.8, pullBack: 1.1, climb: 0.75 }; // tune
  */
 const FREE_MAX_LEAD = 280;
 /** Hero -> payload frame (free since 2026-11-06, user: "too many scrolls"): a higher cap so a swipe crosses the stage. */
-const PAYLOAD_MAX_LEAD = 460;
-const maxLead = (scroll: number) => (payloadRange.T > 0 && scroll < payloadRange.Q + payloadRange.T ? PAYLOAD_MAX_LEAD : FREE_MAX_LEAD);
+const PAYLOAD_MAX_LEAD = 300; // was 460 at lerp .18; top speed ~lerp x lead x 60 px/s (~4,300 at PAYLOAD_LERP, was ~5,000)
+/**
+ * Top of the page -> payload frame (user 2026-11-06: "smooth but there is some delay, not responding immediately").
+ * Measured headless at 60 fps: the page moved on the first frame after the wheel, but at lerp .18 a step took ~200 ms to
+ * reach 90% and drifted on ~300 ms after the swipe ended. A tighter lerp here follows the hand (~130 ms / ~180 ms).
+ */
+const PAYLOAD_LERP = 0.24; // .3 felt too fast (user 2026-11-06); .18 lagged
+const inPayloadStage = (scroll: number) => payloadRange.T > 0 && scroll < payloadRange.Q + payloadRange.T;
+const maxLead = (scroll: number) => (inPayloadStage(scroll) ? PAYLOAD_MAX_LEAD : FREE_MAX_LEAD);
 /** The root Lenis, for the climb's speed cap in the virtualScroll hook (set by SceneController). */
-const lenisRef: { current: { targetScroll: number; animatedScroll: number } | null } = { current: null };
+const lenisRef: { current: { targetScroll: number; animatedScroll: number; options: { lerp?: number } } | null } = { current: null };
 const climbScale = (scroll: number) =>
-  payloadRange.T > 0 && scroll < payloadRange.Q + payloadRange.T
+  inPayloadStage(scroll)
     ? CLIMB_SCROLL_SCALE.payload
     : scroll < climbRange.Q
       ? CLIMB_SCROLL_SCALE.pullBack
@@ -662,6 +669,8 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
             const dir = deltaY > 0 ? 1 : -1;
             let d = Math.abs(deltaY) * climbScale(window.scrollY);
             const L = lenisRef.current;
+            // Lenis reads options.lerp for each wheel step, so the payload stage can follow the hand more tightly.
+            if (L) L.options.lerp = inPayloadStage(window.scrollY) ? PAYLOAD_LERP : FREE_LERP;
             if (L && event.type === "wheel") d = Math.min(d, Math.max(0, maxLead(window.scrollY) - (L.targetScroll - L.animatedScroll) * dir));
             data.deltaY = dir * d;
           }
