@@ -129,8 +129,10 @@ function Hero() {
             Illustrative medical delivery
           </p>
           <Heading variant="hero" className="sm:whitespace-nowrap">
-            <span className="block">The road goes around.</span>
-            <span className="block">Raven goes over.</span>
+            {/* Phones (user 2026-11-06: three lines, not four): the two sentences flow as one paragraph, which at the
+                11.5vw size breaks "The road goes / around. Raven / goes over." on any phone width; one line each from sm. */}
+            <span className="inline sm:block">The road goes around.</span>{" "}
+            <span className="inline sm:block">Raven goes over.</span>
           </Heading>
         </div>
         <div className="flex max-w-90 min-w-0 flex-col items-start gap-[clamp(0.875rem,1.4vw,1.375rem)]">

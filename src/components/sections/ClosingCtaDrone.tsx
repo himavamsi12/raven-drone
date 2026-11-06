@@ -76,15 +76,21 @@ function Flight({ playing }: { playing: boolean }) {
   );
 }
 
+/** Mockup framing: front on from ~20 deg above (top plate visible), hub a little above the copy. */
 /**
- * Mockup framing: front on from ~20 deg above (top plate visible), the airframe about 55% of the width, hub a little
- * above the copy. On narrow screens the camera backs off so the arms stay in frame.
+ * Framing: the drone (2 units across, props included; ~1.15 units tall from rotor rings to skids in this view) spans
+ * `fill` of the canvas width or `fillHeight` of its height, whichever is tighter. User 2026-11-06: desktop "reduce the
+ * section height and increase the drone size a little" (was a full-height section with a width-only fit held back by a
+ * fixed minimum distance, ~55% wide); phones: 0.85 of the width (rotor rings clear the edges).
  */
-const VIEW = { fov: 30, fill: 0.55, elevation: 0.3, minDist: 4.2, target: 0.05 };
+const VIEW = { fov: 30, fill: 0.64, fillHeight: 0.7, droneHeight: 1.15, fillPortrait: 0.85, elevation: 0.3, target: 0.05 };
 function CtaCamera() {
   const aspect = useThree((s) => s.size.width / Math.max(s.size.height, 1));
-  const tanH = Math.tan(((VIEW.fov / 2) * Math.PI) / 180) * aspect;
-  const dist = Math.max(VIEW.minDist, 2 / (VIEW.fill * 2 * tanH));
+  const tanV = Math.tan(((VIEW.fov / 2) * Math.PI) / 180);
+  const fill = aspect < 0.85 ? VIEW.fillPortrait : VIEW.fill;
+  const byWidth = 2 / (fill * 2 * tanV * aspect);
+  const byHeight = VIEW.droneHeight / (VIEW.fillHeight * 2 * tanV);
+  const dist = Math.max(byWidth, byHeight);
   return (
     <PerspectiveCamera
       makeDefault

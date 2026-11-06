@@ -104,8 +104,9 @@ export function FeatureSection() {
               // Far below the stage: no SSR preload during the loader (load time, 2026-11-05).
               loading="lazy"
               decoding="async"
-              className="absolute inset-0 h-full w-full object-cover object-[72%_50%] md:object-center"
+              className={`absolute inset-0 h-full w-full object-contain md:object-cover md:object-center${f.fadeBottom !== undefined && f.aspect ? " feature-img-fadeb" : ""}`}
               style={{
+                ...(f.fadeBottom !== undefined && f.aspect && ({ "--fb": `${f.fadeBottom}%`, "--ar": f.aspect } as React.CSSProperties)),
                 // User 2026-11-05: a quick swap. The outgoing render is gone in 0.2 s so it never shows behind the
                 // incoming one (the renders are smaller than the screen now, so a held old image showed round the
                 // new one's edges); the new one fades in over 0.4 s with a short settle.

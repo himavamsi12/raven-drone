@@ -30,6 +30,13 @@ export type Feature = {
   frame: { x: number; y: number; s: number };
   /** Left edge where the render's content starts (% of image width): faded to black from there, hides a hard cut. */
   fadeLeft?: number;
+  /**
+   * Phones only: % of image height where a fade to black starts at the bottom (the render's own bottom edge cuts
+   * through the object, which shows on phones where the whole render is contained). Needs the image's `aspect`.
+   */
+  fadeBottom?: number;
+  /** Image width / height (for `fadeBottom`: the phone image box takes the render's own proportions). */
+  aspect?: number;
 };
 
 /** Copy from the user's mockups (2026-11-05). */
@@ -53,6 +60,8 @@ export const FEATURES: Feature[] = [
     image: "/assets/features/feature-gimbal.webp",
     alt: "The drone's optical sensor gimbal above the medical box",
     frame: { x: 5, y: 0, s: 1 }, // user 2026-11-05: a little right
+    fadeBottom: 62, // user 2026-11-06: the medical box is cut at the render's bottom edge on phones
+    aspect: 2560 / 1583,
   },
   {
     id: "motor",

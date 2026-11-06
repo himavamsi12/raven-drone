@@ -378,7 +378,25 @@ dialog::backdrop {
   .feature-stage {
     --nav-step: 30px;
   }
-  /* Phones: the render is full bleed under the heading, so the shade runs further down behind the copy. */
+  /* Phones (user 2026-11-06: "the images are very big in mobile"): the whole render, contained in the band between
+     the heading and the card (was full bleed, cropped and ~3.5x larger), edges faded into the stage like desktop. */
+  .feature-frame {
+    top: 28%;
+    bottom: 36%;
+    mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%);
+  }
+  /* Phones (user 2026-11-06): a render whose own bottom edge cuts the object (`fadeBottom` in lib/features.ts) fades to
+     black from --fb down. The image box takes the render's proportions (centred, like object-contain) so the % is in
+     image space. */
+  .feature-img-fadeb {
+    height: auto !important;
+    max-height: 100%;
+    aspect-ratio: var(--ar);
+    margin: auto 0;
+    bottom: 0;
+    mask-image: linear-gradient(#000 var(--fb), transparent 100%);
+  }
+  /* Phones: the shade runs further down behind the heading copy. */
   .feature-shade {
     background: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.45) 30%, rgba(0, 0, 0, 0) 50%);
   }
@@ -611,8 +629,8 @@ dialog::backdrop {
 /* Closing CTA (user mockup 2026-11-05): dimmed front-on hexa behind centred copy. */
 .cta {
   --u: min(100vw / 1920, 1px);
-  height: 100dvh;
-  min-height: 560px;
+  /* User 2026-11-06: shorter on desktop (was a full 100dvh of mostly black around the drone). */
+  height: clamp(560px, 76dvh, 860px);
 }
 .cta-dim {
   background:
@@ -664,6 +682,12 @@ dialog::backdrop {
   border-radius: 3px;
 }
 @media (max-width: 767px) {
+  /* Phones (user 2026-11-06: "reduce the section height in mobile"): 1.35x the width (527 px on a 390 px phone),
+     not a whole tall screen of black around the drone. */
+  .cta {
+    height: clamp(460px, 135vw, 100svh);
+    min-height: 0;
+  }
   .cta-p {
     margin-top: 12px;
   }

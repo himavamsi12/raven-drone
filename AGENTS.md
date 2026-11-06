@@ -234,6 +234,18 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Open work (see RECONSTRUCTION.md for full list)
 
+- Phones (2026-11-06, user): the hero headline flows as one paragraph below 640 px, so it reads in three lines ("The road goes / around. Raven / goes over.", checked 320-430 px; one line per sentence from sm). The sensor render fades to black at its bottom on phones (`fadeBottom` 62 + `aspect` in `lib/features.ts`, `.feature-img-fadeb` in globals.css): its own bottom edge cut through the medical box.
+- Phone pan to Summit Station (2026-11-06, user: the next stop was cut off on mobile): portrait < 768 px, the mountain view window pans right with the drone once it passes 60% of the width (`MOBILE_FOLLOW` / `mobilePan` in DroneRig, on top of the zoom view offset; Ridge Clinic at ~54% so the climb frame is unchanged) and back as it returns. Site cards slide on their stem near an edge only as they open (`placeClinicPin` dx x open), so the closed Ridge Clinic pin stays on its stem at the left edge.
+- Phone stage stops (2026-11-06, user: "taking too many scrolls" on mobile): touch phones have no free zone
+  (SmoothScroll `touchPhone`, from the `(max-width: 768px) and (pointer: coarse)` query); the climb plays its two band
+  stops (halfway, Ridge Clinic). 390x844 with 400 px touch flicks: 6 swipes top -> Section 03 (was 12). Desktop keeps
+  the free climb. Payload camera ends at `radiusPortrait` 1.05 x the hero distance on portrait screens (0.86 landscape)
+  so the rotor rings stay inside a phone's width (checked 360/390/430 px).
+- Closing CTA framing (2026-11-06, user): section `clamp(560px, 76dvh, 860px)` on desktop (was 100dvh), phones
+  `clamp(460px, 135vw, 100svh)`; the camera fits the drone to width (`fill` .64, phones `fillPortrait` .85) or height
+  (`fillHeight` .7 of the section, drone ~1.15 units tall), whichever is tighter (ClosingCtaDrone `VIEW`).
+- Section 03 on phones (2026-11-06, user: "images are very big"): each render is contained (whole, ~390x240) in a band
+  between the heading and the card (`.feature-frame` top 28% / bottom 36%, edge fade), was full-bleed cover.
 - Mobile pass (2026-11-06, see RECONSTRUCTION.md "Mobile pass"): 390x844, 360x640 and 844x390 checked headless; feature frames isolated, phone callouts at the bottom, hero drone 1x on phones, landscape-phone hero/Section 03/site-card fixes. Not checked on real iOS/Android devices or 768-1023 portrait tablets.
 - Sections 03/04 (2026-11-04, user Figma): Section 03 redesigned 2026-11-05 to the user's "Feature 7/8" mockups (heading "Engineered for Performance. Built for Reliability.", compact card bottom right with the user's copy, BUILT/SENSOR/MOTOR indicator on the right; `lib/features.ts` FEATURE_*). The heading lines and line below fade up (blur 6px -> 0, staggered .12 s) once 35% of the stage is in view, and again on each re-entry. Renders are the user's `raven-drone-site/src/hardware` images (flattened on black, WebP); Renders are shown at 0.74x, a little below centre, with a radial edge fade (globals.css `.feature-frame`); `frame` in FEATURES nudges the motor up/left. Switching: the old render fades out in 0.2 s while the new one fades in over 0.4 s (user: fast, no old image behind) and the card copy for every feature sits in one grid cell (`.feature-stack`), so the card height never jumps (was AnimatePresence popLayout, which glitched). Not checked on Safari/iOS touch.
 - Section 05 + closing CTA (2026-11-05, user mockups): `sections/UseCases.tsx` (three photo cards, the user's
@@ -246,7 +258,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   back as the speed flight leaves), Summit Station at the end of the speed flight. Photos are the user's
   (`public/assets/route/ridge-clinic.png`, `summit-station.png`, 128 px, from `raven-drone-site/src/img1.png`/`img-2.png`).
   The Summit Station photo shows the Red Cross emblem; confirm use rights before a public deploy.
-- Mountain views slide left by `MOUNTAIN_ZOOM` 1.12 toward (0.5, 0.62) and `MOUNTAIN_SHIFT` (4.5% of the width, was 13% then 8%, DroneRig, camera view offset eased in with the
+- Mountain views slide left by `MOUNTAIN_ZOOM` 1.12 toward (0.5, 0.62) and `MOUNTAIN_SHIFT` (8% of the width since 2026-11-06, user: the massif still ran under the right-hand callout; was 13%, 8%, 4.5%, DroneRig, camera view offset eased in with the
   pull-back; landscape >= 768px only) so the right-hand callout block does not cover the massif (user 2026-11-05).
 - Free zone (2026-11-05, user: scroll follows the gesture and stops where it stops; the hero part was reverted to
   snaps the same day): payload frame -> Ridge Clinic has no snap stops (`isFree`/`freeStart`/`freeEnd` in

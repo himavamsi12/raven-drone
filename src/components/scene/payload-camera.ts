@@ -11,6 +11,11 @@ import { lerp } from "@/lib/math";
 export const PAYLOAD_CAMERA = {
   /** Distance to the payload box at the end, relative to the hero distance. */
   radius: 0.86,
+  /**
+   * Portrait screens (user 2026-11-06: "reduce the drone a little here in mobile, it is cutting the sides"): the camera
+   * ends further back so the rotor rings stay inside a phone's width.
+   */
+  radiusPortrait: 1.05,
   /** Elevation above the box at the end (deg; hero ~33). */
   elevation: 21,
   /** Orbit added by the end (deg, positive = camera swings to its right). */
@@ -43,7 +48,7 @@ export function applyPayloadCamera(mover: THREE.Object3D, anchor: THREE.Vector3,
   if (r0 < 1e-6) return;
   const az0 = Math.atan2(_rel.x, _rel.z);
   const el0 = Math.asin(THREE.MathUtils.clamp(_rel.y / r0, -1, 1));
-  const r = r0 * lerp(1, PAYLOAD_CAMERA.radius, zoom);
+  const r = r0 * lerp(1, aspect < 1 ? PAYLOAD_CAMERA.radiusPortrait : PAYLOAD_CAMERA.radius, zoom);
   const el = lerp(el0, PAYLOAD_CAMERA.elevation * DEG, zoom);
   const az = az0 + PAYLOAD_CAMERA.azimuth * DEG * zoom;
   _eye.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).multiplyScalar(r).add(anchor);

@@ -105,7 +105,14 @@ const isHoldStop = (y: number) => {
  */
 const freeStart = () => (payloadRange.T > 0 ? payloadRange.Q + payloadRange.T : 0);
 const freeEnd = () => (climbRange.T > 0 ? climbRange.Q + climbRange.T : 0);
+/**
+ * Touch phones (user 2026-11-06: the 3D stage "is taking too many scrolls to go down only in mobile"): no free zone.
+ * Following the finger, the climb took ~8 of the stage's 12 swipes on a 390x844 phone; there it plays its two stops
+ * (halfway up, Ridge Clinic) like every other stage, one swipe each. Set by SceneController from its media query.
+ */
+const touchPhone = { current: false };
 const isFree = (scroll: number, dir: number) => {
+  if (touchPhone.current) return false;
   const a = freeStart();
   const b = freeEnd();
   if (!(b > a && a > 0)) return false;
@@ -241,6 +248,9 @@ function SceneController() {
   const lenis = useLenis();
   const loadingHidden = useLoading((s) => s.loadingCanvasIsHiding || s.loadingCanvasHidden);
   const isTouchPhone = useMediaQuery("(max-width: 768px) and (pointer: coarse)");
+  useEffect(() => {
+    touchPhone.current = isTouchPhone;
+  }, [isTouchPhone]);
 
   const scrollbarDrag = useRef(false);
   useEffect(() => {

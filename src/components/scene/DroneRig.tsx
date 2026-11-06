@@ -350,7 +350,13 @@ const _anchorFly = new THREE.Vector3();
 /** Zoom of the mountain views (view window W / zoom), and where in the frame it zooms toward (0..1, 0.5 = centre). */
 const MOUNTAIN_ZOOM = 1.12;
 const MOUNTAIN_ZOOM_CENTER = { x: 0.5, y: 0.62 };
-const MOUNTAIN_SHIFT = 0.045; // was .13, then .08; less with MOUNTAIN_ZOOM so the route start stays clear of the left edge
+const MOUNTAIN_SHIFT = 0.08; // was .13, .08, .045 (with MOUNTAIN_ZOOM); back to .08 (user 2026-11-06: the massif still ran under the right-hand callout)
+/**
+ * Phones (portrait, < 768 px; user 2026-11-06: "the next stop Summit Station is cutting"): the summit sits off the
+ * right edge, so the view window pans right with the drone once it passes this share of the window width (Ridge
+ * Clinic sits at ~54%, so the climb frame is unchanged), and back as it returns. `rate` = easing per second.
+ */
+const MOBILE_FOLLOW = { at: 0.6, rate: 6 } as const;
 const _fwdEnd = new THREE.Vector3();
 
 /** Top and bottom centre of `drone`'s bounds in its local space (rotors, mast and skids included). */
@@ -486,6 +492,8 @@ export function DroneRig() {
   const draw2 = useRef(0);
   /** Speed stage flight along leg 2 (0..1, time). */
   const flight2 = useRef(0);
+  const mobilePan = useRef(0); // phones: view window pan toward Summit Station (full-frame px)
+  const flyScreen = useRef({ x: 0, ok: false }); // drone's route point on screen (CSS px), for mobilePan
   /** Smoothed leg 2 speed (share of the leg per second): the HUD's km/h and the forward lean. */
   const flight2Vel = useRef(0);
   useEffect(() => () => {
@@ -737,6 +745,7 @@ export function DroneRig() {
     routePath.visible = pathOn && pathDraw.current > 0;
     routePath2.visible = pathOn && draw2.current > 0;
     speedScreen.ok = false;
+    flyScreen.current.ok = false;
     heading.current.weight = 0;
     if (pathOn && camera.current) {
       camera.current.updateWorldMatrix(true, false);
@@ -788,6 +797,9 @@ export function DroneRig() {
         speedScreen.kmh = 0;
       }
       net.toWorld(_netPt, _flyW);
+      _onScreen.copy(_flyW).project(camera.current);
+      flyScreen.current.x = (_onScreen.x * 0.5 + 0.5) * size.width;
+      flyScreen.current.ok = _onScreen.z < 1;
       net.toWorld(net.start, _flyW0);
       routeOffset.current.subVectors(_flyW, _flyW0);
       net.dirToWorld(_netDir, heading.current.dir);
@@ -832,9 +844,20 @@ export function DroneRig() {
       const zoom = 1 + (MOUNTAIN_ZOOM - 1) * k;
       const w = W / zoom;
       const h = H / zoom;
-      const ox = Math.round(((W - w) * MOUNTAIN_ZOOM_CENTER.x + shift * W) * 10) / 10;
-      const oy = Math.round((H - h) * MOUNTAIN_ZOOM_CENTER.y * 10) / 10;
       const cam = camera.current;
+      const ox0 = (W - w) * MOUNTAIN_ZOOM_CENTER.x + shift * W;
+      // Phones: follow the drone right (MOBILE_FOLLOW). Its screen x was projected with last frame's window, so map it
+      // back to the full frame first (x / scale + offset): the pan target never depends on the pan itself.
+      let panTarget = 0;
+      if (W < 768 && H > W && flyScreen.current.ok) {
+        const v = cam.view;
+        const fullX = v?.enabled ? flyScreen.current.x * (v.width / W) + v.offsetX : flyScreen.current.x;
+        panTarget = Math.max(0, fullX - (ox0 + w * MOBILE_FOLLOW.at)) * k;
+      }
+      mobilePan.current += (panTarget - mobilePan.current) * (1 - Math.exp(-dt * MOBILE_FOLLOW.rate));
+      if (mobilePan.current < 0.05 && panTarget === 0) mobilePan.current = 0;
+      const ox = Math.round((ox0 + mobilePan.current) * 10) / 10;
+      const oy = Math.round((H - h) * MOUNTAIN_ZOOM_CENTER.y * 10) / 10;
       if (ox > 0.05 || zoom > 1.0005) {
         const v = cam.view;
         if (!v || !v.enabled || v.offsetX !== ox || v.offsetY !== oy || Math.abs(v.width - w) > 0.01 || v.fullWidth !== W || v.fullHeight !== H)

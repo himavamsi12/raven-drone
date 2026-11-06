@@ -133,10 +133,11 @@ export function placeClinicPin(refs: ClinicPinRefs, x: number, y: number, stem: 
   if (head) {
     const w = PIN.size + (CARD.w - PIN.size) * open;
     const h = PIN.size + (CARD.h - PIN.size) * open;
-    // Keep the open card on screen: slide it sideways on its stem near the edges.
+    // Keep the open card on screen: slide it sideways on its stem near the edges. Only as it opens (x open): the closed
+    // round pin stays on its stem (on phones the camera pans to Summit Station and Ridge Clinic ends at the left edge).
     const W = window.innerWidth;
     const left = x - w / 2;
-    const dx = left < CARD.gutter ? CARD.gutter - left : x + w / 2 > W - CARD.gutter ? W - CARD.gutter - (x + w / 2) : 0;
+    const dx = (left < CARD.gutter ? CARD.gutter - left : x + w / 2 > W - CARD.gutter ? W - CARD.gutter - (x + w / 2) : 0) * open;
     // Short screens (landscape phones, mobile pass 2026-11-06): the site sits high, so the open card rose under the nav
     // bar. Slide it down its stem until it clears the bar (same clamp as --nav-height).
     const navH = Math.min(Math.max(56, W * 0.054), 82);
