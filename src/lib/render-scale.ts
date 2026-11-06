@@ -35,16 +35,7 @@ export function initialSceneFactor(canvas = canvasDpr()) {
  * less; measured on an M3, 2026-11-03). Supersampling the layer (2x on 1x screens) cost ~15 fps at 1920x1080.
  */
 export function droneLayerSamples(canvas = canvasDpr()) {
-  // Phones (user 2026-11-06: drone edges pixelate on mobile): the canvas is capped at 2x on 3x screens, so the browser
-  // upscales the frame 1.5x and 2 samples left visible steps on the thin arms and legs. The drone layer is cropped to the
-  // drone and phone screens are small, so 4 samples are cheap there.
-  if (isPhoneScreen()) return 4;
   return canvas < 1.5 ? 4 : 2;
-}
-
-/** Phone-sized screen (shorter side under 600 CSS px: portrait and landscape phones, not tablets). */
-export function isPhoneScreen() {
-  return typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) < 600;
 }
 
 export const useRenderScale = create<{ sceneDpr: number; setSceneDpr: (dpr: number) => void }>((set) => ({

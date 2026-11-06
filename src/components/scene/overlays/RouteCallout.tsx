@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { CALLOUT_BODY, CALLOUT_BOX, CALLOUT_H, kickerText } from "./callout-layout";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { ALTITUDE_COPY, ROUTE_CLINIC_IMAGE, ROUTE_COPY, ROUTE_FLIGHT, routeScreen, type SiteImage } from "@/lib/payload";
 
 /** Pin geometry from the `net` section's CSS (.pin__btn 44px, .pin__label at 54/13; clinic stem 84px, summit 96px). */
@@ -18,6 +19,11 @@ const metres = (m: number) => `${Math.round(m).toLocaleString("en-US")} m`;
 
 /** Clinic card (user mockup 2026-11-05): photo left, name right, on the pin's stem. px. */
 const CARD = { w: 300, h: 92, img: 70, pad: 11, gutter: 12, gap: 18, font: 17 }; // user 2026-11-05: bigger (was 236 x 72; 360 x 112 was too big)
+/** Phones (user 2026-11-06: "make this card small in mobile", both cards): about two thirds of the desktop card. */
+const CARD_PHONE = { w: 196, h: 60, img: 44, pad: 8, gutter: 12, gap: 12, font: 12 };
+const PHONE_QUERY = "(max-width: 767px)";
+const cardFor = (phone: boolean) => (phone ? CARD_PHONE : CARD);
+const isPhone = () => typeof window !== "undefined" && window.innerWidth < 768;
 const smooth = (t: number) => {
   const c = Math.min(Math.max(t, 0), 1);
   return c * c * (3 - 2 * c);
@@ -57,6 +63,7 @@ export function ClinicPin({
   image?: SiteImage;
 }) {
   const [broken, setBroken] = useState(false);
+  const card = cardFor(useMediaQuery(PHONE_QUERY));
   return (
     <div ref={refs.root} className="absolute top-0 left-0 flex flex-col items-center" style={{ width: PIN.size, opacity: 0 }}>
       <div className="relative" style={{ width: PIN.size, height: PIN.size }}>
@@ -81,9 +88,9 @@ export function ClinicPin({
           <div
             ref={refs.card}
             className="absolute top-0 left-0 flex items-center"
-            style={{ width: CARD.w, height: CARD.h, padding: CARD.pad, gap: CARD.gap, opacity: 0 }}
+            style={{ width: card.w, height: card.h, padding: card.pad, gap: card.gap, opacity: 0 }}
           >
-            <span className="relative block shrink-0 overflow-hidden bg-[#2c2c2c]" style={{ width: CARD.img, height: CARD.img }}>
+            <span className="relative block shrink-0 overflow-hidden bg-[#2c2c2c]" style={{ width: card.img, height: card.img }}>
               {/* Neutral tile if the photo fails to load. */}
               <span aria-hidden="true" className="absolute inset-0 grid place-items-center text-white/35">
                 <svg width="22" height="22" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -102,7 +109,7 @@ export function ClinicPin({
                 />
               )}
             </span>
-            <span style={{ fontSize: CARD.font }} className="font-mono leading-none tracking-[0.08em] whitespace-nowrap text-white uppercase">{name}</span>
+            <span style={{ fontSize: card.font }} className="font-mono leading-none tracking-[0.08em] whitespace-nowrap text-white uppercase">{name}</span>
           </div>
         </div>
         <span
@@ -131,6 +138,7 @@ export function placeClinicPin(refs: ClinicPinRefs, x: number, y: number, stem: 
   }
   const head = refs.head.current;
   if (head) {
+    const CARD = cardFor(isPhone());
     const w = PIN.size + (CARD.w - PIN.size) * open;
     const h = PIN.size + (CARD.h - PIN.size) * open;
     // Keep the open card on screen: slide it sideways on its stem near the edges. Only as it opens (x open): the closed

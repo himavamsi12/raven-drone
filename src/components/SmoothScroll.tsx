@@ -45,6 +45,8 @@ const SNAP_RAMP_MS = 260;
 const SNAP_EASE_SHARE = 0.28;
 /** Time to reach cruise speed at the start of any move (ms): short, so a scroll answers at once. */
 const SNAP_START_MS = 180;
+/** Touch phones: opening and payload stage snaps play this much faster (user 2026-11-06: "late response"). */
+const PHONE_STAGE_SPEEDUP = 1.7;
 /** Free scroll smoothing outside the snap bands (Lenis lerp per 60 Hz frame; was .95 = almost none). */
 const FREE_LERP = 0.18; // was .14, .11; user 2026-11-06: "too sticky and slow because of smoothness": less trailing
 const WHEEL_MULTIPLIER = 1.1;
@@ -302,6 +304,14 @@ function SceneController() {
   /** When the last move landed, and whether on a hold stop (checkpoint). */
   const arrivedAt = useRef(0);
   const arrivedHold = useRef(false);
+  /**
+   * Phones (user 2026-11-06: hero snap "delaying, late response" after a swipe): the finger's speed (px/ms, smoothed)
+   * and a flag set when a swipe's snap is picked, so the move starts at the finger's pace instead of from rest.
+   * Measured before (390x844, 250 px swipe): the page stopped dead ~70 ms after the lift, ramped over ~220 ms, and
+   * landed 2.0-2.6 s after the lift.
+   */
+  const touchVel = useRef(0);
+  const touchLaunch = useRef(false);
 
   const measure = useCallback(() => {
     bands.current = pageBands(measureStoryMap());
@@ -388,9 +398,11 @@ function SceneController() {
       const dt = Math.min(lastTs.current ? ts - lastTs.current : 16, 100);
       lastTs.current = ts;
       const vel = Math.abs(lenis.velocity);
-      if (isTouchPhone && !touching.current && pendingDir.current !== null && vel < 2 * dt) {
+      // Phones: no wait for Lenis' touch inertia to die down; the snap's own steps (immediate) replace it at once.
+      if (isTouchPhone && !touching.current && pendingDir.current !== null) {
         pickTarget(pendingDir.current);
         pendingDir.current = null;
+        touchLaunch.current = target.current !== null;
       }
       let t = target.current;
       const scroll = lenis.scroll;
@@ -415,7 +427,7 @@ function SceneController() {
           arrivedAt.current = performance.now();
           arrivedHold.current = isHoldStop(t);
           queuedDir.current = 0;
-        } else if (vel < 2 * dt && !scrollbarDrag.current && (!isTouchPhone || !touching.current)) {
+        } else if ((vel < 2 * dt || isTouchPhone) && !scrollbarDrag.current && (!isTouchPhone || !touching.current)) {
           const sign = delta > 0 ? 1 : -1;
           // Raven: the opening move plays over OPENING_MS whatever the viewport height; the story keeps 2px/ms.
           // The clay landscape climb (Care teams → village, storyMap.C0..C1) moves at half speed so the climb reads.
@@ -437,7 +449,7 @@ function SceneController() {
           // Leg 2 (speed stage, two stops) at the same pace: climb start -> end of the speed stage.
           const legsEnd = speedRange.T > 0 ? speedRange.Q + speedRange.T : C.Q + C.T;
           const inMountClimb = C.T > 0 && Math.min(scroll, t) >= C.Q - 1 && Math.max(scroll, t) <= legsEnd + 1;
-          const rate =
+          const baseRate =
             scroll < storyMap.P + 1 && t <= storyMap.P + 1
               ? Math.max(storyMap.P / OPENING_MS, 0.2)
               : inMountClimb
@@ -449,6 +461,17 @@ function SceneController() {
                   : inClimb
                     ? 1
                     : 2.4; // was 2 (shipped); user 2026-11-05: a little faster
+          // Phones: the opening and payload moves (desktop scrolls them freely) were 2.5 s / 2.0 s glides that felt late
+          // (user 2026-11-06); they play ~1.7x faster on touch phones.
+          const rate = isTouchPhone && Math.max(scroll, t) <= payloadRange.Q + payloadRange.T + 1 ? baseRate * PHONE_STAGE_SPEEDUP : baseRate;
+          // A swipe's snap starts at the finger's pace (at least 60% of cruise), not from rest.
+          if (touchLaunch.current) {
+            touchLaunch.current = false;
+            legTarget.current = null;
+            legLen.current = 0;
+            legRate.current = 0;
+            snapVel.current = sign * Math.min(rate, Math.max(rate * 0.6, Math.abs(touchVel.current)));
+          }
           // Eased: accelerate to `rate` over SNAP_RAMP_MS, brake so speed reaches 0 at the target (v = sqrt(2 a d)).
           // Long moves (the climb, the stages) ease in and out over a share of their own duration, so they glide like a
           // camera move instead of starting and stopping at full speed (user 2026-11-05: "very smooth"); short moves
@@ -560,6 +583,7 @@ function SceneController() {
       }
     };
     let touchY = 0;
+    let touchT = 0;
     const onTouchStart = (e: TouchEvent) => {
       if (!ready()) return;
       if (e.target instanceof Element && e.target.closest('[data-nav-touch="1"]')) {
@@ -568,11 +592,18 @@ function SceneController() {
       }
       navTouch.current = false;
       touchY = e.touches[0].clientY;
+      touchT = e.timeStamp;
+      touchVel.current = 0;
       touching.current = true;
     };
     const onTouchMove = (e: TouchEvent) => {
       if (!ready() || navTouch.current) return;
-      request(touchY - e.touches[0].clientY > 0 ? 1 : -1);
+      const y = e.touches[0].clientY;
+      const dtT = e.timeStamp - touchT;
+      if (dtT > 0) touchVel.current = touchVel.current * 0.5 + ((touchY - y) / dtT) * 0.5;
+      request(touchY - y > 0 ? 1 : -1);
+      touchY = y;
+      touchT = e.timeStamp;
     };
     const onTouchEnd = () => {
       if (isScrollLocked()) return;

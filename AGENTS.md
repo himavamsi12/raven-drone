@@ -237,9 +237,12 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 - Phones (2026-11-06, user): the hero headline flows as one paragraph below 640 px, so it reads in three lines ("The road goes / around. Raven / goes over.", checked 320-430 px; one line per sentence from sm). The sensor render fades to black at its bottom on phones (`fadeBottom` 62 + `aspect` in `lib/features.ts`, `.feature-img-fadeb` in globals.css): its own bottom edge cut through the medical box.
 - Phone fixes (2026-11-06, user): Section 03's render band is kept clear of the heading and card (`--head-bottom` /
   `--card-top` measured in FeatureSection, CSS `max()` with the old 28% / 36%), plus tighter type at max-height 720 px;
-  checked 390x844 and 360x640. Drone edges on phones (shorter side < 600 px): no unsharp mask in the final pass (it
-  haloed and stair-stepped the 1.5x-upscaled frame) and 4 MSAA samples on the drone layer (`isPhoneScreen` in
-  render-scale.ts); checked headless at 390x844 @3x.
+  checked 390x844 and 360x640. (A phone drone-edge change, sharpen off + 4 MSAA, was reverted the same day: user found
+  the drone too blurry.)
+- Phone snap response (2026-11-06, user: hero snap "delaying, late response" on mobile): a swipe's snap starts at the
+  finger's pace (`touchVel`, at least 60% of cruise, `touchLaunch`) without waiting for Lenis' touch inertia, and the
+  opening/payload snaps run `PHONE_STAGE_SPEEDUP` 1.7x faster on touch phones. Measured 390x844, 250 px CDP swipe:
+  moves on the first frame after touchend (was a dead stop + 220 ms ramp); lands 1.1-1.5 s after the lift (was 2.0-2.6).
 - Phone pan to Summit Station (2026-11-06, user: the next stop was cut off on mobile): portrait < 768 px, the mountain view window pans right with the drone once it passes 60% of the width (`MOBILE_FOLLOW` / `mobilePan` in DroneRig, on top of the zoom view offset; Ridge Clinic at ~54% so the climb frame is unchanged) and back as it returns. Site cards slide on their stem near an edge only as they open (`placeClinicPin` dx x open), so the closed Ridge Clinic pin stays on its stem at the left edge.
 - Phone stage stops (2026-11-06, user: "taking too many scrolls" on mobile): touch phones have no free zone
   (SmoothScroll `touchPhone`, from the `(max-width: 768px) and (pointer: coarse)` query); the climb plays its two band
@@ -258,7 +261,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   confirm rights) and `sections/ClosingCta.tsx` ("Want your product explained this clearly?", Talk to us -> contact modal) over
   the tundra-terrain footer landing drone (`sections/drone-flight.ts` restored from 98b052b; `RavenModel realLook`
   skips the payload vector sweep; descent is one eased curve over 3.4 s, starting nearer, triggered at 5% visible with the canvas rendering a screen ahead, not the old ease-out drop). Framing checked at 1440x900 only (reduced-motion pose); glide-in not seen at 60 fps.
-- Site cards (2026-11-05, user mockup): a site pin opens into a small photo + name card (300x92, was 236x72) when the drone
+- Site cards (2026-11-05, user mockup): a site pin opens into a small photo + name card (300x92, was 236x72; phones < 768 px 196x60, `CARD_PHONE`, user 2026-11-06) when the drone
   arrives (`ClinicPin`/`placeClinicPin` in `overlays/RouteCallout.tsx`): Ridge Clinic at the end of the climb (folds
   back as the speed flight leaves), Summit Station at the end of the speed flight. Photos are the user's
   (`public/assets/route/ridge-clinic.png`, `summit-station.png`, 128 px, from `raven-drone-site/src/img1.png`/`img-2.png`).
