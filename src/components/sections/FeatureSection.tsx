@@ -2,7 +2,7 @@
 
 import { motion, useInView, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { FEATURE_BODY, FEATURE_HEADING, FEATURES } from "@/lib/features";
+import { FEATURE_BODY, FEATURE_HEADING, FEATURE_KICKER, FEATURES } from "@/lib/features";
 
 /** Hexa mark from the card's bottom-right corner (Figma 128:820 "Union"). */
 function HexaMark({ className }: { className?: string }) {
@@ -153,15 +153,18 @@ export function FeatureSection() {
 
         <div className="feature-layout absolute inset-0">
           <div ref={heading} className="feature-heading">
+            <motion.p className="section-kicker font-dm uppercase" {...reveal(0)}>
+              / {FEATURE_KICKER}
+            </motion.p>
             <h2 className="feature-h">
-              <motion.span className="block" {...reveal(0)}>
+              <motion.span className="block" {...reveal(1)}>
                 {FEATURE_HEADING[0]}
               </motion.span>
-              <motion.span className="block" {...reveal(1)}>
+              <motion.span className="block" {...reveal(2)}>
                 {FEATURE_HEADING[1]}
               </motion.span>
             </h2>
-            <motion.p className="feature-p" {...reveal(2)}>
+            <motion.p className="feature-p" {...reveal(3)}>
               {FEATURE_BODY}
             </motion.p>
           </div>

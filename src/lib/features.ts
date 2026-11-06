@@ -6,13 +6,17 @@
  * motor pod, so the first two cards are titled after their own image (parts of the hexa model, no performance claims).
  */
 
-export const SECTION_HEADING = "Send What’s Needed, Where It’s Needed";
-export const SECTION_BODY = "Heavy payload capacity and long flight distance overcome logistical limitations for next-generation delivery.";
+/** Copy from the user's mockups (2026-11-06). */
+export const SECTION_KICKER = "Capability";
+export const SECTION_HEADING = "Sense. Stabilise. Navigate.";
+export const SECTION_BODY =
+  "Terrain-aware sensing, active crosswind compensation and autonomous route planning, working as one system through canyons, ridgelines and gusting wind.";
 
 /** Section 03 heading (user mockups 2026-11-05, "Feature 7/8" frames); Section 04 keeps SECTION_HEADING above. */
+export const FEATURE_KICKER = "Hardware";
 export const FEATURE_HEADING = ["Engineered for Performance.", "Built for Reliability."] as const;
 export const FEATURE_BODY =
-  "Every component is designed for demanding flight conditions, combining robust construction, intelligent systems and reliable performance for mission-critical operations.";
+  "Carbon structure build, stabilised sensing and sealed propulsion, each specified for high-altitude, all-weather operation.";
 
 /**
  * `nav`: the right-hand indicator label. `frame`: desktop nudge of the render (translate %, scale). Renders: the user's
@@ -43,7 +47,7 @@ export type Feature = {
 export const FEATURES: Feature[] = [
   {
     id: "arms",
-    nav: "Built",
+    nav: "Structure",
     title: "Carbon fibre arms",
     body: "Lightweight, high-strength carbon fibre arms provide exceptional structural rigidity and durability while reducing overall weight for efficient, stable flight.",
     tags: ["Structural strength", "Lightweight design"],
@@ -54,9 +58,9 @@ export const FEATURES: Feature[] = [
   {
     id: "sensor",
     nav: "Sensor",
-    title: "Advanced optical sensor",
-    body: "High-precision optical sensors capture real-time visual data, enabling accurate environmental awareness, obstacle detection and intelligent navigation during flight.",
-    tags: ["Optical sensors", "Real-time vision"],
+    title: "Stabilised optical payload",
+    body: "Gimbal-stabilised optics feed live imagery to the flight system, supporting obstacle detection and precise navigation on approach.",
+    tags: ["Obstacle avoidance", "Real-time vision"],
     image: "/assets/features/feature-gimbal.webp",
     alt: "The drone's optical sensor gimbal above the medical box",
     frame: { x: 5, y: 0, s: 1 }, // user 2026-11-05: a little right
@@ -67,8 +71,8 @@ export const FEATURES: Feature[] = [
     id: "motor",
     nav: "Motor",
     title: "Sealed motor pods",
-    body: "Weather-resistant motor housings protect critical propulsion components from dust, moisture and external elements, ensuring reliable performance in demanding flight conditions.",
-    tags: ["Propulsion", "Weather protection"],
+    body: "Sealed housings shield the brushless motors from dust, moisture and cold-weather ingress, holding thrust steady in rain, dust and thin air.",
+    tags: ["All-weather propulsion", "IP-rated sealing"],
     image: "/assets/features/feature-motor.webp",
     alt: "A sealed motor pod with its propeller",
     frame: { x: -4, y: -4, s: 1 },
@@ -82,5 +86,5 @@ export type CapabilityVideo = { id: string; label: string; src: string; poster: 
 export const CAPABILITY_VIDEOS: CapabilityVideo[] = [
   { id: "sensor", label: "Sensor", src: "/assets/video/section04/sensor.mp4", poster: "/assets/video/section04/sensor-poster.jpg" },
   { id: "crosswind", label: "Crosswind", src: "/assets/video/section04/crosswind.mp4", poster: "/assets/video/section04/crosswind-poster.jpg" },
-  { id: "autopilot", label: "Auto pilot", src: "/assets/video/section04/autopilot.mp4", poster: "/assets/video/section04/autopilot-poster.jpg" },
+  { id: "autopilot", label: "Route", src: "/assets/video/section04/autopilot.mp4", poster: "/assets/video/section04/autopilot-poster.jpg" },
 ];

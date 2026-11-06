@@ -25,11 +25,15 @@ export function ClosingCta() {
       <div aria-hidden="true" className="cta-dim pointer-events-none absolute inset-0" />
       <div className="relative flex h-full flex-col items-center justify-center px-5 text-center">
         <h2 id="contact-cta-h" className="cta-h">
-          Want your product
+          Make your product
           <br />
-          explained this clearly?
+          impossible to scroll past.
         </h2>
-        <p className="cta-p">We&rsquo;re Sixjuly, a clarity-first design studio.</p>
+        {/* User's mockup 2026-11-06 (part of the second sentence sat under a review pin: "Brand, web and 3D, built"). */}
+        <p className="cta-p">
+          Sixjuly is a clarity-first design studio. Brand, web and 3D, built for products that need explaining. Our 3D shortens the path from
+          first look to confident decision.
+        </p>
         <ContactButton
           label="Talk to us"
           trigger={

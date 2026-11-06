@@ -7,21 +7,21 @@ const USE_CASES = [
   {
     id: "healthcare",
     title: "Healthcare",
-    body: "Medical supplies, when every second counts.",
+    body: "Vaccines, blood and essential medicines, delivered cold-chain intact.",
     src: "/assets/use-cases/healthcare.jpg",
     alt: "Raven hexacopter carrying a white medical box over misty hills at sunset",
   },
   {
     id: "disaster-relief",
     title: "Disaster relief",
-    body: "Reaching places roads cannot.",
+    body: "Rapid resupply into flood zones and cut-off communities.",
     src: "/assets/use-cases/disaster-relief.jpg",
     alt: "Rescue workers guiding a drone lowering a medical kit beside a flooded village",
   },
   {
     id: "industrial",
     title: "Industrial",
-    body: "Critical parts, beyond the supply chain.",
+    body: "Spares and critical parts, flown to offshore and remote sites.",
     src: "/assets/use-cases/industrial.jpg",
     alt: "Drone lowering a cargo crate onto a ship's helideck at sea",
   },
@@ -37,7 +37,7 @@ export function UseCases() {
       <div className="uc-inner">
         <p className="uc-kicker font-dm uppercase">/ Use cases</p>
         <h2 id="use-cases-h" className="uc-h">
-          Built for missions that matter.
+          Built for the missions roads can&rsquo;t reach.
         </h2>
         <p className="uc-p">One platform. Multiple critical delivery scenarios.</p>
 

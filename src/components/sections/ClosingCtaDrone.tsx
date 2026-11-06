@@ -15,8 +15,8 @@ import { FloatBob, landingPose, landingProgress, PointerLean, type LandingPose }
  * screens, so its second WebGL context, environment bake, shader compile and drei Environment code stay out of the
  * page's first load).
  *
- * Closing CTA (user mockup 2026-11-05): the hexa, front on, large and dimmed behind "Want your product explained this
- * clearly?". The drone's entrance is the footer landing of the tundra-terrain branch (FooterDrone + drone-flight.ts,
+ * Closing CTA (user mockup 2026-11-05): the hexa, front on, large and dimmed behind the closing line ("Make your product
+ * impossible to scroll past.", 2026-11-06). The drone's entrance is the footer landing of the tundra-terrain branch (FooterDrone + drone-flight.ts,
  * removed there in 7b9d467): a banked glide-in and let-down once the section is 30% in view, then a slow float that
  * leans with the pointer. Leaving the view resets it so it plays again. Reduced motion: parked, no flight.
  */

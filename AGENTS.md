@@ -261,7 +261,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   confirm rights) and `sections/ClosingCta.tsx` ("Want your product explained this clearly?", Talk to us -> contact modal) over
   the tundra-terrain footer landing drone (`sections/drone-flight.ts` restored from 98b052b; `RavenModel realLook`
   skips the payload vector sweep; descent is one eased curve over 3.4 s, starting nearer, triggered at 5% visible with the canvas rendering a screen ahead, not the old ease-out drop). Framing checked at 1440x900 only (reduced-motion pose); glide-in not seen at 60 fps.
-- Site cards (2026-11-05, user mockup): a site pin opens into a small photo + name card (300x92, was 236x72; phones < 768 px 196x60, `CARD_PHONE`, user 2026-11-06) when the drone
+- Site cards (2026-11-05, user mockup; 2026-11-06 second mockup: portrait photo on top, name centred below, `card()` in RouteCallout, desktop 140 wide with a 120x130 photo, phones < 768 px 112 wide `CARD_PHONE` (user: smaller, 2026-11-06; opaque and above its stem); was 300x92 photo left + name right, phones 196x60; the photos are only 128 px, so they look soft at this size) a site pin opens into a photo + name card when the drone
   arrives (`ClinicPin`/`placeClinicPin` in `overlays/RouteCallout.tsx`): Ridge Clinic at the end of the climb (folds
   back as the speed flight leaves), Summit Station at the end of the speed flight. Photos are the user's
   (`public/assets/route/ridge-clinic.png`, `summit-station.png`, 128 px, from `raven-drone-site/src/img1.png`/`img-2.png`).

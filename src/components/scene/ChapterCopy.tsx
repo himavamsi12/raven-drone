@@ -21,8 +21,8 @@ const SETTLE = { opacity: 1, y: 0, color: "#FFFFFF" };
 const EXIT = { opacity: 0, y: -8, color: "#FF2200" };
 
 const HEADING = {
-  /** Homepage hero (asset/html/raven_homepage.html `.headline`): two uppercase lines, tight leading. */
-  hero: "text-[clamp(2.125rem,11.5vw,3.75rem)] sm:text-[clamp(2.5rem,4.7vw,4.875rem)] leading-[0.9] font-semibold tracking-[-0.045em] uppercase text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
+  /** Homepage hero: two lines in Title Case (user's mockup 2026-11-06; was uppercase semibold, tight leading). */
+  hero: "text-[clamp(2.125rem,11.5vw,3.75rem)] sm:text-[clamp(2.5rem,4.7vw,4.875rem)] leading-[1.05] font-medium tracking-[-0.04em] text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
   h1: "text-m-h0 md:text-d-h0 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h0 max-w-204 text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
   h2: "text-m-h1 md:text-d-h1 [@media(min-width:48rem)_and_(max-height:37.5rem)]:!text-m-h1 max-w-204 text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)]",
 };
@@ -125,21 +125,21 @@ function Hero() {
     <Frame innerClassName="!flex flex-col justify-end">
       <div className="flex flex-col items-start justify-between gap-5 px-1 sm:flex-row sm:items-end sm:gap-8 md:px-[clamp(0rem,1.1vw,1.375rem)]">
         <div>
-          <p className="text-m-mono md:text-d-mono mb-3 font-mono text-yellow uppercase text-shadow-[0px_1px_24px_rgba(0,0,0,0.45)] md:mb-4">
-            Illustrative medical delivery
-          </p>
           <Heading variant="hero" className="sm:whitespace-nowrap">
             {/* Phones (user 2026-11-06: three lines, not four): the two sentences flow as one paragraph, which at the
                 11.5vw size breaks "The road goes / around. Raven / goes over." on any phone width; one line each from sm. */}
-            <span className="inline sm:block">The road goes around.</span>{" "}
-            <span className="inline sm:block">Raven goes over.</span>
+            <span className="inline sm:block">The Road Goes Around.</span>{" "}
+            <span className="inline sm:block">Raven Goes Over.</span>
           </Heading>
         </div>
         <div className="flex max-w-90 min-w-0 flex-col items-start gap-[clamp(0.875rem,1.4vw,1.375rem)]">
           {/* Landscape phones (mobile pass 2026-11-06): no room for drone, headline and paragraph; keep headline + CTA. */}
           <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90 [@media(min-width:48rem)_and_(max-height:37.5rem)]:hidden">
-            When a hill clinic runs short of medicines, the journey matters. Raven explores a direct air link from a regional health centre to the
-            village waiting for supplies.
+            When a hill clinic runs short of medicines, the road is the bottleneck. Raven flies a direct air link from the regional health centre
+            to the village waiting for supplies, over terrain ground transport can&rsquo;t cross.
+          </Support>
+          <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90 [@media(min-width:48rem)_and_(max-height:37.5rem)]:hidden">
+            Hours by road, minutes by air. Raven runs point-to-point medical resupply across terrain that cuts villages off.
           </Support>
           <SquareCta onClick={explore}>Follow the delivery</SquareCta>
         </div>

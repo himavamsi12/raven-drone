@@ -17,10 +17,14 @@ const YELLOW = "#ffcb47";
 
 const metres = (m: number) => `${Math.round(m).toLocaleString("en-US")} m`;
 
-/** Clinic card (user mockup 2026-11-05): photo left, name right, on the pin's stem. px. */
-const CARD = { w: 300, h: 92, img: 70, pad: 11, gutter: 12, gap: 18, font: 17 }; // user 2026-11-05: bigger (was 236 x 72; 360 x 112 was too big)
+/**
+ * Site card (user mockup 2026-11-06, was photo left + name right 300 x 92): portrait photo on top with an even margin
+ * (`pad`) on the top and sides, the name centred in the band below (`nameH`). `w`/`h` = the whole card, px.
+ */
+const card = (w: number, pad: number, imgH: number, nameH: number, font: number) => ({ w, h: pad + imgH + nameH, pad, imgH, nameH, font, gutter: 12 });
+const CARD = card(140, 10, 130, 40, 13); // mockup proportions (300 x 404, photo 256 x 292); user 2026-11-06: smaller (was 180 wide)
 /** Phones (user 2026-11-06: "make this card small in mobile", both cards): about two thirds of the desktop card. */
-const CARD_PHONE = { w: 196, h: 60, img: 44, pad: 8, gutter: 12, gap: 12, font: 12 };
+const CARD_PHONE = card(112, 8, 104, 32, 10); // was 136 wide
 const PHONE_QUERY = "(max-width: 767px)";
 const cardFor = (phone: boolean) => (phone ? CARD_PHONE : CARD);
 const isPhone = () => typeof window !== "undefined" && window.innerWidth < 768;
@@ -66,7 +70,8 @@ export function ClinicPin({
   const card = cardFor(useMediaQuery(PHONE_QUERY));
   return (
     <div ref={refs.root} className="absolute top-0 left-0 flex flex-col items-center" style={{ width: PIN.size, opacity: 0 }}>
-      <div className="relative" style={{ width: PIN.size, height: PIN.size }}>
+      {/* Above the stem: a card slid down its stem (short screens) must cover it, not show it through the name. */}
+      <div className="relative z-[1]" style={{ width: PIN.size, height: PIN.size }}>
         <div
           ref={refs.head}
           className="absolute bottom-0 left-1/2 overflow-hidden"
@@ -87,10 +92,10 @@ export function ClinicPin({
           </span>
           <div
             ref={refs.card}
-            className="absolute top-0 left-0 flex items-center"
-            style={{ width: card.w, height: card.h, padding: card.pad, gap: card.gap, opacity: 0 }}
+            className="absolute top-0 left-0 flex flex-col"
+            style={{ width: card.w, height: card.h, padding: `${card.pad}px ${card.pad}px 0`, opacity: 0 }}
           >
-            <span className="relative block shrink-0 overflow-hidden bg-[#2c2c2c]" style={{ width: card.img, height: card.img }}>
+            <span className="relative block w-full shrink-0 overflow-hidden bg-[#2c2c2c]" style={{ height: card.imgH }}>
               {/* Neutral tile if the photo fails to load. */}
               <span aria-hidden="true" className="absolute inset-0 grid place-items-center text-white/35">
                 <svg width="22" height="22" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -109,7 +114,12 @@ export function ClinicPin({
                 />
               )}
             </span>
-            <span style={{ fontSize: card.font }} className="font-mono leading-none tracking-[0.08em] whitespace-nowrap text-white uppercase">{name}</span>
+            <span
+              style={{ fontSize: card.font, height: card.nameH }}
+              className="grid place-items-center font-mono leading-none tracking-[0.08em] whitespace-nowrap text-white uppercase"
+            >
+              {name}
+            </span>
           </div>
         </div>
         <span
@@ -156,7 +166,7 @@ export function placeClinicPin(refs: ClinicPinRefs, x: number, y: number, stem: 
     head.style.borderRadius = `${(PIN.size / 2) * (1 - open) + 2 * open}px`;
     head.style.background =
       open > 0
-        ? `rgba(${Math.round(30 + 42 * open)}, ${Math.round(30 + 42 * open)}, ${Math.round(30 + 42 * open)}, ${(1 - 0.08 * open).toFixed(3)})`
+        ? `rgba(${Math.round(30 + 42 * open)}, ${Math.round(30 + 42 * open)}, ${Math.round(30 + 42 * open)}, 1)` // opaque: the stem showed through the open card (user 2026-11-06)
         : "#1e1e1e";
   }
   if (refs.plus.current) refs.plus.current.style.opacity = smooth(1 - open * 2.5).toFixed(3);

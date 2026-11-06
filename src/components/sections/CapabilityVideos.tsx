@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CAPABILITY_VIDEOS, SECTION_BODY, SECTION_HEADING } from "@/lib/features";
+import { CAPABILITY_VIDEOS, SECTION_BODY, SECTION_HEADING, SECTION_KICKER } from "@/lib/features";
 
 /**
  * Section 04 (Figma 100:622 "Section 4", 1920 x 1433): three tabs over one video panel. When the section comes into
- * view the active clip plays once; when it ends the next tab takes over (Sensor -> Crosswind -> Auto pilot -> Sensor).
+ * view the active clip plays once; when it ends the next tab takes over (Sensor -> Crosswind -> Route -> Sensor; "Route" was "Auto pilot" until 2026-11-06).
  * The active tab fills left to right with the clip's playback (Figma "Rectangle 35", white 4%). Leaving the section
  * pauses; coming back resumes. A tab click jumps to that clip from its start. Reduced motion: no autoplay, a click plays.
  */
@@ -92,6 +92,7 @@ export function CapabilityVideos() {
       className="caps font-tight z-over-scroll-sequence relative w-full bg-[#060606] text-white"
     >
       <div className="caps-heading">
+        <p className="section-kicker font-dm uppercase">/ {SECTION_KICKER}</p>
         <h2 className="caps-h">{SECTION_HEADING}</h2>
         <p className="caps-p">{SECTION_BODY}</p>
       </div>

@@ -37,9 +37,9 @@ export const PAYLOAD_TIMELINE = {
 
 /** The callout copy (user, 2026-11-03: "we can carry upto 15 to 25 kg"). */
 export const PAYLOAD_COPY = {
-  kicker: "Payload capacity",
+  kicker: "Rated payload", // copy from the user's mockups, 2026-11-06
   value: "15–25 kg",
-  body: "We can carry up to 15–25 kg of medical supplies.",
+  body: "Of mission-ready medical payload, flown point-to-point in a single flight.",
 } as const;
 
 /** Clay look on black (scene/clay-map.ts CLAY, the reference's `net` section colours). */
@@ -87,9 +87,9 @@ export const ALTITUDE_TIMELINE = {
 
 /** The altitude callout copy (user's figure: "5000m"). */
 export const ALTITUDE_COPY = {
-  kicker: "Operating altitude",
+  kicker: "Service ceiling", // user's mockups, 2026-11-06
   value: "5,000 m",
-  body: "Raven flies at up to 5,000 m, up to the clinics on the last ridge.",
+  body: "Of operating altitude, putting even the last ridge within reach.",
 } as const;
 
 /** Page range of the altitude stage (directly after the payload stage), set by story-map `measureStoryMap`. */
@@ -162,7 +162,7 @@ export const SPEED_TIMELINE = {
  */
 export const SPEED_FIGURES = { metresPerUnit: 50, kmh: 79 } as const;
 export const SPEED_FLIGHT = { flyS: 11, returnS: 1, rampShare: 0.12 } as const;
-export const SPEED_COPY = { kicker: "Distance flown", to: "To Summit Station" } as const; // kicker was "Speed and distance" (user 2026-11-05: big figure = distance from 0)
+export const SPEED_COPY = { kicker: "Cruise speed", eta: "ETA", distance: "Distance" } as const; // user's mockups, 2026-11-06: big figure = cruise speed // kicker was "Speed and distance" (user 2026-11-05: big figure = distance from 0)
 /** Page range of the speed stage (directly after the mountain stage), set by story-map `measureStoryMap`. */
 export const speedRange = { Q: 0, T: 0 };
 export const speedProgress = (page: number) => (speedRange.T > 0 ? clamp01((page - speedRange.Q) / speedRange.T) : 0);

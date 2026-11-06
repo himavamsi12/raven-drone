@@ -503,8 +503,9 @@ dialog::backdrop {
    bar; heading and tabs keep their size and the video panel takes the rest, its clip cropped to fill (object-cover). */
 .caps {
   --u: min(100vw / 1920, 1px);
-  height: 100dvh;
-  min-height: 600px;
+  /* User 2026-11-06 ("previously it is cropped, increase the height a little"): at least one screen, and taller when
+     the panel needs its minimum height (.caps-panel). */
+  min-height: max(100dvh, 600px);
   display: flex;
   flex-direction: column;
   padding: calc(var(--nav-height) + var(--u) * 40) 0 calc(var(--u) * 56);
@@ -516,7 +517,8 @@ dialog::backdrop {
   gap: calc(var(--u) * 9);
   text-align: center;
   margin: 0 auto;
-  width: min(calc(var(--u) * 756), calc(100% - 40px));
+  /* Wide enough for "Sense. Stabilise. Navigate." on one line (user's mockup 2026-11-06); the body keeps its own width. */
+  width: min(calc(var(--u) * 1200), calc(100% - 40px));
 }
 .caps-h {
   font-size: calc(var(--u) * 72);
@@ -553,8 +555,9 @@ dialog::backdrop {
   outline-offset: -1px;
 }
 .caps-panel {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  /* Never wider than 2.2:1 (it was ~2.65:1 at 1440x900, cropping the 16:9 clips hard); grows on taller screens. */
+  min-height: calc(var(--u) * 1680 / 2.2);
 }
 @media (max-width: 767px) {
   /* Phones: natural height, a 16:9 panel (the whole section fits a phone screen as it is). */
@@ -602,7 +605,9 @@ dialog::backdrop {
   width: calc(var(--u) * 1680);
   margin: 0 auto;
 }
-.uc-kicker {
+/* Mono yellow section kicker ("/ Use cases", "/ Hardware", "/ Capability"; user's mockups 2026-11-06). */
+.uc-kicker,
+.section-kicker {
   color: #ffcb47;
   font-size: max(calc(var(--u) * 14), 11px);
   line-height: 1.4;
@@ -694,6 +699,8 @@ dialog::backdrop {
   text-shadow: 0 2px 24px rgba(0, 0, 0, 0.5);
 }
 .cta-p {
+  /* Two lines on desktop for the longer studio line (user's mockup 2026-11-06). */
+  max-width: max(calc(var(--u) * 640), 320px);
   margin-top: calc(var(--u) * 18);
   font-size: max(calc(var(--u) * 16), 14px);
   line-height: 1.4;
