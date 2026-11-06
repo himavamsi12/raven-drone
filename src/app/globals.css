@@ -381,8 +381,9 @@ dialog::backdrop {
   /* Phones (user 2026-11-06: "the images are very big in mobile"): the whole render, contained in the band between
      the heading and the card (was full bleed, cropped and ~3.5x larger), edges faded into the stage like desktop. */
   .feature-frame {
-    top: 28%;
-    bottom: 36%;
+    /* At least the old 28% / 36% band, and always clear of the heading and the card (measured in FeatureSection). */
+    top: max(28%, calc(var(--head-bottom, 0px) + 16px));
+    bottom: max(36%, calc(100% - var(--card-top, 100%) + 16px));
     mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%);
   }
   /* Phones (user 2026-11-06): a render whose own bottom edge cuts the object (`fadeBottom` in lib/features.ts) fades to
@@ -451,6 +452,38 @@ dialog::backdrop {
     gap: 6px;
     padding: 4px 8px;
     font-size: 11px;
+  }
+}
+
+/* Short phones (360x640 class, user 2026-11-06): the heading and card left the render a thumbnail between them once it
+   was kept clear of both; tighter type and card give it room. */
+@media (max-width: 767px) and (max-height: 720px) {
+  .feature-heading {
+    top: calc(var(--nav-height) + 16px);
+    gap: 8px;
+  }
+  .feature-h {
+    font-size: 26px;
+  }
+  .feature-p {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .feature-card {
+    bottom: 16px;
+    padding: 16px 16px 14px;
+    gap: 12px;
+  }
+  .feature-title {
+    font-size: 15px;
+  }
+  .feature-body {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .feature-tag {
+    padding: 4px 6px;
+    font-size: 10px;
   }
 }
 

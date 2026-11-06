@@ -56,6 +56,29 @@ export function FeatureSection() {
     transition: headingIn ? { duration: 0.9, delay: 0.1 + i * 0.12, ease: [0.22, 1, 0.36, 1] as const } : { duration: 0.2 },
   });
 
+  // Phones (user 2026-11-06: the heading copy ran over the render on some phones): the render band starts below the
+  // heading's real bottom and ends above the card's top (CSS --head-bottom / --card-top, px from the stage top), since
+  // the heading wraps to more lines on narrow or short screens than the fixed 28% / 36% band allowed for.
+  const heading = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const st = stage.current;
+    const h = heading.current;
+    const c = card.current;
+    if (!st || !h || !c) return;
+    const measure = () => {
+      // Layout boxes (offset*), not getBoundingClientRect: the heading's reveal moves it with a transform.
+      st.style.setProperty("--head-bottom", `${h.offsetTop + h.offsetHeight}px`);
+      st.style.setProperty("--card-top", `${c.offsetTop}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(st);
+    ro.observe(h);
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const update = () => {
       const el = band.current;
@@ -129,7 +152,7 @@ export function FeatureSection() {
         <div aria-hidden="true" className="feature-shade pointer-events-none absolute inset-0" />
 
         <div className="feature-layout absolute inset-0">
-          <div className="feature-heading">
+          <div ref={heading} className="feature-heading">
             <h2 className="feature-h">
               <motion.span className="block" {...reveal(0)}>
                 {FEATURE_HEADING[0]}
@@ -143,7 +166,7 @@ export function FeatureSection() {
             </motion.p>
           </div>
 
-          <div className="feature-card bg-[#242424]">
+          <div ref={card} className="feature-card bg-[#242424]">
             {/* User 2026-11-05 ("glitch while changing"): every feature's copy sits in the same grid cell, so the card
                 keeps one height and the old and new text cross over in place (was AnimatePresence popLayout, whose
                 height jump showed one frame of overlapping text). */}

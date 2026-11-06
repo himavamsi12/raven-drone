@@ -636,11 +636,13 @@ export function usePostFX(flockTarget: THREE.WebGLRenderTarget) {
       // A real 1 px unsharp kernel (in drawing-buffer pixels) at a fixed strength; light grain.
       final.u("uGrainAmount").value = MOUNTAIN_CLARITY.grain + (MOUNTAIN_CLARITY.heroGrain - MOUNTAIN_CLARITY.grain) * h;
       // Payload page: no unsharp mask on the clay view (it ringed the altitude line and the vector outlines).
-      final.u("uSharpenOpacity").value = MOUNTAIN_CLARITY.sharpen * (1 - payloadLook().clay);
+      // Phones (user 2026-11-06: drone edges pixelate on mobile): no unsharp mask. The frame is upscaled 1.5x on 3x screens
+      // and the 1 px kernel turned the drone's antialiased edges into bright halos and stair steps.
+      final.u("uSharpenOpacity").value = Math.min(size.width, size.height) < 600 ? 0 : MOUNTAIN_CLARITY.sharpen * (1 - payloadLook().clay);
       final.u("uSharpenKernelOffset").value = 1 / Math.max(size.width * gl.getPixelRatio(), 1);
     } else {
       final.u("uGrainAmount").value = DAYLIGHT.grain + (HERO_LIGHT.post.grain - DAYLIGHT.grain) * h;
-      final.u("uSharpenOpacity").value = DAYLIGHT.sharpen + (HERO_LIGHT.post.sharpen - DAYLIGHT.sharpen) * h;
+      final.u("uSharpenOpacity").value = Math.min(size.width, size.height) < 600 ? 0 : DAYLIGHT.sharpen + (HERO_LIGHT.post.sharpen - DAYLIGHT.sharpen) * h;
     }
     final.u("uOpacity").value = remap(multi.hideRatio, 0, 0.25, 1, 0);
     updateLens(state.camera, dt);

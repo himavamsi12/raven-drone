@@ -235,6 +235,11 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 ## Open work (see RECONSTRUCTION.md for full list)
 
 - Phones (2026-11-06, user): the hero headline flows as one paragraph below 640 px, so it reads in three lines ("The road goes / around. Raven / goes over.", checked 320-430 px; one line per sentence from sm). The sensor render fades to black at its bottom on phones (`fadeBottom` 62 + `aspect` in `lib/features.ts`, `.feature-img-fadeb` in globals.css): its own bottom edge cut through the medical box.
+- Phone fixes (2026-11-06, user): Section 03's render band is kept clear of the heading and card (`--head-bottom` /
+  `--card-top` measured in FeatureSection, CSS `max()` with the old 28% / 36%), plus tighter type at max-height 720 px;
+  checked 390x844 and 360x640. Drone edges on phones (shorter side < 600 px): no unsharp mask in the final pass (it
+  haloed and stair-stepped the 1.5x-upscaled frame) and 4 MSAA samples on the drone layer (`isPhoneScreen` in
+  render-scale.ts); checked headless at 390x844 @3x.
 - Phone pan to Summit Station (2026-11-06, user: the next stop was cut off on mobile): portrait < 768 px, the mountain view window pans right with the drone once it passes 60% of the width (`MOBILE_FOLLOW` / `mobilePan` in DroneRig, on top of the zoom view offset; Ridge Clinic at ~54% so the climb frame is unchanged) and back as it returns. Site cards slide on their stem near an edge only as they open (`placeClinicPin` dx x open), so the closed Ridge Clinic pin stays on its stem at the left edge.
 - Phone stage stops (2026-11-06, user: "taking too many scrolls" on mobile): touch phones have no free zone
   (SmoothScroll `touchPhone`, from the `(max-width: 768px) and (pointer: coarse)` query); the climb plays its two band
