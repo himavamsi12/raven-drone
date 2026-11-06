@@ -243,6 +243,9 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
   finger's pace (`touchVel`, at least 60% of cruise, `touchLaunch`) without waiting for Lenis' touch inertia, and the
   opening/payload snaps run `PHONE_STAGE_SPEEDUP` 1.7x faster on touch phones. Measured 390x844, 250 px CDP swipe:
   moves on the first frame after touchend (was a dead stop + 220 ms ramp); lands 1.1-1.5 s after the lift (was 2.0-2.6).
+- Section 03 indicator (2026-11-06, user: "make this clickable"): STRUCTURE / SENSOR / MOTOR are buttons
+  (`.feature-nav-btn`, `goTo` in FeatureSection) that ease to that feature's stop (Lenis scrollTo 0.8 s, band top +
+  i x viewport height); labels two away stay hidden and unclickable. Checked 1440x900 click and 390x844 tap.
 - Phone pan to Summit Station (2026-11-06, user: the next stop was cut off on mobile): portrait < 768 px, the mountain view window pans right with the drone once it passes 60% of the width (`MOBILE_FOLLOW` / `mobilePan` in DroneRig, on top of the zoom view offset; Ridge Clinic at ~54% so the climb frame is unchanged) and back as it returns. Site cards slide on their stem near an edge only as they open (`placeClinicPin` dx x open), so the closed Ridge Clinic pin stays on its stem at the left edge.
 - Phone stage stops (2026-11-06, user: "taking too many scrolls" on mobile): touch phones have no free zone
   (SmoothScroll `touchPhone`, from the `(max-width: 768px) and (pointer: coarse)` query); the climb plays its two band

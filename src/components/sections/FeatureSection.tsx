@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, useInView, useReducedMotion } from "motion/react";
+import { useLenis } from "lenis/react";
 import { useEffect, useRef, useState } from "react";
 import { FEATURE_BODY, FEATURE_HEADING, FEATURE_KICKER, FEATURES } from "@/lib/features";
 
@@ -46,6 +47,19 @@ export function FeatureSection() {
   const band = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const activeRef = useRef(0);
+  const lenis = useLenis();
+  /**
+   * Indicator labels are clickable (user 2026-11-06): scroll to that feature's stop (the active feature is the nearest
+   * whole screen into the band, see the scroll listener below), eased like the nav bar's chapter jumps.
+   */
+  const goTo = (i: number) => {
+    const el = band.current;
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + window.scrollY + i * window.innerHeight;
+    const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    if (lenis) lenis.scrollTo(y, { duration: 0.8, easing: ease });
+    else window.scrollTo({ top: y, behavior: "smooth" });
+  };
   // Heading fade-in (user 2026-11-05): plays as the section slides up into view, again on every re-entry.
   const stage = useRef<HTMLElement>(null);
   const headingIn = useInView(stage, { amount: 0.35 });
@@ -212,10 +226,21 @@ export function FeatureSection() {
                   style={{
                     transform: `translateY(calc(${d} * var(--nav-step) - 50%))`,
                     opacity: d === 0 ? 1 : Math.abs(d) === 1 ? 0.7 : 0,
+                    // Hidden labels (two away) are not clickable.
+                    pointerEvents: Math.abs(d) > 1 ? "none" : undefined,
                   }}
                 >
-                  {f.nav}
-                  <span className="feature-nav-sq" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="feature-nav-btn"
+                    onClick={() => goTo(i)}
+                    aria-label={`Show ${f.nav}`}
+                    aria-current={d === 0 ? "true" : undefined}
+                    tabIndex={Math.abs(d) > 1 ? -1 : 0}
+                  >
+                    {f.nav}
+                    <span className="feature-nav-sq" aria-hidden="true" />
+                  </button>
                 </li>
               );
             })}
