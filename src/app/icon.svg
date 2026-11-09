@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Raven hexacopter mark (Navbar Logo), white on the site background; strokes heavier than the bar's so it reads at 16 px. -->
+  <rect width="32" height="32" rx="7" fill="#0f0f0f"/>
+  <g transform="translate(3 3)" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round">
+    <circle cx="13" cy="13" r="3.2"/>
+    <line x1="13" y1="9.8" x2="13" y2="5.6"/>
+    <line x1="13" y1="16.2" x2="13" y2="20.4"/>
+    <line x1="10.2" y1="11.4" x2="6.8" y2="9.4"/>
+    <line x1="15.8" y1="14.6" x2="19.2" y2="16.6"/>
+    <line x1="15.8" y1="11.4" x2="19.2" y2="9.4"/>
+    <line x1="10.2" y1="14.6" x2="6.8" y2="16.6"/>
+  </g>
+  <g transform="translate(3 3)" fill="#fff">
+    <circle cx="13" cy="3.2" r="2"/>
+    <circle cx="13" cy="22.8" r="2"/>
+    <circle cx="4.6" cy="8.2" r="2"/>
+    <circle cx="21.4" cy="17.8" r="2"/>
+    <circle cx="21.4" cy="8.2" r="2"/>
+    <circle cx="4.6" cy="17.8" r="2"/>
+  </g>
+</svg>
