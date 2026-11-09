@@ -138,7 +138,7 @@ export const ROUTE_TIMELINE = {
 export const ROUTE_COPY = { destination: "Ridge Clinic", second: "Summit Station" } as const;
 /**
  * Site cards (user 2026-11-05: when the drone arrives a pin opens into a card with a photo and the name). Photos are
- * the user's own (`raven-drone-site/src/img1.png`, `img-2.png`, 128 px squares).
+ * the user's own (portrait, ~270x310 and ~320x350, replaced 2026-11-09).
  */
 export type SiteImage = { src: string; alt: string };
 export const ROUTE_CLINIC_IMAGE: SiteImage = { src: "/assets/route/ridge-clinic.png", alt: "Ridge Clinic, a small clinic in a mountain village" };
