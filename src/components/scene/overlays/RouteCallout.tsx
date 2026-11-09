@@ -157,9 +157,10 @@ export function placeClinicPin(refs: ClinicPinRefs, x: number, y: number, stem: 
     const left = x - w / 2;
     const dx = (left < CARD.gutter ? CARD.gutter - left : x + w / 2 > W - CARD.gutter ? W - CARD.gutter - (x + w / 2) : 0) * open;
     // Short screens (landscape phones, mobile pass 2026-11-06): the site sits high, so the open card rose under the nav
-    // bar. Slide it down its stem until it clears the bar (same clamp as --nav-height).
+    // bar. Slide it down its stem until it clears the bar (same clamp as --nav-height). Only as it opens (x open): the
+    // closed + pin slid down its own stem too and sat over it (user 2026-11-09).
     const navH = Math.min(Math.max(56, W * 0.054), 82);
-    const dy = Math.max(0, navH + CARD.gutter - (y - stem - h));
+    const dy = Math.max(0, navH + CARD.gutter - (y - stem - h)) * open;
     head.style.width = `${w.toFixed(1)}px`;
     head.style.height = `${h.toFixed(1)}px`;
     head.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), ${Math.min(dy, stem).toFixed(1)}px)`;

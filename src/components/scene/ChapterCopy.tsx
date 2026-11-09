@@ -9,9 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { useLoading } from "@/lib/loading";
 import { SCENE, useScenes, type SceneId } from "@/lib/scenes";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { useLenis } from "lenis/react";
-import { linear } from "@/lib/math";
-import { PAYLOAD_MS, PAYLOAD_TIMELINE, payloadRange, ROUTE_TIMELINE, SPEED_TIMELINE, usePayload } from "@/lib/payload";
+import { PAYLOAD_TIMELINE, ROUTE_TIMELINE, SPEED_TIMELINE, usePayload } from "@/lib/payload";
 import { SpeedCallout } from "./overlays/SpeedCallout";
 import { RouteCallout } from "./overlays/RouteCallout";
 import { PayloadCallout } from "./overlays/PayloadCallout";
@@ -96,31 +94,8 @@ const SWARM_TRAITS = [
 
 const bottomLeft = "bottom-0 left-0 lg:absolute lg:mr-70 lg:max-w-133.5";
 
-/** Homepage CTA (asset/html/raven_homepage.html `.cta`): square outline, frosted, small caps; delayed .4s like `Cta`. */
-function SquareCta({ onClick, children }: { onClick?: () => void; children: ReactNode }) {
-  return (
-    <AnimatePresence mode="wait" propagate>
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ delay: 0.4, duration: 0.4 }}>
-        <button
-          type="button"
-          onClick={onClick}
-          className="pointer-events-auto inline-flex cursor-pointer items-center gap-3 border border-[#f4f3ef] bg-black/25 px-[1.375rem] py-3.5 text-[clamp(0.6875rem,0.82vw,0.8125rem)] leading-none font-medium tracking-[0.04em] text-[#f4f3ef] uppercase backdrop-blur-[6px] transition-colors duration-200 hover:bg-black/45 focus-visible:bg-black/45 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-white"
-        >
-          {children}
-          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" className="size-3.5">
-            <path d="M2 7h10M8 3l4 4-4 4" />
-          </svg>
-        </button>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
-/** Hero in the homepage composition: headline bottom-left, supporting copy + CTA bottom-right on one baseline. */
+/** Hero in the homepage composition: headline bottom-left, supporting copy bottom-right (CTA removed, user 2026-11-09) on one baseline. */
 function Hero() {
-  // Raven payload page: the CTA plays the payload stage (same pace as the scroll snap).
-  const lenis = useLenis();
-  const explore = () => lenis?.scrollTo(payloadRange.Q + payloadRange.T, { duration: PAYLOAD_MS / 1000, easing: linear });
   return (
     <Frame innerClassName="!flex flex-col justify-end">
       <div className="flex flex-col items-start justify-between gap-5 px-1 sm:flex-row sm:items-end sm:gap-8 md:px-[clamp(0rem,1.1vw,1.375rem)]">
@@ -141,7 +116,6 @@ function Hero() {
           <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90 [@media(min-width:48rem)_and_(max-height:37.5rem)]:hidden">
             Hours by road, minutes by air. Raven runs point-to-point medical resupply across terrain that cuts villages off.
           </Support>
-          <SquareCta onClick={explore}>Follow the delivery</SquareCta>
         </div>
       </div>
     </Frame>

@@ -241,7 +241,7 @@ Section 03, Section 04, closing CTA; no console or GL errors; `scripts/check-rav
   0.02) (portrait: centred, upper); the aim moves from the hero aim point to the box so the drone stays framed.
 - Callout: yellow ring on the box, drawn leader line to a label in the right-hand column ("Payload capacity",
   "15–25 kg", "We can carry up to 15–25 kg of medical supplies."); portrait: straight down to a centred label.
-- Nav: bar/menu links Story + Payload; chapter ticks off. Hero CTA "Follow the delivery" plays the payload stage.
+- Nav: bar/menu links Story + Payload; chapter ticks off. Hero CTA "Follow the delivery" removed (user 2026-11-09); the hero has no button.
 - Checked (headless Chrome, dev server): 1440×900 at 2701 / 3071 / 3431 / 3791 / 4151 / 4501 and the sweep at
   2971-3521; 390×844 at 2533 -> 4221 in six steps (continuous camera, drone framed); real wheel events 0 -> 2701 ->
   4501 -> 2701 -> 0; typecheck and production build pass; only console error the missing favicon. Not checked:

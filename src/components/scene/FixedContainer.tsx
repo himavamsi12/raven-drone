@@ -17,7 +17,11 @@ import { MainScene } from "./MainScene";
 import { sharedMountainSlices, mountainTerrainEnabled } from "./mountain-terrain";
 import { terrainVariant } from "./raven-terrain";
 import { useGLB } from "./types";
+import { markSceneCodeLoaded } from "@/lib/load-eta";
 import { ASSETS } from "@/lib/assets";
+
+// Loader ETA (lib/load-eta.ts): this module runs once every scene chunk has downloaded.
+markSceneCodeLoaded();
 
 const KEYS: KeyboardControlsEntry<string>[] = [
   { name: "left", keys: ["ArrowLeft", "KeyA"] },

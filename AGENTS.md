@@ -234,6 +234,7 @@ Text motion: enter opacity0 y+8 #FF2200 → white, exit y-8 #FF2200, .4s easeInO
 
 ## Open work (see RECONSTRUCTION.md for full list)
 
+- Loader ETA (2026-11-09, user: "show how long it will take to load the site, not the complete site"): the status line shows the time left until the reveal (`lib/load-eta.ts`, `useRevealEta` in Loader): missing first-frame bytes (compressed sizes, plus ~340 KB of scene JS until `FixedContainer` has run) / link speed from Resource Timing, + 2 s prepare + 0.8 s full-map wait on fast links; floors at "~1 s" while preparing. Checked on `next start` 1440x900: 400 KB/s first figure ~9 s, revealed 6 s later; fast links the prepare step varies 2-6 s on an M-series Mac. Meaningless on `npm run dev` (~10 MB JS). Re-measure the byte table if the first-frame assets change.
 - Phones (2026-11-06, user): the hero headline flows as one paragraph below 640 px, so it reads in three lines ("The road goes / around. Raven / goes over.", checked 320-430 px; one line per sentence from sm). The sensor render fades to black at its bottom on phones (`fadeBottom` 62 + `aspect` in `lib/features.ts`, `.feature-img-fadeb` in globals.css): its own bottom edge cut through the medical box.
 - Phone fixes (2026-11-06, user): Section 03's render band is kept clear of the heading and card (`--head-bottom` /
   `--card-top` measured in FeatureSection, CSS `max()` with the old 28% / 36%), plus tighter type at max-height 720 px;
