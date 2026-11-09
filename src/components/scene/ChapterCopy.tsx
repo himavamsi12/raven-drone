@@ -109,12 +109,9 @@ function Hero() {
         </div>
         <div className="flex max-w-90 min-w-0 flex-col items-start gap-[clamp(0.875rem,1.4vw,1.375rem)]">
           {/* Landscape phones (mobile pass 2026-11-06): no room for drone, headline and paragraph; keep headline + CTA. */}
+          {/* One paragraph (user mockup 2026-11-09; was two: the hill-clinic paragraph + "across terrain that cuts villages off"). */}
           <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90 [@media(min-width:48rem)_and_(max-height:37.5rem)]:hidden">
-            When a hill clinic runs short of medicines, the road is the bottleneck. Raven flies a direct air link from the regional health centre
-            to the village waiting for supplies, over terrain ground transport can&rsquo;t cross.
-          </Support>
-          <Support className="!text-[clamp(0.8125rem,0.95vw,0.97rem)] !leading-[1.4] !font-normal !tracking-[-0.01em] text-white/90 [@media(min-width:48rem)_and_(max-height:37.5rem)]:hidden">
-            Hours by road, minutes by air. Raven runs point-to-point medical resupply across terrain that cuts villages off.
+            Hours by road, minutes by air. Raven runs point-to-point medical resupply from regional health centre to remote village.
           </Support>
         </div>
       </div>
