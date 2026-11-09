@@ -42,7 +42,10 @@ const _q = new THREE.Quaternion();
  */
 export const openingEase = (p: number) => {
   const t = Math.min(Math.max(p, 0), 1);
-  return 1 - (1 - t) ** 2.2;
+  // Mostly linear (user 2026-11-06, free scroll: "still some slow, snap-like effect"): the ease-out (1-(1-t)^2.2) moved
+  // the camera 3% over the last fifth of the opening, ~500 px of scroll where nothing changed before the payload stage.
+  // Now 35% smootherstep: the camera answers the first scroll and keeps ~2/3 of its mean speed to the hero frame.
+  return 0.65 * t + 0.35 * t * t * t * (t * (6 * t - 15) + 10);
 };
 
 /** Barrel strength for an opening progress. */

@@ -62,6 +62,15 @@ export const easeOutRange = (p: number, [a, b]: readonly [number, number]) => {
   return u * u * u * (u * (6 * u - 15) + 10);
 };
 
+/**
+ * Scroll-proportional ease over [a, b] for free-scrolled stages: 65% linear + 35% smootherstep. Moves with the first
+ * scroll and never stalls near the end (a plain ease-out or S-curve leaves hundreds of px where nothing moves).
+ */
+export const scrollEase = (p: number, [a, b]: readonly [number, number]) => {
+  const t = clamp01((p - a) / (b - a));
+  return 0.65 * t + 0.35 * t * t * t * (t * (6 * t - 15) + 10);
+};
+
 /** Page range of the stage, set by story-map `measureStoryMap`. */
 export const payloadRange = { Q: 0, T: 0 };
 
@@ -231,7 +240,9 @@ export function payloadLook(page = typeof window === "undefined" ? 0 : window.sc
     clay: clamp01((p - t.clay[0]) / (t.clay[1] - t.clay[0])),
     // Ease-out (user 2026-11-05: the hero did not answer the scroll at once): the camera starts moving with the
     // scroll and settles softly. The S-curve it had (smootherstep) moved it <4% over the first fifth of the stage.
-    zoom: easeOutRange(p, t.zoom),
+    // Mostly linear since 2026-11-06 (free scroll, user: "snap-like"): easeOutRange moved it 5% over the last 30% of the
+    // stage, a dead zone before the mountain stage. scrollEase keeps ~2/3 of its mean speed at both ends.
+    zoom: scrollEase(p, t.zoom),
     vector: clamp01((p - t.vector[0]) / (t.vector[1] - t.vector[0])), // the sweep shader eases its own front
     highlight: easeRange(p, t.highlight) * (1 - easeRange(r, ROUTE_TIMELINE.highlightOut)),
     /** Altitude stage camera weight (raw progress in its range; the camera eases its parts). */

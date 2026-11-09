@@ -159,7 +159,8 @@ const _eyeA = new THREE.Vector3();
 const _qA = new THREE.Quaternion();
 export function applyRouteCamera(mover: THREE.Object3D, eye: THREE.Vector3, quat: THREE.Quaternion, target: THREE.Vector3, t: number) {
   if (t <= 0) return;
-  const e = THREE.MathUtils.smootherstep(t, 0, 1);
+  // Mostly linear (2026-11-06, free scroll): a full smootherstep sat still for ~180 px right after the payload frame.
+  const e = 0.65 * t + 0.35 * THREE.MathUtils.smootherstep(t, 0, 1);
   _eyeA.copy(mover.position);
   _qA.copy(mover.quaternion);
   const dA = Math.max(_eyeA.distanceTo(target), 1e-3);
